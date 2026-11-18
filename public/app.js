@@ -239,6 +239,8 @@ function persistSocketIOEvidence(id, state) {
     JSON.stringify({
       version: 1,
       pendingAckRecovery: state.pendingAckRecovery || null,
+      pendingSendRecovery: state.pendingSendRecovery || null,
+      creationIntent: state.creationIntent || null,
       uncertainStart: !!state.uncertainStart,
       uncertainSessions: state.uncertainSessions,
       stopProblems: state.stopProblems,
@@ -254,8 +256,16 @@ function restoreSocketIOEvidence(id, state) {
     const raw = sessionStorage.getItem(socketioEvidenceKey(id));
     if (!raw) return;
     const value = JSON.parse(raw);
+    const boundedId = id => typeof id === "string" && /^[A-Za-z0-9_-]{1,200}$/.test(id);
+    const uuid = id => typeof id === "string" && /^[a-f0-9-]{36}$/.test(id);
     if (
       value.version !== 1 ||
+      (value.creationIntent != null &&
+        (!uuid(value.creationIntent.instanceId) || !uuid(value.creationIntent.intentId) ||
+         !boundedId(value.creationIntent.definitionId))) ||
+      (value.pendingSendRecovery != null &&
+        (!uuid(value.pendingSendRecovery.id) || !boundedId(value.pendingSendRecovery.sessionId) ||
+         !Number.isSafeInteger(value.pendingSendRecovery.sequence) || value.pendingSendRecovery.sequence < 1)) ||
       (value.pendingAckRecovery != null &&
         (typeof value.pendingAckRecovery !== "object" ||
           [
@@ -280,6 +290,14 @@ function restoreSocketIOEvidence(id, state) {
           !/^[A-Za-z0-9_-]{1,200}$/.test(value.sessionId)))
     )
       throw Error("无效恢复记录");
+    if (value.creationIntent) {
+      const { instanceId, intentId, definitionId } = value.creationIntent;
+      state.creationIntent = { instanceId, intentId, definitionId };
+    }
+    if (value.pendingSendRecovery) {
+      const { id, sequence, sessionId } = value.pendingSendRecovery;
+      state.pendingSendRecovery = { id, sequence, sessionId };
+    }
     state.pendingAckRecovery = value.pendingAckRecovery
       ? {
           sessionId: value.pendingAckRecovery.sessionId,
@@ -353,6 +371,7 @@ function bindSocketIOWorkbench() {
     }
   };
   bindSocketIO(root, {
+    ownerReceipts: true,
     state,
     definitions: project.settings?.socketioDefinitions || [],
     uid,
@@ -396,12 +415,15 @@ function bindSocketIOWorkbench() {
     },
     get: (action) => {
       current();
-      if (!/^socketio-sessions(?:\/[A-Za-z0-9_-]+)?$/.test(action))
+      if (!/^socketio-sessions(?:\/[A-Za-z0-9_-]+)?$/.test(action) &&
+          !/^socketio-creation-intents\/[a-f0-9-]{36}\/[a-f0-9-]{36}$/.test(action))
         throw Error("未知Socket.IO读取");
       return api("/projects/" + owner.id + "/" + action);
     },
     post: async (action, body) => {
       current();
+      if (action === "socketio-creation-intents")
+        return api("/projects/" + owner.id + "/" + action, "POST", body);
       if (
         !/^socketio-sessions(?:\/[A-Za-z0-9_-]+\/(?:send|ack|stop))?$/.test(
           action,

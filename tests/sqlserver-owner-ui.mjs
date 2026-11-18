@@ -32,6 +32,8 @@ try {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   const open = async () => {
+    // A token fragment on the current URL is a same-document navigation.
+    await page.goto("about:blank");
     await page.goto(app.launchUrl);
     await page.getByRole("button", { name: "发 送", exact: true }).waitFor();
     await page.locator('.rail [data-page="settings"]').click();
@@ -170,7 +172,7 @@ try {
   }
   await scan(root);
   assert.deepEqual(errors, []);
-  await page.screenshot({ path: "/tmp/local-api-sqlserver-owner-ui.png" });
+  await page.screenshot({ path: path.join(tmpdir(), "local-api-sqlserver-owner-ui.png") });
   console.log(
     "SQLSERVER_OWNER_GUI_PASS real-browser/server; no real SQL Server acceptance",
   );

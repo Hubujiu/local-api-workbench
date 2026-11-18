@@ -68,13 +68,40 @@ test(
     };
     project.settings.socketioDefinitions = [definition];
     await app.store.save(project);
-    const started = await call("socketio-sessions", "POST", {
-      definitionId: definition.id,
+    const lostState = createSocketIOState();
+    selectSocketIO(lostState, definition);
+    let sentBody, startBody, emitted = 0;
+    const lostController = createSocketIOController({
+      state: lostState, ownerReceipts: true, setBusy() {}, assertCurrent() {},
+      persistEvidence: () => true, get: call,
+      async post(path, body) {
+        const result = await call(path, "POST", body);
+        if (path === "socketio-creation-intents") return result;
+        if (path.endsWith("/send")) sentBody = body;
+        else startBody = body;
+        throw Error("lost response");
+      },
     });
+    await lostController.connect();
+    assert.equal(lostState.uncertainStart, true);
+    await lostController.poll();
+    const started = lostState.session;
+    assert.equal(lostState.uncertainStart, false);
+    await assert.rejects(call("socketio-sessions", "POST", startBody));
     let session = await wait(async () => {
       const s = await call("socketio-sessions/" + started.id);
       return s.state === "open" ? s : null;
     });
+    peer.on("echo", (ack) => { emitted++; ack("received"); });
+    selectSocketIO(lostState, session.definition);
+    lostState.session = session;
+    lostState.event = "echo";
+    await lostController.send();
+    assert.deepEqual(lostState.uncertainSessions, [session.id]);
+    await lostController.poll();
+    assert.deepEqual(lostState.uncertainSessions, []);
+    await assert.rejects(call("socketio-sessions/" + started.id + "/send", "POST", sentBody));
+    assert.equal(emitted, 1);
     peer.emit("question", { text: "safe fixture" }, () => acks++);
     session = await wait(async () => {
       const s = await call("socketio-sessions/" + started.id);

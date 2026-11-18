@@ -34,7 +34,10 @@ class BaselineTests(unittest.TestCase):
         path = self.root / name
         with zipfile.ZipFile(path, 'w') as archive:
             for key, value in files.items():
-                archive.writestr(key, value)
+                # Use the supplied archive spelling on both POSIX and Windows.
+                entry = zipfile.ZipInfo(key)
+                entry.filename = key
+                archive.writestr(entry, value)
         return path
 
     def extract(self):

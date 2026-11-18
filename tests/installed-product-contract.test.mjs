@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, writeFile, symlink, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, symlink, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -78,15 +78,21 @@ test("runtime identity pins actual process, app version and isolated data", () =
     );
 });
 test("inventory rejects symlinks and preserves foreign file hashes", async (t) => {
-  const root = await mkdtemp(path.join(tmpdir(), "product-contract-"));
+  const root = await mkdtemp(path.join(await realpath(tmpdir()), "product-contract-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(path.join(root, "foreign.txt"), "keep");
   assert.deepEqual(await inventory(root), { "foreign.txt": sha("keep") });
-  await symlink(path.join(root, "foreign.txt"), path.join(root, "alias"));
+  if (process.platform === "win32") {
+    const directory = path.join(root, "files");
+    await mkdir(directory);
+    await symlink(directory, path.join(root, "alias"), "junction");
+  } else {
+    await symlink(path.join(root, "foreign.txt"), path.join(root, "alias"));
+  }
   await assert.rejects(inventory(root));
 });
 test("plan and payload digests, receipts, identity fail closed", async (t) => {
-  const root = await mkdtemp(path.join(tmpdir(), "product-plan-"));
+  const root = await mkdtemp(path.join(await realpath(tmpdir()), "product-plan-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const p = plan();
   for (const [i, item] of p.packages.entries()) {

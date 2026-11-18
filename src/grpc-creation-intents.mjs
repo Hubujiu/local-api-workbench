@@ -5,7 +5,7 @@ const fail = (message) => {
 const digest = (definition) =>
   createHash("sha256").update(JSON.stringify(definition)).digest("hex");
 // Owner-only correlation, not authority. No credentials or messages are retained.
-export class GrpcCreationIntents {
+export class SessionCreationIntents {
   constructor(sessions, { now = Date.now } = {}) {
     this.sessions = sessions;
     this.now = now;
@@ -19,7 +19,7 @@ export class GrpcCreationIntents {
         this.entries.delete(id);
     }
     if (this.entries.size >= 256)
-      fail("gRPC创建意图暂满，请等待未提交意图过期");
+      fail("创建意图暂满，请等待未提交意图过期");
     const intentId = randomUUID();
     this.entries.set(intentId, {
       projectId,
@@ -32,10 +32,10 @@ export class GrpcCreationIntents {
     return this.read(projectId, intentId, this.instanceId);
   }
   entry(projectId, intentId, instanceId) {
-    if (instanceId !== this.instanceId) fail("gRPC服务实例已变化，禁止重放");
+    if (instanceId !== this.instanceId) fail("服务实例已变化，禁止重放");
     const e = this.entries.get(intentId);
     if (!e || e.projectId !== projectId)
-      fail("gRPC创建意图不存在或不属于此项目，禁止重放");
+      fail("创建意图不存在或不属于此项目，禁止重放");
     return e;
   }
   read(projectId, intentId, instanceId) {
@@ -66,9 +66,9 @@ export class GrpcCreationIntents {
       correlation.instanceId,
     );
     if (e.definitionId !== definition.id || e.digest !== digest(definition))
-      fail("gRPC创建定义已变化，禁止重放");
+      fail("创建定义已变化，禁止重放");
     if (e.phase !== "reserved" || e.expiresAt <= this.now())
-      fail("gRPC创建意图已消费或过期，禁止重放；请只读查询");
+      fail("创建意图已消费或过期，禁止重放；请只读查询");
     e.phase = "unknown";
     try {
       const result = this.sessions.start(projectId, definition, options, {
@@ -85,3 +85,4 @@ export class GrpcCreationIntents {
     }
   }
 }
+export { SessionCreationIntents as GrpcCreationIntents };

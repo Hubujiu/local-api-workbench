@@ -1,5 +1,5 @@
 import { GrpcOwnerOperations } from "./grpc-owner-operations.mjs";
-import { GrpcCreationIntents } from "./grpc-creation-intents.mjs";
+import { SessionCreationIntents } from "./grpc-creation-intents.mjs";
 import { sqlServerPreviewEnabled } from "./sqlserver-provider.mjs";
 import { ProtocolSessionIntents } from "./protocol-session-intents.mjs";
 import { beginLoadReport, finishLoadReport } from "./load-report-evidence.mjs";
@@ -180,8 +180,13 @@ export async function createApp({
   const grpcSlots = new GrpcSlots();
   const grpcSessions = new GrpcSessions({ store, slots: grpcSlots });
   const grpcOwnerOperations = new GrpcOwnerOperations(grpcSessions);
-  const grpcCreationIntents = new GrpcCreationIntents(grpcSessions);
+  const grpcCreationIntents = new SessionCreationIntents(grpcSessions);
   const socketioSessions = new SocketIOSessions();
+  const socketioCreationIntents = new SessionCreationIntents({
+    start: (projectId, definition, input, observer) =>
+      socketioSessions.start(projectId, { ...definition, ...input }, observer),
+    snapshot: (projectId, id) => socketioSessions.ownerSnapshot(projectId, id),
+  });
   const oauth = new OAuthManager();
   const oauth1 = new OAuth1Manager();
   const databaseSessions = new DatabaseSessions({
@@ -1747,6 +1752,18 @@ export async function createApp({
               200,
               (p.protocolRuns || []).filter((x) => x.type === "socketio"),
             );
+          if (action === "socketio-creation-intents") {
+            res.setHeader("Cache-Control", "no-store");
+            if (req.method === "GET" && parts.length === 6)
+              return json(res, 200, socketioCreationIntents.read(p.id, parts[5], parts[4]));
+            if (req.method !== "POST" || parts.length !== 4)
+              throw Error("Socket.IO 创建意图路径无效");
+            const data = await body(req);
+            if (Object.keys(data).length !== 1) throw Error("创建意图仅接受已保存的定义 ID");
+            const definition = p.settings.socketioDefinitions?.find(d => d.id === data.definitionId);
+            if (!definition) throw Error("Socket.IO 定义不存在");
+            return json(res, 200, socketioCreationIntents.acquire(p.id, definition));
+          }
           if (action === "socketio-sessions") {
             const sessionId = parts[4],
               operation = parts[5];
@@ -1755,8 +1772,8 @@ export async function createApp({
                 res,
                 200,
                 sessionId
-                  ? socketioSessions.snapshot(p.id, sessionId)
-                  : socketioSessions.list(p.id),
+                  ? socketioSessions.ownerSnapshot(p.id, sessionId)
+                  : socketioSessions.list(p.id, { owner: true }),
               );
             if (req.method === "POST") {
               const data = await body(req);
@@ -1766,6 +1783,7 @@ export async function createApp({
                     (k) =>
                       ![
                         "definitionId",
+                        "creationIntent",
                         "auth",
                         "query",
                         "headers",
@@ -1780,18 +1798,20 @@ export async function createApp({
                   (x) => x.id === data.definitionId,
                 );
                 if (!definition) throw Error("Socket.IO定义不存在");
-                const { definitionId, ...input } = data;
+                const { definitionId, creationIntent, ...input } = data;
                 return json(
                   res,
                   200,
-                  socketioSessions.start(p.id, { ...definition, ...input }),
+                  creationIntent === undefined
+                    ? socketioSessions.start(p.id, { ...definition, ...input })
+                    : socketioCreationIntents.start(p.id, definition, input, creationIntent),
                 );
               }
               if (operation === "send")
                 return json(
                   res,
                   200,
-                  await socketioSessions.send(p.id, sessionId, data),
+                  await socketioSessions.sendFromOwner(p.id, sessionId, data),
                 );
               if (operation === "ack")
                 return json(
