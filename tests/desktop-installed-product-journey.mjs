@@ -25,6 +25,7 @@ import { assertCleanDesktopExit } from "./helpers/desktop-restart-receipt.mjs";
 import { hardStopDesktopProcess } from "./helpers/desktop-hard-stop.mjs";
 import {
   assertProductRollbackLog,
+  assertTargetPathBudget,
   assertRuntimeIdentity,
   inventory,
   loadProductPlan,
@@ -52,6 +53,10 @@ if (exerciseRollback)
 assert.ok(path.isAbsolute(process.env.LOCALAPPDATA));
 await noAlias(process.env.LOCALAPPDATA);
 const target = path.join(process.env.LOCALAPPDATA, plan.directory);
+assertTargetPathBudget(
+  target,
+  plan.packages.map((p) => p.contract),
+);
 await assert.rejects(
   stat(target),
   { code: "ENOENT" },

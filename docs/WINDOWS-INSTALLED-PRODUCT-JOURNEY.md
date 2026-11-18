@@ -183,3 +183,21 @@ pass; local authoring/contract tests do not set it. This scenario tests rollback
 an installer failure after owned-file removal, **not** a failure after a new app has
 run data migrations. Real native execution of this optional full-product scenario
 is still required, as are signing, ICE, and genuine standard-user acceptance.
+
+### Dynamic installed-path budget
+
+Before creating test data or invoking MSI, the product harness checks the actual
+`LOCALAPPDATA` target against both digest-pinned package inventories, including
+empty directories. File paths must fit 259 UTF-16 code units excluding NUL;
+directories use a conservative 247-unit limit. Parent directories, the retained
+foreign directory, and its sentinel are included. JavaScript string length counts
+surrogate pairs as two units. Existing-folder and alias checks remain unchanged.
+The supported exact `LocalAPI-Q-<UUID>` and legacy fixture names are unchanged.
+A short fixture leaf cannot guarantee safety for an unusually long profile path.
+
+Run `44251020785` reported Error 1304 writing a 260-character path and then 1603.
+Shorter neighboring files had copied. This strongly suggests a MAX_PATH boundary,
+not direct Win32 error-code proof. The guard rejects this path before MSI, while
+the current shorter fixture leaf fits the same payload/profile. No payload files,
+identity, policy, trust settings or signatures are changed. Portable regression
+tests are not native x64 acceptance; the ARM64 exploratory failure remains a failure.
