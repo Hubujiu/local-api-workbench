@@ -1,3 +1,5 @@
+import { GrpcOwnerOperations } from "./grpc-owner-operations.mjs";
+import { GrpcCreationIntents } from "./grpc-creation-intents.mjs";
 import { ProtocolSessionIntents } from "./protocol-session-intents.mjs";
 import { beginLoadReport, finishLoadReport } from "./load-report-evidence.mjs";
 import { requirePostmanEnvironmentText } from "./postman-environment-import.mjs";
@@ -176,6 +178,8 @@ export async function createApp({
 
   const grpcSlots = new GrpcSlots();
   const grpcSessions = new GrpcSessions({ store, slots: grpcSlots });
+  const grpcOwnerOperations = new GrpcOwnerOperations(grpcSessions);
+  const grpcCreationIntents = new GrpcCreationIntents(grpcSessions);
   const socketioSessions = new SocketIOSessions();
   const oauth = new OAuthManager();
   const oauth1 = new OAuth1Manager();
@@ -1150,9 +1154,12 @@ export async function createApp({
           // never start/send execution.
           const evidenceOnly =
             parts[4] &&
-            ((action === "protocol-sessions" &&
-              ((req.method === "GET" && !parts[5]) ||
-                (req.method === "POST" && parts[5] === "stop"))) ||
+            ((action === "grpc-creation-intents" &&
+              req.method === "GET" &&
+              parts.length === 6) ||
+              (action === "protocol-sessions" &&
+                ((req.method === "GET" && !parts[5]) ||
+                  (req.method === "POST" && parts[5] === "stop"))) ||
               (action === "grpc-sessions" &&
                 ((req.method === "GET" && !parts[5]) ||
                   (req.method === "POST" &&
@@ -1827,12 +1834,57 @@ export async function createApp({
               }
             }
           }
+          if (action === "grpc-creation-intents") {
+            res.setHeader("Cache-Control", "no-store");
+            if (req.method === "GET" && parts.length === 6) {
+              const receipt = grpcCreationIntents.read(
+                p.id,
+                parts[5],
+                parts[4],
+              );
+              return json(
+                res,
+                200,
+                receipt.session
+                  ? {
+                      ...receipt,
+                      session: grpcOwnerOperations.withReceipts(
+                        p.id,
+                        receipt.session,
+                      ),
+                    }
+                  : receipt,
+              );
+            }
+            if (req.method !== "POST" || parts.length !== 4)
+              throw Error("gRPC创建意图路径无效");
+            const input = await body(req);
+            if (
+              !input ||
+              Object.keys(input).some((key) => key !== "definitionId")
+            )
+              throw Error("gRPC创建意图仅接受定义ID");
+            const definition = (p.settings.grpcDefinitions || []).find(
+              (item) => item.id === input.definitionId,
+            );
+            if (!definition) throw Error("gRPC定义不存在或不属于此项目");
+            return json(
+              res,
+              200,
+              grpcCreationIntents.acquire(p.id, definition),
+            );
+          }
           if (action === "grpc-sessions") {
+            res.setHeader("Cache-Control", "no-store");
             const sessionId = parts[4],
               operation = parts[5];
             if (parts.length > 6) throw Error("gRPC会话路径无效");
             if (sessionId && req.method === "GET" && !operation)
-              return json(res, 200, grpcSessions.snapshot(p.id, sessionId));
+              return json(
+                res,
+                200,
+                grpcOwnerOperations.snapshot(p.id, sessionId),
+              );
             if (req.method !== "POST") throw Error("gRPC会话操作无效");
             const input = await body(req);
             if (!input || typeof input !== "object" || Array.isArray(input))
@@ -1841,9 +1893,13 @@ export async function createApp({
               if (
                 Object.keys(input).some(
                   (key) =>
-                    !["definitionId", "message", "metadata", "tls"].includes(
-                      key,
-                    ),
+                    ![
+                      "definitionId",
+                      "message",
+                      "metadata",
+                      "tls",
+                      "creationIntent",
+                    ].includes(key),
                 )
               )
                 throw Error("gRPC会话仅接受已保存定义及临时消息/凭据");
@@ -1856,39 +1912,79 @@ export async function createApp({
                   .filter((key) => Object.hasOwn(input, key))
                   .map((key) => [key, input[key]]),
               );
+              const opened = input.creationIntent
+                ? grpcCreationIntents.start(
+                    p.id,
+                    definition,
+                    options,
+                    input.creationIntent,
+                  )
+                : grpcSessions.start(p.id, definition, options);
               return json(
                 res,
                 200,
-                grpcSessions.start(p.id, definition, options),
+                grpcOwnerOperations.withReceipts(p.id, opened),
               );
             }
             // Check ownership even for an invalid operation; IDs never cross projects.
             grpcSessions.get(p.id, sessionId);
             if (operation === "send") {
               if (
-                Object.keys(input).some((key) => key !== "message") ||
+                Object.keys(input).some(
+                  (key) => !["message", "ownerOperation"].includes(key),
+                ) ||
                 !Object.hasOwn(input, "message")
               )
                 throw Error("gRPC会话send须且仅须message");
               return json(
                 res,
                 200,
-                grpcSessions.send(p.id, sessionId, input.message),
+                input.ownerOperation
+                  ? grpcOwnerOperations.execute(
+                      p.id,
+                      sessionId,
+                      "send",
+                      input.message,
+                      input.ownerOperation,
+                    )
+                  : grpcOwnerOperations.withReceipts(
+                      p.id,
+                      grpcSessions.send(p.id, sessionId, input.message),
+                    ),
               );
             }
-            if (Object.keys(input).length)
-              throw Error("gRPC会话终止操作不接受额外字段");
-            if (operation === "half-close")
-              return json(res, 200, grpcSessions.halfClose(p.id, sessionId));
-            if (operation === "cancel")
-              return json(res, 200, await grpcSessions.cancel(p.id, sessionId));
-            if (operation === "reconcile")
+            if (
+              operation === "half-close" &&
+              input.ownerOperation &&
+              Object.keys(input).length === 1
+            )
               return json(
                 res,
                 200,
-                await grpcSessions.reconcile(p.id, sessionId),
+                grpcOwnerOperations.execute(
+                  p.id,
+                  sessionId,
+                  "half-close",
+                  undefined,
+                  input.ownerOperation,
+                ),
               );
-            throw Error("未知gRPC会话操作");
+            if (Object.keys(input).length)
+              throw Error("gRPC会话终止操作不接受额外字段");
+            const result =
+              operation === "half-close"
+                ? grpcSessions.halfClose(p.id, sessionId)
+                : operation === "cancel"
+                  ? await grpcSessions.cancel(p.id, sessionId)
+                  : operation === "reconcile"
+                    ? await grpcSessions.reconcile(p.id, sessionId)
+                    : null;
+            if (!result) throw Error("未知gRPC会话操作");
+            return json(
+              res,
+              200,
+              grpcOwnerOperations.withReceipts(p.id, result),
+            );
           }
           if (action === "grpc-runs" && req.method === "GET")
             return json(

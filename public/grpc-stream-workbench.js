@@ -20,6 +20,10 @@ export function createGrpcStreamState() {
     pending: null,
     cancelPending: null,
     uncertainStart: false,
+    startRecoveryId: "",
+    creationIntentId: "",
+    creationInstanceId: "",
+    pendingOwnerOperation: null,
     uncertainSessions: [],
     persistenceProblems: [],
     notice: "",
@@ -105,6 +109,34 @@ export function createGrpcStreamController(options) {
       else add(state.persistenceProblems, result.id);
     }
     return result;
+  }
+  function recoverOwnerOperation(value) {
+    const pending = state.pendingOwnerOperation;
+    if (!pending || pending.sessionId !== value.id) return false;
+    const ledger = value.ownerOperations;
+    if (!ledger || ledger.instanceId !== pending.instanceId) return false;
+    const receipt = ledger.receipts?.find(
+      (r) => r.operationId === pending.operationId && r.kind === pending.kind,
+    );
+    if (
+      !receipt ||
+      ![
+        pending.kind === "send" ? "locally-written" : "half-closed",
+        "failed-before-submit",
+      ].includes(receipt.state)
+    )
+      return false;
+    // Never erase independent transport failures exposed by this same snapshot.
+    if (
+      value.requestMessages.some((m) =>
+        ["unknown", "failed"].includes(m.sendState),
+      )
+    )
+      return false;
+    state.uncertainSessions = state.uncertainSessions.filter(
+      (id) => id !== value.id,
+    );
+    return true;
   }
   function edit(k, value) {
     check();
@@ -235,9 +267,34 @@ export function createGrpcStreamController(options) {
             ? "client/bidi流不能提供初始请求，请取消勾选"
             : "服务端流须勾选初始请求",
         );
+      if (options.creationIntents) {
+        const receipt = await post("grpc-creation-intents", {
+          definitionId: body.definitionId,
+        });
+        current();
+        if (
+          !receipt ||
+          !/^[a-f0-9-]{36}$/.test(receipt.intentId) ||
+          !/^[a-f0-9-]{36}$/.test(receipt.instanceId) ||
+          receipt.definitionId !== body.definitionId ||
+          receipt.phase !== "reserved"
+        )
+          throw Error("gRPC创建意图回执无效");
+        state.creationIntentId = receipt.intentId;
+        state.creationInstanceId = receipt.instanceId;
+        body.creationIntent = {
+          intentId: receipt.intentId,
+          instanceId: receipt.instanceId,
+        };
+      }
       state.uncertainStart = true;
+      state.startRecoveryId = "";
+      state.sessionId = "";
+      state.sessionIdKnown = false;
+      state.session = null;
       persist();
       const value = await post("grpc-sessions", body);
+      state.startRecoveryId = snapshot(value).id;
       try {
         current();
       } catch (e) {
@@ -257,17 +314,76 @@ export function createGrpcStreamController(options) {
     });
   }
   async function poll() {
-    const id = state.sessionId;
-    if (!id) throw Error("请输入原会话ID");
+    if (state.uncertainStart && state.creationIntentId) {
+      return operation("refresh", async (current) => {
+        const receipt = await get(
+          "grpc-creation-intents/" +
+            encodeURIComponent(state.creationInstanceId) +
+            "/" +
+            encodeURIComponent(state.creationIntentId),
+        );
+        current();
+        if (
+          !receipt ||
+          receipt.instanceId !== state.creationInstanceId ||
+          receipt.intentId !== state.creationIntentId ||
+          receipt.definitionId !== state.definitionId ||
+          receipt.retry_safe !== false
+        )
+          throw Error("gRPC创建意图回执不匹配，禁止重放");
+        if (
+          receipt.phase !== "created" ||
+          !receipt.sessionId ||
+          !receipt.session
+        )
+          throw Error("gRPC创建结果尚不可确认，禁止重放或重建");
+        snapshot(receipt.session, receipt.sessionId);
+        state.startRecoveryId = receipt.sessionId;
+        apply(receipt.session, receipt.sessionId);
+        state.uncertainStart = false;
+        try {
+          persist();
+        } catch (error) {
+          state.uncertainStart = true;
+          throw error;
+        }
+        state.notice =
+          "已只读恢复本机创建回执；未重新创建或发送，不保证远端业务结果。";
+      });
+    }
+    const id = state.sessionId || state.startRecoveryId;
+    if (!id) throw Error("请输入原会话ID；没有创建回执时不能猜测或重建连接");
+    if (
+      state.uncertainStart &&
+      state.startRecoveryId &&
+      id !== state.startRecoveryId
+    )
+      throw Error("须读取原创建回执的会话ID，不能以其他会话消除未知创建标记");
     return operation(
       "refresh",
       async (current) => {
         const value = await get("grpc-sessions/" + encodeURIComponent(id));
         current();
         apply(value, id);
-        persist();
+        const recoveredOperation = recoverOwnerOperation(value);
+        const recoveredStart =
+          state.uncertainStart && state.startRecoveryId === id;
+        if (recoveredStart) state.uncertainStart = false;
+        try {
+          persist();
+        } catch (error) {
+          if (recoveredStart) state.uncertainStart = true;
+          if (recoveredOperation) add(state.uncertainSessions, id);
+          throw error;
+        }
         state.notice =
-          "只读刷新；未知发送标记保持。终态记录状态与网络结果分别显示。";
+          (recoveredStart
+            ? "已按原创建回执ID只读恢复本地会话；未重新创建流。"
+            : "只读刷新；") +
+          (recoveredOperation
+            ? "已核对原操作的本机回执，未重发；远端业务结果仍未知。"
+            : "未知发送标记保持，不代表远端业务成功。") +
+          "终态记录状态与网络结果分别显示。";
       },
       id,
     );
@@ -289,10 +405,33 @@ export function createGrpcStreamController(options) {
     if (s.requestMessages.some((m) => m.sendState === "pending"))
       throw Error("本地发送仍在等待回调/drain，请刷新");
     const body = kind === "send" ? { message: JSON.parse(state.message) } : {};
+    let pendingOwnerOperation = null;
+    if (options.ownerOperationReceipts) {
+      const ledger = s.ownerOperations;
+      if (
+        !ledger ||
+        !Number.isSafeInteger(ledger.sequence) ||
+        ledger.sequence < 0 ||
+        ledger.sequence >= Number.MAX_SAFE_INTEGER ||
+        typeof ledger.instanceId !== "string"
+      )
+        throw Error("请先只读刷新，取得本机操作序列，不能猜测或重发");
+      pendingOwnerOperation = {
+        sessionId: s.id,
+        instanceId: ledger.instanceId,
+        operationId: String(ledger.sequence + 1) + ":" + crypto.randomUUID(),
+        kind,
+      };
+      body.ownerOperation = {
+        instanceId: pendingOwnerOperation.instanceId,
+        operationId: pendingOwnerOperation.operationId,
+      };
+    }
     return operation(
       kind,
       async (current) => {
         add(state.uncertainSessions, s.id);
+        state.pendingOwnerOperation = pendingOwnerOperation;
         persist();
         const value = await post(
           "grpc-sessions/" + encodeURIComponent(s.id) + "/" + kind,
@@ -321,7 +460,8 @@ export function createGrpcStreamController(options) {
           ) ||
           (kind === "half-close" &&
             !["halfClosed", "halfClosing"].includes(value.requestState));
-        if (!unknown)
+        if (pendingOwnerOperation) recoverOwnerOperation(value);
+        if (!pendingOwnerOperation && !unknown)
           state.uncertainSessions = state.uncertainSessions.filter(
             (x) => x !== s.id,
           );
@@ -417,7 +557,7 @@ export function createGrpcStreamController(options) {
 export function renderGrpcStream(state, definitions = []) {
   const busy = !!(state.pending || state.cancelPending),
     disabled = busy ? "disabled" : "";
-  return `<section id="grpc-stream-workbench"><h2>gRPC 交互式流</h2><p>仅已保存的server/client/bidi流式定义；定义编辑与保存请使用上方面板。总期限与消息上限不续期。操作均显式执行，不自动重连或重发。</p><label>已保存定义<select id="grpc-stream-definition" ${disabled}><option value="">请选择</option>${definitions.map((d) => `<option value="${esc(d.id)}" ${d.id === state.definitionId ? "selected" : ""}>${esc(d.name)} · ${esc(d.service)} / ${esc(d.method)}</option>`).join("")}</select></label><label><input type="checkbox" id="grpc-stream-initialEnabled" ${state.initialEnabled ? "checked" : ""} ${disabled}>服务端流：创建时发送一条初始请求（client/bidi不得勾选）</label><label>初始请求 JSON<textarea id="grpc-stream-initialMessage" ${disabled}>${esc(state.initialMessage)}</textarea></label><details><summary>临时metadata与TLS（离开清空，不保存）</summary>${["metadata", "ca", "cert", "key"].map((k) => `<label>${esc(k)}<textarea id="grpc-stream-${k}" autocomplete="off" spellcheck="false" ${disabled}>${esc(state[k])}</textarea></label>`).join("")}</details><p>请求/响应正文及远端错误可能敏感，会进入终态历史。accepted仅指本机写入，非远端业务确认。</p><button id="grpc-stream-start" ${disabled} ${state.uncertainStart ? "disabled" : ""}>创建流（一次尝试）</button><label>原会话ID（手动恢复，不会创建连接）<input id="grpc-stream-sessionId" value="${esc(state.sessionId)}" ${disabled}></label><button id="grpc-stream-refresh" ${disabled}>只读刷新</button><p id="grpc-stream-status">${esc(state.session ? `${state.session.id} · ${state.session.lifecycle} · ${state.session.requestState} · 保存:${state.session.receiptState ?? "尚未终态"}` : "尚未核对会话")}</p><label>发送消息 JSON<textarea id="grpc-stream-message" ${disabled}>${esc(state.message)}</textarea></label><button id="grpc-stream-send" ${disabled} ${state.uncertainSessions.includes(state.sessionId) || state.uncertainStart || state.persistenceProblems.length ? "disabled" : ""}>发送一条新消息</button><button id="grpc-stream-half-close" ${disabled} ${state.uncertainSessions.includes(state.sessionId) || state.uncertainStart || state.persistenceProblems.length ? "disabled" : ""}>半关闭请求方向</button><button id="grpc-stream-cancel" ${state.cancelPending || (state.pending && !["send", "half-close"].includes(state.pending.kind)) ? "disabled" : ""}>取消并核对保存</button><button id="grpc-stream-reconcile" ${disabled}>终态记录保存核对（可能重试存储）</button><p id="grpc-stream-notice" role="status">${esc(state.notice)}</p>${state.uncertainStart ? "<p>创建结果未知：不可直接重试，也不能凭定义认领；请保留迟到回执或原会话ID。</p>" : ""}${state.uncertainSessions.length ? `<p>未知发送/半关闭：${esc(state.uncertainSessions.join("、"))}；刷新不会证明远端未执行。</p>` : ""}${state.persistenceProblems.length ? `<p>停止/保存待核对：${esc(state.persistenceProblems.join("、"))}</p>` : ""}<pre id="grpc-stream-result">${esc(state.session ? JSON.stringify(state.session, null, 2) : "尚无会话回执")}</pre>${state.lateResult ? `<details><summary>迟到回执（未认领，可能敏感）</summary><pre>${esc(JSON.stringify(state.lateResult, null, 2))}</pre></details>` : ""}</section>`;
+  return `<section id="grpc-stream-workbench"><h2>gRPC 交互式流</h2><p>仅已保存的server/client/bidi流式定义；定义编辑与保存请使用上方面板。总期限与消息上限不续期。操作均显式执行，不自动重连或重发。</p><label>已保存定义<select id="grpc-stream-definition" ${disabled}><option value="">请选择</option>${definitions.map((d) => `<option value="${esc(d.id)}" ${d.id === state.definitionId ? "selected" : ""}>${esc(d.name)} · ${esc(d.service)} / ${esc(d.method)}</option>`).join("")}</select></label><label><input type="checkbox" id="grpc-stream-initialEnabled" ${state.initialEnabled ? "checked" : ""} ${disabled}>服务端流：创建时发送一条初始请求（client/bidi不得勾选）</label><label>初始请求 JSON<textarea id="grpc-stream-initialMessage" ${disabled}>${esc(state.initialMessage)}</textarea></label><details><summary>临时metadata与TLS（离开清空，不保存）</summary>${["metadata", "ca", "cert", "key"].map((k) => `<label>${esc(k)}<textarea id="grpc-stream-${k}" autocomplete="off" spellcheck="false" ${disabled}>${esc(state[k])}</textarea></label>`).join("")}</details><p>请求/响应正文及远端错误可能敏感，会进入终态历史。accepted仅指本机写入，非远端业务确认。</p><button id="grpc-stream-start" ${disabled} ${state.uncertainStart ? "disabled" : ""}>创建流（一次尝试）</button><label>原会话ID（手动恢复，不会创建连接）<input id="grpc-stream-sessionId" value="${esc(state.sessionId)}" ${disabled}></label><button id="grpc-stream-refresh" ${disabled}>只读刷新 / 恢复创建回执</button>${state.uncertainStart && state.creationIntentId ? `<p>已保存创建意图。即使创建响应完全丢失，也可只读查询同一服务实例的本机回执；不会重建或重发。</p>` : ""}${state.uncertainStart && state.startRecoveryId ? `<p>已保留原创建回执ID：${esc(state.startRecoveryId)}。只读刷新可核对恢复，不会创建新流。</p>` : ""}<p id="grpc-stream-status">${esc(state.session ? `${state.session.id} · ${state.session.lifecycle} · ${state.session.requestState} · 保存:${state.session.receiptState ?? "尚未终态"}` : "尚未核对会话")}</p><label>发送消息 JSON<textarea id="grpc-stream-message" ${disabled}>${esc(state.message)}</textarea></label><button id="grpc-stream-send" ${disabled} ${state.uncertainSessions.includes(state.sessionId) || state.uncertainStart || state.persistenceProblems.length ? "disabled" : ""}>发送一条新消息</button><button id="grpc-stream-half-close" ${disabled} ${state.uncertainSessions.includes(state.sessionId) || state.uncertainStart || state.persistenceProblems.length ? "disabled" : ""}>半关闭请求方向</button><button id="grpc-stream-cancel" ${state.cancelPending || (state.pending && !["send", "half-close"].includes(state.pending.kind)) ? "disabled" : ""}>取消并核对保存</button><button id="grpc-stream-reconcile" ${disabled}>终态记录保存核对（可能重试存储）</button><p id="grpc-stream-notice" role="status">${esc(state.notice)}</p>${state.uncertainStart ? "<p>创建结果未知：不可直接重试，也不能凭定义认领；请保留迟到回执或原会话ID。</p>" : ""}${state.uncertainSessions.length ? `<p>未知发送/半关闭：${esc(state.uncertainSessions.join("、"))}；刷新不会证明远端未执行。</p>` : ""}${state.persistenceProblems.length ? `<p>停止/保存待核对：${esc(state.persistenceProblems.join("、"))}</p>` : ""}<pre id="grpc-stream-result">${esc(state.session ? JSON.stringify(state.session, null, 2) : "尚无会话回执")}</pre>${state.lateResult ? `<details><summary>迟到回执（未认领，可能敏感）</summary><pre>${esc(JSON.stringify(state.lateResult, null, 2))}</pre></details>` : ""}</section>`;
 }
 export function bindGrpcStream(root, options) {
   const controller = createGrpcStreamController(options),

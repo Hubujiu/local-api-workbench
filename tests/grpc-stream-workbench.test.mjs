@@ -477,3 +477,128 @@ test("cancellation intent binds manual ID before uncertain dispatch", async () =
   assert.equal(x.state.sessionIdKnown, true);
   assert.throws(() => x.c.edit("sessionId", "other"), /不能更换/);
 });
+
+test("late creation receipt is recovered by exact-ID read without another start", async () => {
+  const d = deferred();
+  const x = setup({ post: () => d.promise });
+  const start = x.c.start();
+  await new Promise((resolve) => setImmediate(resolve));
+  invalidateGrpcStream(x.state);
+  d.resolve(view());
+  await start;
+  assert.equal(x.state.startRecoveryId, "s1");
+  assert.equal(x.state.sessionId, "");
+  assert.equal(x.state.uncertainStart, true);
+  await x.c.poll();
+  assert.equal(x.state.uncertainStart, false);
+  assert.equal(x.state.sessionId, "s1");
+  assert.deepEqual(x.calls, [["grpc-sessions/s1"]]);
+});
+test("manual reads cannot replace missing or mismatched creation correlation", async () => {
+  const x = setup();
+  x.state.uncertainStart = true;
+  x.c.edit("sessionId", "s1");
+  await x.c.poll();
+  await x.c.poll();
+  assert.equal(x.state.uncertainStart, true);
+  x.state.startRecoveryId = "original";
+  await assert.rejects(x.c.poll(), /原创建回执/);
+  assert.equal(x.calls.length, 2);
+});
+test("failed recovery persistence keeps unknown start, and recovery never clears unknown sends", async () => {
+  let fail = true;
+  const x = setup({ persistEvidence: () => !fail });
+  x.state.uncertainStart = true;
+  x.state.startRecoveryId = "s1";
+  x.state.uncertainSessions = ["s1"];
+  await x.c.poll();
+  assert.equal(x.state.uncertainStart, true);
+  fail = false;
+  await x.c.poll();
+  assert.equal(x.state.uncertainStart, false);
+  assert.deepEqual(x.state.uncertainSessions, ["s1"]);
+  await assert.rejects(x.c.send(), /未知/);
+});
+test("new start clears an older correlation before uncertain dispatch", async () => {
+  const x = setup({
+    post: async () => {
+      throw Error("lost new response");
+    },
+  });
+  x.state.startRecoveryId = "s1";
+  x.state.sessionId = "s1";
+  x.state.sessionIdKnown = true;
+  x.state.session = view({
+    lifecycle: "terminal",
+    recordSaved: true,
+    receiptState: "saved",
+  });
+  await x.c.start();
+  assert.equal(x.state.sessionId, "");
+  assert.equal(x.state.sessionIdKnown, false);
+  assert.equal(x.state.uncertainStart, true);
+  assert.equal(x.state.startRecoveryId, "");
+  x.c.edit("sessionId", "s1");
+  await x.c.poll();
+  assert.equal(x.state.uncertainStart, true);
+});
+test("owner operation read requires exact instance/id/kind and conclusive local receipt", async () => {
+  const pending = {
+    sessionId: "s1",
+    instanceId: "instance",
+    operationId: "1:nonce",
+    kind: "send",
+  };
+  for (const [change, cleared] of [
+    [{}, true],
+    [{ state: "pending" }, false],
+    [{ state: "unknown" }, false],
+    [{ operationId: "1:other" }, false],
+    [{ kind: "half-close" }, false],
+    [{ state: "failed-before-submit" }, true],
+  ]) {
+    const { state, c: controller } = setup({
+      get: async () =>
+        view({
+          ownerOperations: {
+            instanceId: "instance",
+            sequence: 1,
+            receipts: [{ ...pending, state: "locally-written", ...change }],
+          },
+        }),
+    });
+    state.sessionId = "s1";
+    state.pendingOwnerOperation = { ...pending };
+    state.uncertainSessions = ["s1"];
+    await controller.poll();
+    assert.equal(state.uncertainSessions.length, cleared ? 0 : 1);
+  }
+});
+test("owner receipt recovery preserves unknown on restart, independent failures and persistence loss", async () => {
+  const pending = {
+    sessionId: "s1",
+    instanceId: "instance",
+    operationId: "1:nonce",
+    kind: "half-close",
+  };
+  for (const mode of ["restart", "transport-failed", "persistence-failed"]) {
+    const { state, c: controller } = setup({
+      persistEvidence: () => mode !== "persistence-failed",
+      get: async () =>
+        view({
+          requestMessages:
+            mode === "transport-failed" ? [{ sendState: "unknown" }] : [],
+          ownerOperations: {
+            instanceId: mode === "restart" ? "other" : "instance",
+            sequence: 1,
+            receipts: [{ ...pending, state: "half-closed" }],
+          },
+        }),
+    });
+    state.sessionId = "s1";
+    state.pendingOwnerOperation = { ...pending };
+    state.uncertainSessions = ["s1"];
+    await controller.poll();
+    assert.deepEqual(state.uncertainSessions, ["s1"]);
+  }
+});

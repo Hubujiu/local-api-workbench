@@ -25,6 +25,11 @@ const snap = (extra = {}) => ({
   requestMessages: [],
   recordSaved: false,
   receiptState: null,
+  ownerOperations: {
+    instanceId: "33333333-3333-4333-8333-333333333333",
+    sequence: 0,
+    receipts: [],
+  },
   ...extra,
 });
 const schema = {
@@ -41,6 +46,16 @@ async function passSchema(calls) {
   calls[0].resolve(schema);
   await Promise.resolve();
   await Promise.resolve();
+}
+async function passIntent(calls) {
+  assert.match(calls[1].url, /grpc-creation-intents$/);
+  calls[1].resolve({
+    intentId: "11111111-1111-4111-8111-111111111111",
+    instanceId: "22222222-2222-4222-8222-222222222222",
+    definitionId: "def",
+    phase: "reserved",
+  });
+  for (let i = 0; i < 5; i++) await Promise.resolve();
 }
 function harness() {
   const calls = [],
@@ -132,8 +147,9 @@ test("actual stream adapter persists only ids and uncertainty, never runtime cre
   const start = r.controller.start();
   assert.equal(calls.length, 1);
   await passSchema(calls);
+  await passIntent(calls);
   assert.equal(r.restore().uncertainStart, true);
-  calls[1].resolve(snap());
+  calls[2].resolve(snap());
   await start;
   const text = [...storage.values()].join();
   assert.doesNotMatch(text, /META_SECRET|KEY_SECRET/);
@@ -147,8 +163,9 @@ test("actual stream adapter isolates late start from a different project", async
     old = r.state;
   const start = r.controller.start();
   await passSchema(calls);
+  await passIntent(calls);
   r.switchProject();
-  calls[1].resolve(snap());
+  calls[2].resolve(snap());
   await start;
   assert.notEqual(r.state, old);
   assert.equal(r.state.session, null);
@@ -274,4 +291,72 @@ test("restored pending stop cannot be hidden even when sessionIdKnown field is f
   Object.assign(r.state, r.restore());
   assert.throws(() => r.controller.edit("sessionId", ""));
   await assert.rejects(() => r.controller.start());
+});
+
+test("actual adapter persists late creation correlation and restores it without adopting unrelated state", async () => {
+  const { r, calls, storage } = harness(),
+    original = r.state;
+  const start = r.controller.start();
+  await passSchema(calls);
+  await passIntent(calls);
+  r.leave();
+  calls[2].resolve(snap());
+  await start;
+  const restored = r.restore();
+  assert.equal(restored.startRecoveryId, "session");
+  assert.equal(restored.uncertainStart, true);
+  assert.equal(restored.sessionId, "");
+  assert.equal(original.lateResult.id, "session");
+  assert.doesNotMatch(
+    [...storage.values()].join(),
+    /requestMessages|metadata|messages|proto/,
+  );
+});
+test("actual adapter restores entirely lost creation response by intent-only GET", async () => {
+  const { r, calls, storage } = harness();
+  const start = r.controller.start();
+  await passSchema(calls);
+  await passIntent(calls);
+  const persisted = r.restore();
+  assert.equal(persisted.uncertainStart, true);
+  assert.ok(persisted.creationIntentId);
+  calls[2].reject(Error("lost response"));
+  await start;
+  const read = r.controller.poll();
+  assert.match(calls[3].url, /grpc-creation-intents\//);
+  assert.equal(calls[3].method, undefined);
+  calls[3].resolve({
+    instanceId: persisted.creationInstanceId,
+    intentId: persisted.creationIntentId,
+    definitionId: "def",
+    phase: "created",
+    sessionId: "session",
+    session: snap(),
+    retry_safe: false,
+  });
+  await read;
+  assert.equal(r.state.uncertainStart, false);
+  assert.equal(r.state.sessionId, "session");
+  assert.equal(calls.length, 4);
+  assert.doesNotMatch([...storage.values()].join(), /PROTO_SOURCE|metadata/);
+});
+test("actual adapter persists only correlated operation identifiers before lost send", async () => {
+  const { r, calls, storage } = harness();
+  r.state.session = snap();
+  r.state.sessionId = "session";
+  r.state.message = '{"text":"MESSAGE_SECRET"}';
+  const send = r.controller.send();
+  const restored = r.restore();
+  assert.equal(restored.pendingOwnerOperation.kind, "send");
+  assert.deepEqual(calls[0].body.ownerOperation, {
+    instanceId: restored.pendingOwnerOperation.instanceId,
+    operationId: restored.pendingOwnerOperation.operationId,
+  });
+  assert.doesNotMatch(
+    [...storage.values()].join(),
+    /MESSAGE_SECRET|ownerOperations|receipts/,
+  );
+  calls[0].reject(Error("lost"));
+  await send;
+  assert.deepEqual(r.state.uncertainSessions, ["session"]);
 });
