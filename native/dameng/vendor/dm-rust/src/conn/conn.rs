@@ -157,6 +157,8 @@ impl Connection {
         // 2. TLS
         match sr.ssl_encrypt {
             0 => return Err(Error::Tls("server did not negotiate full-session TLS".into())),
+            1 if o.tls_client_cert.is_empty() || o.tls_client_key.is_empty() =>
+                return Err(Error::Tls("mutual TLS requires a client identity".into())),
             1 | 4 | 5 => self.upgrade_tls().await?,
             n => return Err(Error::Other(format!("unsupported ssl mode {n} (auth-only TLS needs client certificates)"))),
         }
@@ -229,8 +231,7 @@ impl Connection {
             Err(_) if !self.opts.tls_verify => ServerName::try_from("dameng").unwrap(),
             Err(e) => return Err(Error::Tls(format!("invalid TLS server name {host:?}: {e}"))),
         };
-        let connector = crate::conn::stream::tls::connector(&self.opts.tls_ca_pem, &self.opts.tls_client_cert, &self.opts.tls_client_key)?;
-        let t = connector.connect(name, tcp).await.map_err(|e| Error::Tls(e.to_string()))?;
+        let t = crate::conn::stream::tls::connect(tcp, name, &self.opts.tls_ca_pem, &self.opts.tls_client_cert, &self.opts.tls_client_key).await?;
         self.stream = Stream::Tls(Box::new(t));
         Ok(())
     }

@@ -55,8 +55,24 @@ impl AsyncWrite for Stream {
 #[cfg(feature = "tls")]
 pub(crate) mod tls {
     use crate::conn::error::{Error, Result};
+    use rustls::client::ResolvesClientCert;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
-    pub fn connector(pem: &[u8], cert: &[u8], key: &[u8]) -> Result<tokio_rustls::TlsConnector> {
+    #[derive(Debug)]
+    struct ClientIdentity {
+        resolver: Arc<dyn ResolvesClientCert>,
+        selected: AtomicBool,
+    }
+    impl ResolvesClientCert for ClientIdentity {
+        fn resolve(&self, issuers: &[&[u8]], schemes: &[rustls::SignatureScheme]) -> Option<Arc<rustls::sign::CertifiedKey>> {
+            let identity = self.resolver.resolve(issuers, schemes);
+            self.selected.store(identity.is_some(), Ordering::Relaxed);
+            identity
+        }
+        fn has_certs(&self) -> bool { self.resolver.has_certs() }
+    }
+    pub async fn connect(tcp: tokio::net::TcpStream, name: rustls::pki_types::ServerName<'static>,
+        pem: &[u8], cert: &[u8], key: &[u8]) -> Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>> {
         let mut roots = rustls::RootCertStore::empty();
         for cert in rustls_pemfile::certs(&mut &pem[..]) {
             roots.add(cert.map_err(|e| Error::Tls(e.to_string()))?)
@@ -67,7 +83,7 @@ pub(crate) mod tls {
         let builder = rustls::ClientConfig::builder_with_provider(provider)
             .with_safe_default_protocol_versions().map_err(|e| Error::Tls(e.to_string()))?
             .with_root_certificates(roots);
-        let config = if cert.is_empty() && key.is_empty() {
+        let mut config = if cert.is_empty() && key.is_empty() {
             builder.with_no_client_auth()
         } else {
             let chain = rustls_pemfile::certs(&mut &cert[..]).collect::<std::io::Result<Vec<_>>>()?;
@@ -76,6 +92,17 @@ pub(crate) mod tls {
             builder.with_client_auth_cert(chain, private)
                 .map_err(|_| Error::Tls("invalid client identity".into()))?
         };
-        Ok(tokio_rustls::TlsConnector::from(Arc::new(config)))
+        // A configured identity must participate in this handshake before LOGIN.
+        let identity = Arc::new(ClientIdentity {
+            resolver: config.client_auth_cert_resolver.clone(),
+            selected: AtomicBool::new(false),
+        });
+        config.client_auth_cert_resolver = identity.clone();
+        let stream = tokio_rustls::TlsConnector::from(Arc::new(config)).connect(name, tcp)
+            .await.map_err(|e| Error::Tls(e.to_string()))?;
+        if !cert.is_empty() && !identity.selected.load(Ordering::Relaxed) {
+            return Err(Error::Tls("server did not request the configured client certificate".into()));
+        }
+        Ok(stream)
     }
 }

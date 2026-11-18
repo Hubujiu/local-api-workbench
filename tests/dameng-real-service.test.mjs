@@ -63,6 +63,18 @@ test("DM8 real verified TLS, exact decimal, bind order and binary read", async (
       assert.ok(clientCert && clientKey);
       const missing = sessions.register("real-fixture", passwordOnly);
       await assert.rejects(select(missing.id));
+      stage = "untrusted-client-certificate";
+      const fixture = (file) =>
+        readFile(new URL("./fixtures/" + file, import.meta.url), "utf8");
+      const untrusted = sessions.register("real-fixture", {
+        ...grant,
+        clientCert: await fixture("dameng-client.crt"),
+        clientKey: await fixture("localhost.key"),
+      });
+      await assert.rejects(select(untrusted.id));
+      console.log(
+        "DM8_MUTUAL_TLS_PASS configured identity requested, missing identity and untrusted certificate refused",
+      );
     }
     stage = "wrong-ca";
     const bad = sessions.register("real-fixture", {
