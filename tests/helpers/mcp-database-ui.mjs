@@ -11,7 +11,75 @@ export async function exerciseMCPDatabaseUI(page, root) {
     page.url(),
   ).href;
   const fields = page.locator("#mcp-db-fields");
-  assert(await fields.isDisabled());
+  const policy = await page.evaluate(async () => {
+    const response = await fetch("/api/mcp/config", {
+      headers: { "x-local-token": sessionStorage.getItem("local-api-token") },
+    });
+    if (!response.ok) throw Error("MCP owner configuration read failed");
+    const config = await response.json();
+    return {
+      enabled: config.enabled,
+      write: config.write,
+      execute: config.execute,
+      projects: config.projects,
+    };
+  });
+  assert.equal(
+    policy.enabled &&
+      policy.write &&
+      policy.execute &&
+      policy.projects.includes(id),
+    false,
+    "fixture must start without database grant authority",
+  );
+  await page.waitForFunction(() => {
+    const fieldset = document.querySelector("#mcp-db-fields");
+    return (
+      fieldset?.disabled === true &&
+      fieldset.matches(":disabled") &&
+      document
+        .querySelector("#mcp-db-policy")
+        .textContent.startsWith("未开放：")
+    );
+  });
+  assert.deepEqual(
+    await fields.evaluate((element) => ({
+      tag: element.tagName,
+      disabled: element.disabled,
+      nativeDisabled: element.matches(":disabled"),
+    })),
+    { tag: "FIELDSET", disabled: true, nativeDisabled: true },
+  );
+  for (const control of await fields
+    .locator("input, select, textarea, button")
+    .all())
+    assert(
+      await control.isDisabled(),
+      "all real controls must inherit native fieldset denial",
+    );
+  assert(await page.locator("#mcp-db-refresh").isDisabled());
+  const deniedRequests = [];
+  const observeDenied = (request) => {
+    if (request.url() === endpoint) deniedRequests.push(request.method());
+  };
+  page.on("request", observeDenied);
+  try {
+    await page.locator("#mcp-db-form").dispatchEvent("submit");
+    await page.locator("#mcp-db-refresh").dispatchEvent("click");
+    await page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
+    assert.deepEqual(
+      deniedRequests,
+      [],
+      "denied handlers must not send even a read or grant request",
+    );
+  } finally {
+    page.off("request", observeDenied);
+  }
   async function configure() {
     await page.locator("#mcp-config").click();
     await page.locator("#mcp-enabled").check();
