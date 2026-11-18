@@ -1,7 +1,9 @@
 param([Parameter(Mandatory)][string]$Media, [Parameter(Mandatory)][string]$ExpectedSha,
-      [Parameter(Mandatory)][string]$ManifestSha, [string]$PreviousMedia, [string]$PreviousVersion)
+      [Parameter(Mandatory)][string]$ManifestSha, [string]$PreviousMedia, [string]$PreviousVersion, [string]$PreviousVerification, [string]$PreviousReceiptSha, [string]$PreviousMediaSha, [string]$PreviousHead)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'windows_release_predecessor.ps1')
+Assert-PreviousArguments $PSBoundParameters
 if ($env:LOCALAPI_DISPOSABLE_RELEASE_VM -ne '1') { throw 'Fresh disposable Windows standard-user VM required' }
 . (Join-Path $PSScriptRoot 'windows_release_qualification.ps1')
 $qualification = New-SignedReleaseQualification (Read-WindowsStandardUserReceipt)
@@ -50,8 +52,15 @@ function Check-Installed {
   Confirm-Registration $current $true
 }
 Confirm-Registration $current $false
+$predecessorEvidence=$null
 if ($PreviousMedia) {
-  & "$PSScriptRoot/windows-release-signature.ps1" -File $PreviousMedia
+  . (Join-Path $PSScriptRoot 'windows_release_predecessor.ps1')
+  $published = Read-PinnedReleaseReceipt $PreviousVerification $PreviousReceiptSha
+  $previousPublisher = Get-PreviousPublisher $PreviousVersion $published.publisher $env:WORKBENCH_PUBLISHER_THUMBPRINT $env:WORKBENCH_PUBLISHER_ROTATION
+  Assert-ReleaseReceipt $published $PreviousVersion $PreviousMediaSha $previousPublisher
+  if ($PreviousHead -notmatch '^[a-f0-9]{40}$' -or $published.head -cne $PreviousHead -or (Get-FileHash -LiteralPath $PreviousMedia).Hash -ine $PreviousMediaSha) { throw 'Predecessor release identity or media digest mismatch' }
+  & "$PSScriptRoot/windows-release-signature.ps1" -File $PreviousMedia -ExpectedPublisher $previousPublisher
+  $predecessorEvidence=@{version=$PreviousVersion;head=$PreviousHead;sha256=$PreviousMediaSha;receiptSha256=$PreviousReceiptSha;publisher=$previousPublisher;rotationAuthorized=($previousPublisher -ine $env:WORKBENCH_PUBLISHER_THUMBPRINT)}
   $previous = Read-ReleaseMsiIdentity $PreviousMedia $PreviousVersion
   if ($previous.code -eq $current.code -or [version]$previous.version -ge [version]$current.version) { throw 'Upgrade requires an older, distinct product in the same family' }
   Confirm-Registration $previous $false
@@ -75,6 +84,6 @@ if ((Test-Path -LiteralPath $target) -or (Test-Path -LiteralPath $shortcut)) { t
 # Recheck in this process only AFTER every signed lifecycle assertion completed.
 $qualification = New-SignedReleaseQualification (Read-WindowsStandardUserReceipt)
 @{ schema='localapi-signed-windows-release-acceptance-v2'; qualification=$qualification; signedLifecyclePassed=$true; head=$env:GITHUB_SHA; sha256=$ExpectedSha; manifestSha256=$ManifestSha; standardUser=$true;
-   os='Windows 11 native x64'; publisher=$env:WORKBENCH_PUBLISHER_THUMBPRINT; previousReleaseUpgraded=[bool]$PreviousMedia;
+   os='Windows 11 native x64'; publisher=$env:WORKBENCH_PUBLISHER_THUMBPRINT; previousReleaseUpgraded=[bool]$PreviousMedia; previousReleaseEvidence=$predecessorEvidence;
    projectFilesPreserved=$true; registrationVerified=$true } |
   ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $out 'release-acceptance.json')

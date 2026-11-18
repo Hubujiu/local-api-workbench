@@ -31,6 +31,7 @@ jobs:
         run: |
           ./tests/windows-msi-policy-contract.ps1
           ./tests/windows-release-qualification-contract.ps1
+          ./tests/windows-release-predecessor-contract.ps1
       - id: source
         env:
           GH_TOKEN: ${{ github.token }}
@@ -165,6 +166,7 @@ jobs:
     timeout-minutes: 55
     env:
       WORKBENCH_PUBLISHER_THUMBPRINT: ${{ vars.WORKBENCH_PUBLISHER_THUMBPRINT }}
+      WORKBENCH_PUBLISHER_ROTATION: ${{ vars.WORKBENCH_PUBLISHER_ROTATION }}
       VERSION: ${{ needs.source.outputs.version }}
       DIGEST: ${{ needs.sign-media.outputs.digest }}
       MANIFEST: ${{ needs.sign-payload.outputs.manifest }}
@@ -199,6 +201,16 @@ jobs:
             gh release download $previous.tag_name --pattern $name --dir media
             if ($LASTEXITCODE -or (Get-FileHash "media/$name").Hash -ne $asset[0].digest.Substring(7)) { throw 'Previous release download failed integrity check' }
             $opts.PreviousMedia = (Resolve-Path "media/$name").Path
+            $receiptAsset = @($previous.assets | Where-Object name -eq 'verification.json')
+            if ($receiptAsset.Count -ne 1 -or $receiptAsset[0].size -gt 1048576 -or $receiptAsset[0].digest -notmatch '^sha256:[0-9a-f]{64}$') { throw 'Pinned previous verification receipt/source missing' }
+            gh release download $previous.tag_name --pattern verification.json --dir media
+            if ($LASTEXITCODE -or (Get-FileHash 'media/verification.json').Hash -ne $receiptAsset[0].digest.Substring(7)) { throw 'Previous verification receipt integrity check failed' }
+            $opts.PreviousVerification = (Resolve-Path 'media/verification.json').Path
+            $opts.PreviousReceiptSha = $receiptAsset[0].digest.Substring(7)
+            $opts.PreviousMediaSha = $asset[0].digest.Substring(7)
+            $tagCommit = gh api "repos/$env:GITHUB_REPOSITORY/commits/tags/$($previous.tag_name)" --jq .sha
+            if ($LASTEXITCODE -or $tagCommit -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve exact published tag commit' }
+            $opts.PreviousHead = $tagCommit
             $opts.PreviousVersion = $v
           }
           ./scripts/accept_windows_release.ps1 -Media "media/LocalAPI-$env:VERSION-windows-x64.msi" -ExpectedSha $env:DIGEST -ManifestSha $env:MANIFEST @opts
@@ -237,16 +249,29 @@ jobs:
           test "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)" = "$GITHUB_SHA"
           mapfile -t receipts < <(find acceptance -type f -name release-acceptance.json)
           test "${#receipts[@]}" -eq 1
-          jq -e --arg head "$GITHUB_SHA" --arg sha "$DIGEST" --arg manifest "$MANIFEST" '
+          jq -e --arg head "$GITHUB_SHA" --arg sha "$DIGEST" --arg manifest "$MANIFEST" --arg version "$VERSION" '
             .schema=="localapi-signed-windows-release-acceptance-v2" and .signedLifecyclePassed==true and
             .qualification=={schema:"localapi-windows-standard-user-qualification-v1",
               preflightPassed:true,windows11Client:true,nativeX64:true,uacEnabled:true,
               genuineNonAdministrator:true,interactiveToken:true,installerPolicyObserved:true} and
+            (.publisher|type)=="string" and (.publisher|test("^[a-fA-F0-9]{40}$")) and
+            ((.previousReleaseUpgraded==false and .previousReleaseEvidence==null) or
+             (.previousReleaseUpgraded==true and
+              (.previousReleaseEvidence as $p |
+               ($p|type)=="object" and ($p|keys)==["head","publisher","receiptSha256","rotationAuthorized","sha256","version"] and
+               ($p.version|type)=="string" and ($p.version|test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+               ($p.version|split(".")|map(tonumber)) < ($version|split(".")|map(tonumber)) and
+               ($p.head|type)=="string" and ($p.head|test("^[a-f0-9]{40}$")) and
+               ($p.sha256|type)=="string" and ($p.sha256|test("^[a-fA-F0-9]{64}$")) and
+               ($p.receiptSha256|type)=="string" and ($p.receiptSha256|test("^[a-fA-F0-9]{64}$")) and
+               ($p.publisher|type)=="string" and ($p.publisher|test("^[a-fA-F0-9]{40}$")) and
+               ($p.rotationAuthorized|type)=="boolean" and
+               $p.rotationAuthorized==(($p.publisher|ascii_downcase)!=(.publisher|ascii_downcase))))) and
             .head==$head and .standardUser==true and .projectFilesPreserved==true and
             .registrationVerified==true and (.sha256|ascii_downcase)==$sha and (.manifestSha256|ascii_downcase)==$manifest
           ' "${receipts[0]}"
           jq --arg ci "$CI_RUN" --arg journey "$JOURNEY_RUN" --arg run "$GITHUB_RUN_ID" --arg version "$VERSION" '
-            {schema,qualification,signedLifecyclePassed,head,sha256,manifestSha256,standardUser,os,publisher,previousReleaseUpgraded,projectFilesPreserved,registrationVerified} +
+            {schema,qualification,signedLifecyclePassed,head,sha256,manifestSha256,standardUser,os,publisher,previousReleaseUpgraded,previousReleaseEvidence,projectFilesPreserved,registrationVerified} +
             {version:$version,ciRun:$ci,journeyRun:$journey,releaseRun:$run}
           ' "${receipts[0]}" > media/verification.json
           cd media

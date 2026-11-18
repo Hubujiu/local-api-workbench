@@ -30,7 +30,8 @@ class ReleaseDraftTests(unittest.TestCase):
             head = 'a' * 40
             digest = hashlib.sha256(installer.read_bytes()).hexdigest()
             receipt = dict(head=head, sha256=digest, standardUser=True, manifestSha256='b' * 64,
-                           projectFilesPreserved=True, registrationVerified=True)
+                           projectFilesPreserved=True, registrationVerified=True, publisher='A'*40,
+                           previousReleaseUpgraded=False, previousReleaseEvidence=None)
             receipt.update(schema='localapi-signed-windows-release-acceptance-v2', signedLifecyclePassed=True,
                            qualification=dict(schema='localapi-windows-standard-user-qualification-v1',
                              preflightPassed=True,windows11Client=True,nativeX64=True,uacEnabled=True,
@@ -96,3 +97,20 @@ class ReleaseDraftTests(unittest.TestCase):
                 (acceptance / 'release-acceptance.json').write_text(json.dumps(bad))
                 self.assertNotEqual(run().returncode, 0)
                 self.assertEqual(json.loads(state.read_text()), [[]])
+
+            predecessor=dict(version='0.1.0',head='d'*40,sha256='e'*64,receiptSha256='f'*64,publisher='B'*40,rotationAuthorized=True)
+            receipt.update(previousReleaseUpgraded=True,previousReleaseEvidence=predecessor)
+            (acceptance / 'release-acceptance.json').write_text(json.dumps(receipt))
+            self.assertEqual(run().returncode,0)
+            self.assertEqual(json.loads((media/'verification.json').read_text())['previousReleaseEvidence'],predecessor)
+            state.write_text('[[]]')
+            for change in [lambda r:r.update(previousReleaseUpgraded=False),
+                           lambda r:r.update(previousReleaseEvidence=None),
+                           lambda r:r['previousReleaseEvidence'].update(rotationAuthorized=False),
+                           lambda r:r['previousReleaseEvidence'].update(receiptSha256=['f'*64]),
+                           lambda r:r['previousReleaseEvidence'].update(version='0.1.1'),
+                           lambda r:r['previousReleaseEvidence'].pop('head')]:
+                bad=copy.deepcopy(receipt);change(bad)
+                (acceptance/'release-acceptance.json').write_text(json.dumps(bad))
+                self.assertNotEqual(run().returncode,0)
+                self.assertEqual(json.loads(state.read_text()),[[]])
