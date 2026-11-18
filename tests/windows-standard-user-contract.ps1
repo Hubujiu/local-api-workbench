@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot '../scripts/windows_standard_user.ps1')
 function New-Receipt {
-    return @{ observationComplete=$true; errors=@(); os=@{caption='Microsoft Windows 11 Pro';version='10.0.26100';build=26100;productType=1};uac=@{kind='DWord';enableLUA=1};
+    return @{ installerPolicy=@{registryView='Registry64';state='absent';kind=$null;value=$null}; observationComplete=$true; errors=@(); os=@{caption='Microsoft Windows 11 Pro';version='10.0.26100';build=26100;productType=1;nativeArchitecture='X64'};uac=@{kind='DWord';enableLUA=1};
         token=@{tokenType=1;elevationType=1;elevated=0;hasRestrictions=0;integritySid='S-1-16-8192';sessionId=1;userSid='S-1-5-21-111-222-333-1001';groups=@(@{sid='S-1-5-4';attributes=7},@{sid='S-1-5-32-545';attributes=7})};
         localAccount=@{sid='S-1-5-21-111-222-333-1001';enabled=$true};administratorMemberSids=@('S-1-5-21-111-222-333-500') }
 }
@@ -56,3 +56,26 @@ $malformed=New-Receipt; $malformed['hostedRunner']=$false; $malformed.Remove('to
 $fallback=ConvertTo-WindowsStandardUserEvidence $malformed
 if($fallback.preflightPassed -or $fallback.rejection -cne 'Windows 11 standard-user requirements not verified') { throw 'Malformed assertion did not use fixed fallback' }
 Write-Output 'Raw exception injection and malformed assertion sanitization cases passed'
+
+foreach ($value in @(1,2)) {
+    $policyBlocked=New-Receipt; $policyBlocked['hostedRunner']=$false
+    $policyBlocked.installerPolicy=@{registryView='Registry64';state='present';kind='DWord';value=$value}
+    $public=ConvertTo-WindowsStandardUserEvidence $policyBlocked
+    if($public.preflightPassed -or $public.installerPolicy.value -ne $value) { throw 'Explicit Installer policy block lost' }
+}
+$missingPolicy=New-Receipt; $missingPolicy['hostedRunner']=$false; $missingPolicy.installerPolicy=$null
+if((ConvertTo-WindowsStandardUserEvidence $missingPolicy).preflightPassed) { throw 'Missing policy evidence allowed' }
+$server=New-Receipt; $server['hostedRunner']=$true; $server.os.caption='Microsoft Windows Server 2025';$server.os.productType=3
+if((ConvertTo-WindowsStandardUserEvidence $server).preflightPassed) { throw 'Absent policy promoted hosted Server to Windows client acceptance' }
+Write-Output 'Installer-policy integration rejects explicit block, missing evidence and Server'
+
+foreach ($architecture in @('Arm64','X86',$null)) {
+    $receipt=New-Receipt; $receipt['hostedRunner']=$false; $receipt.os.nativeArchitecture=$architecture
+    $public=ConvertTo-WindowsStandardUserEvidence $receipt
+    if ($public.preflightPassed) { throw 'Non-x64 native OS architecture accepted' }
+}
+$receipt=New-Receipt; $receipt['hostedRunner']=$false; $receipt.os.Remove('nativeArchitecture')
+if ((ConvertTo-WindowsStandardUserEvidence $receipt).preflightPassed) { throw 'Missing OS architecture accepted' }
+$source=Get-Content (Join-Path $PSScriptRoot '../scripts/windows_standard_user.ps1') -Raw
+if (-not $source.Contains('[Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()')) { throw 'Native OS architecture observation missing' }
+Write-Output 'Native OS architecture: x64 accepted; ARM64, x86, null and absent rejected'

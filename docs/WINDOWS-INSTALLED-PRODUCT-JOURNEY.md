@@ -232,3 +232,52 @@ This redaction applies to the **new preflight receipt only**. Existing lifecycle
 receipts, screenshots/traces, and MSI verbose logs can still contain local paths or
 registration SIDs. Keep raw evidence from any future real machine private and share
 only a separately redacted summary. This change does not rewrite prior evidence.
+
+### Read-only Installer-policy early check
+
+The optional standard-user preflight also reads
+`HKLM\SOFTWARE\Policies\Microsoft\Windows\Installer\DisableMSI` using
+`RegistryKey.OpenBaseKey(LocalMachine, Registry64)` and `OpenSubKey(..., false)`.
+It requires a 64-bit OS, avoiding the documented fallback of Registry64 to the
+32-bit view on a 32-bit OS. It never writes, clears, or overrides the policy.
+
+The evidence distinguishes these states without exposing registry/error text:
+
+- Explicit DWORD `1`: blocks unmanaged/non-elevated per-user installation; reject.
+- Explicit DWORD `2`: disables installation; reject.
+- Explicit DWORD `0`: no block from this setting, but not full policy/installation acceptance.
+- Successfully observed missing key/value: `absent`, value **null**, decision
+  `no-explicit-override`. This is not coerced to zero and does not prove an effective
+  policy. Only the independently verified Windows 11 client gate can continue.
+- Inaccessible/failed query, wrong registry view, wrong type or unsupported value:
+  unavailable/malformed and fail closed. An error is never treated as absence.
+
+The real run `44247162204`, job `134611730623`, source
+`0594223a4b67a5e4232e6446fd6b21b354083aa5`, failed first install with 1625 on a
+GitHub-hosted **Windows Server 2025** image. Verified evidence artifact `14403015275`
+SHA-256 `13a73fb563fa7b660f871900872c489ec06eee7fc2f8c989728e17b55e1b3a01`
+records effective `DisableMsi=1` and rejection of non-assigned applications for
+non-admin users. It separately says the unsigned MSI is permitted by Software
+Restriction Policy at the unrestricted level, and the MSI needs no elevation.
+That is a policy refusal, not an observed signature/trust or installation-scope
+failure. The log alone does not prove whether the registry explicitly held 1 or
+Windows Installer supplied a Server default. Build 26100 alone does not prove
+Windows 11. This addition does not promote that Server route to client acceptance.
+
+No install is retried with elevation, `AlwaysInstallElevated`, a changed policy,
+a different MSI scope, or a trust bypass. Other policy layers can still reject an
+MSI after this limited preflight. Native standard-user client testing remains
+pending and must use a suitable disposable Windows 11 environment with its existing
+security settings intact, not a personal PC. Raw historical logs remain private.
+
+References: [DisableMSI semantics](https://learn.microsoft.com/en-us/windows/win32/msi/disablemsi),
+[explicit registry views](https://learn.microsoft.com/en-us/dotnet/api/microsoft.win32.registrykey.openbasekey),
+and [Registry64 fallback](https://learn.microsoft.com/en-us/dotnet/api/microsoft.win32.registryview).
+
+The strict product preflight also requires native OS architecture `X64` from
+`RuntimeInformation.OSArchitecture`, not the process architecture or an environment
+variable. ARM64 Windows running an emulated x64 process is not native x64 acceptance;
+ARM64, x86 and missing architecture evidence are rejected. The collector requires
+.NET 7 or newer, where Windows emulation-aware reporting is supported. This check
+is read-only.
+See [native OS architecture semantics](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.interopservices.runtimeinformation.osarchitecture).

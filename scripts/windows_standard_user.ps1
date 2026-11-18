@@ -1,3 +1,4 @@
+. (Join-Path $PSScriptRoot 'windows_msi_policy.ps1')
 # Read-only observation. Never creates accounts, filters tokens, or changes OS policy.
 if (-not ('LocalApiStandardUser.Native' -as [type])) {
     Add-Type -TypeDefinition @'
@@ -64,6 +65,8 @@ function Assert-Windows11StandardUserReceipt($Receipt) {
     if ($Receipt.observationComplete -cne $true -or @($Receipt.errors).Count -ne 0) { throw 'Complete native observation required' }
     $os = $Receipt.os; $token = $Receipt.token
     if ($null -eq $os -or $os.productType -ne 1 -or $os.caption -notmatch '\bWindows 11\b' -or $os.version -notmatch '^10\.0\.\d+$' -or $os.build -lt 22000 -or ([version]$os.version).Build -ne $os.build) { throw 'Verified Windows 11 workstation required, not hosted Windows Server' }
+    if ($os.nativeArchitecture -cne 'X64') { throw 'Native x64 Windows required; emulated or unknown OS architecture refused' }
+    Assert-MsiPolicyForStandardUser $Receipt.installerPolicy
     if ($Receipt.uac.kind -cne 'DWord' -or $Receipt.uac.enableLUA -ne 1) { throw 'UAC EnableLUA DWORD 1 required' }
     if ($token.tokenType -ne 1 -or $token.elevationType -ne 1 -or $token.elevated -ne 0 -or $token.hasRestrictions -ne 0 -or $token.integritySid -cne 'S-1-16-8192') { throw 'Primary medium-integrity standard token required; elevated/filtered/restricted administrator refused' }
     if ($token.sessionId -lt 1 -or $token.userSid -notmatch '^S-1-5-21-\d+-\d+-\d+-\d+$' -or $token.userSid -match '-50[01]$') { throw 'Ordinary interactive account required' }
@@ -79,13 +82,16 @@ function Assert-Windows11StandardUserReceipt($Receipt) {
     if ($interactive.Count -ne 1) { throw 'Enabled native INTERACTIVE group required' }
 }
 function Read-WindowsStandardUserReceipt {
-    $receipt = [ordered]@{ observationComplete=$false; errors=@(); os=$null; uac=$null; token=$null; localAccount=$null; administratorMemberSids=$null;
+    $receipt = [ordered]@{ observationComplete=$false; errors=@(); os=$null; uac=$null; token=$null; installerPolicy=$null; localAccount=$null; administratorMemberSids=$null;
         hostedRunner=($env:GITHUB_ACTIONS -eq 'true'); standardUserTesting='pending' }
     try {
         if (-not $IsWindows) { throw 'Native Windows required' }
+        # OSArchitecture handles Windows emulation correctly starting with .NET 7.
+        if ([Environment]::Version.Major -lt 7) { throw 'Modern native architecture observation unavailable' }
+        $receipt.installerPolicy = Read-WindowsMsiPolicy
         $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
         if (@($os).Count -ne 1) { throw 'Ambiguous OS observation' }
-        $receipt.os = @{ caption=$os.Caption; version=$os.Version; build=[int]$os.BuildNumber; productType=[int]$os.ProductType }
+        $receipt.os = @{ caption=$os.Caption; version=$os.Version; build=[int]$os.BuildNumber; productType=[int]$os.ProductType; nativeArchitecture=[Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString() }
         $key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System', $false)
         if ($null -eq $key) { throw 'UAC policy unavailable' }
         try { $receipt.uac = @{ enableLUA=$key.GetValue('EnableLUA',$null); kind=$key.GetValueKind('EnableLUA').ToString() } } finally { $key.Dispose() }
@@ -93,7 +99,8 @@ function Read-WindowsStandardUserReceipt {
         $user = Get-LocalUser -SID $receipt.token.userSid -ErrorAction Stop
         $receipt.localAccount = @{ sid=$user.SID.Value; enabled=$user.Enabled }
         $receipt.administratorMemberSids = @(Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction Stop | ForEach-Object { $_.SID.Value })
-        $receipt.observationComplete = $true
+        $receipt.observationComplete = ($receipt.installerPolicy.state -ne 'unavailable')
+        if (-not $receipt.observationComplete) { $receipt.errors = @('InstallerPolicyUnavailable') }
     } catch { $receipt.errors = @($_.Exception.GetType().Name) }
     return $receipt
 }
@@ -113,7 +120,7 @@ function ConvertTo-WindowsStandardUserEvidence($observed) {
     $public = [ordered]@{
         preflightPassed=$passed; standardUserTesting='pending'; observationComplete=$observed.observationComplete;
         rejection=$rejection; queryErrors=@(if (@($observed.errors).Count -eq 0 -and $observed.observationComplete -ceq $true) { } else { 'NATIVE_OBSERVATION_UNAVAILABLE' }); os=$observed.os; uac=$observed.uac;
-        hostedRunner=$observed.hostedRunner;
+        hostedRunner=$observed.hostedRunner; installerPolicy=(ConvertTo-MsiPolicyEvidence $observed.installerPolicy);
         token=if ($null -eq $token) { $null } else { [ordered]@{
             userIdentity='redacted-local-account'; tokenType=$token.tokenType; elevationType=$token.elevationType;
             elevated=$token.elevated; hasRestrictions=$token.hasRestrictions; integritySid=$token.integritySid;
@@ -131,6 +138,6 @@ function ConvertTo-WindowsStandardUserEvidence($observed) {
         # Even malformed observations/formatting failures must not reveal exception text.
         return [ordered]@{ preflightPassed=$false; standardUserTesting='pending'; observationComplete=$false;
             rejection='Windows 11 standard-user requirements not verified'; queryErrors=@('NATIVE_OBSERVATION_UNAVAILABLE');
-            os=$null; uac=$null; token=$null; hostedRunner=$null }
+            os=$null; uac=$null; token=$null; hostedRunner=$null; installerPolicy=(ConvertTo-MsiPolicyEvidence $null) }
     }
 }

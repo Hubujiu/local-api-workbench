@@ -146,7 +146,9 @@ jobs:
           path: ${{ runner.temp }}/product-bundle
       - name: Check standard-user preflight contract without querying this host
         shell: pwsh
-        run: ./tests/windows-standard-user-contract.ps1
+        run: |
+          ./tests/windows-msi-policy-contract.ps1
+          ./tests/windows-standard-user-contract.ps1
       - name: Native installed product journey on disposable hosted runner
         shell: pwsh
         env:
