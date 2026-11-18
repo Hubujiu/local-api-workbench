@@ -16,8 +16,9 @@
 - 支持 text、exact int64、decimal text、binary 四种结果合同。拒绝 Number 数值、未知类型、
   重复/不匹配列、超过 1000 行或 1 MiB，失败不返回部分数据。
 - 阶段 deadline 与撤销只要求 transport 关闭，不制造关闭回执。结果等待真正的 closed；
-  未确认关闭会保持等待，必须在后续进程 supervisor 中运行才能提供硬截止时间。
-  此变更不宣称已有操作系统级杀进程回执或安全网络实现。
+  未确认关闭会保持等待。独立 runner 在固定进程及其工作线程内运行，父进程将 2 秒超时
+  与撤销转为进程终止，并在操作系统报告进程关闭之前不发布结果。子监督进程在父 IPC
+  断开或超时时也自行终止；它不执行调用方指定的模块。该 runner 默认仍没有驱动。
 
 ## 当前官方 npm 包核验
 
@@ -34,17 +35,29 @@
 作为本项目要求的服务端证书和主机身份校验证据。没有通过修改该专有驱动、全局 monkey
 patch 或关闭安全检查来绕过问题；本项目默认 transport 继续关闭。
 
+## 官方 JDBC 候选核验
+
+[Maven Central 固定版本](https://central.sonatype.com/artifact/com.dameng/DmJdbcDriver18/8.1.3.140)
+的发布 POM 声明 Apache-2.0。检查的原始 JAR SHA-256 为
+`9af4ff4d6ed15948507f528a18ab9b7196b3600d9169ad7998c19869031a3c6f`。
+JAR manifest 标明 DAMENG 8.1.3.140，归档中未找到 LICENSE 或 NOTICE。
+该 JAR 的 SSL 相关类引用 JSSE trust store 和协议选择。这是候选证据，不证明
+服务器主机名校验、无明文降级或可再分发。没有执行或引入该 JAR，也没有把 Java
+加入默认安装条件。实机验证须使用 [达梦官方通信加密文档](https://eco.dameng.com/document/dm/zh-cn/pm/communication-encryption.html)
+配置的独立测试实例，并包含错名/非受信证书、禁用加密的负向测试。
+
 ## 后续必须实际完成
 
 1. 选择许可可用且验证 CA/hostname/协议版本的 transport，实现无静默直连/身份替代。
    可另行评估官方 JDBC 可选 sidecar，但需核对实际 JAR 许可证、TLS 与依赖，不凭 Maven POM
    标签认定许可或安全通过，也不将 Java 运行时强加为默认安装条件。
-2. 实现进程隔离、硬超时、关闭回执、平台分发，不能把 factory 单测当真实网络证据。
+2. 将可信驱动接入已实现的进程隔离，验证实际驱动取消时的资源关闭并完成平台分发，
+   不能把进程及 factory 测试当真实网络证据。
 3. 在批准的隔离 DM 实例上验证登录、对端身份、READ ONLY、参数编码、精确结果及取消。
    只读事务与语法约束不能保证触发器/视图/外部函数没有副作用，仍须最小权限和对象审查。
 4. 通过上述门禁后才接授权界面、查询入口、迁移和格式往返。
 
-本次六项测试都是惰性端口合成交换/纯编译测试。真实数据库、TLS、Windows 均未验收。
+测试包括惰性端口合成交换、纯编译和实际 Node 子进程取消与终止；没有真实数据库、TLS 或 Windows 验收。
 
 来源：[官方 Node.js 编程指南](https://eco.dameng.com/document/dm/zh-cn/pm/nodejs-rogramming-guide)、
 [官方事务文档](https://eco.dameng.com/document/dm/zh-cn/pm/management-affairs.html)、

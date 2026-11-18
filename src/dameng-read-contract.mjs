@@ -132,6 +132,7 @@ export function compileDamengRead(input) {
       serverName: c.serverName,
       ssl: true,
     },
+    inputSql: sql,
     columns: columns.map((c) => (c[1] ?? c[0]).toUpperCase()),
     sql: `SELECT TOP 1001 ${columns.map((c) => quote(c[0]) + (c[1] ? ` AS ${quote(c[1])}` : "")).join(", ")} FROM ${quote(m[2])}.${quote(m[3])}${where}${order}`,
     binds,
