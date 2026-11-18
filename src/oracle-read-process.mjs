@@ -33,6 +33,7 @@ export async function queryOracleRead(input, { signal } = {}) {
         settled = false,
         closing = false;
       let cause,
+        detail,
         killRequested = false,
         closeTimer,
         killTimer,
@@ -119,6 +120,22 @@ export async function queryOracleRead(input, { signal } = {}) {
           return;
         }
         if (message?.kind === "failure") {
+          if (
+            [
+              "connect",
+              "transaction",
+              "select",
+              "metadata",
+              "fetch",
+              "cursor-close",
+              "rollback",
+              "disconnect",
+            ].includes(message.stage)
+          ) {
+            detail = { stage: message.stage };
+            if (/^(ORA|NJS|DPI)-[0-9]{3,5}$/.test(message.driverCode))
+              detail.driverCode = message.driverCode;
+          }
           stop("ORACLE_READ_EXECUTION_FAILED");
           return;
         }
@@ -161,7 +178,9 @@ export async function queryOracleRead(input, { signal } = {}) {
         }
         if (signal?.aborted) cause = "ORACLE_READ_CANCELLED";
         if (cause || code !== 0 || !candidate) {
-          settle(error(cause || "ORACLE_READ_PROCESS_FAILED"));
+          settle(
+            Object.assign(error(cause || "ORACLE_READ_PROCESS_FAILED"), detail),
+          );
           return;
         }
         settle(null, candidate);

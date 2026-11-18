@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { OracleReadSessions } from "../src/oracle-read-sessions.mjs";
 import { DatabaseSessions } from "../src/database-sessions.mjs";
+import { queryOracleRead } from "../src/oracle-read-process.mjs";
 test("opt-in actual Oracle Thin TCPS read-only exact NUMBER gate", async (t) => {
   if (
     process.env.LOCALAPI_ORACLE_REAL === undefined ||
@@ -19,7 +20,19 @@ test("opt-in actual Oracle Thin TCPS read-only exact NUMBER gate", async (t) => 
   )
     throw Error("ORACLE_REAL_GATE_CONFIG_REQUIRED");
   let stage = "config";
-  const sessions = new OracleReadSessions({ enabled: true });
+  const sessions = new OracleReadSessions({
+    enabled: true,
+    query: async (input, options) => {
+      try {
+        return await queryOracleRead(input, options);
+      } catch (error) {
+        stage +=
+          "-" +
+          [error.code, error.stage, error.driverCode].filter(Boolean).join("-");
+        throw error;
+      }
+    },
+  });
   const projectSessions = new DatabaseSessions();
   const previousPreview = process.env.LOCALAPI_ORACLE_PREVIEW;
   process.env.LOCALAPI_ORACLE_PREVIEW = "read-only";

@@ -18,8 +18,19 @@ export async function executeOracleRead(
   let connection,
     resultSet,
     result,
-    failed = false,
+    failure,
     interrupted = false;
+  let stage = "connect";
+  const remember = (err) => {
+    if (failure) return;
+    const driverCode = /^(ORA|NJS|DPI)-[0-9]{3,5}$/.test(err?.code)
+      ? err.code
+      : undefined;
+    failure = Object.assign(Error("ORACLE_READ_FAILED_NO_RESULT"), {
+      stage,
+      driverCode,
+    });
+  };
   const stop = () => {
     interrupted = true;
     try {
@@ -37,10 +48,12 @@ export async function executeOracleRead(
     check();
     if (connection.thin !== true) throw Error();
     connection.callTimeout = 2000;
+    stage = "transaction";
     await connection.execute("SET TRANSACTION READ ONLY", [], {
       autoCommit: false,
     });
     check();
+    stage = "select";
     const value = await connection.execute(plan.sql, plan.binds, {
       autoCommit: false,
       outFormat: driver.OUT_FORMAT_ARRAY,
@@ -69,6 +82,7 @@ export async function executeOracleRead(
       },
     });
     resultSet = value.resultSet;
+    stage = "metadata";
     check();
     if (
       !resultSet ||
@@ -80,6 +94,7 @@ export async function executeOracleRead(
     const columns = value.metaData.map((c) => c.name),
       rows = [];
     let bytes = Buffer.byteLength(JSON.stringify(columns)) + 100;
+    stage = "fetch";
     while (true) {
       check();
       const row = await resultSet.getRow();
@@ -99,8 +114,8 @@ export async function executeOracleRead(
       rows.push(row);
     }
     result = databaseRows(columns, rows);
-  } catch {
-    failed = true;
+  } catch (error) {
+    remember(error);
   } finally {
     try {
       onClosing();
@@ -108,24 +123,27 @@ export async function executeOracleRead(
     signal?.removeEventListener("abort", stop);
     if (resultSet)
       try {
+        stage = "cursor-close";
         await resultSet.close();
-      } catch {
-        failed = true;
+      } catch (error) {
+        remember(error);
       }
     if (connection) {
       try {
+        stage = "rollback";
         await connection.rollback();
-      } catch {
-        failed = true;
+      } catch (error) {
+        remember(error);
       }
       try {
+        stage = "disconnect";
         await connection.close();
-      } catch {
-        failed = true;
+      } catch (error) {
+        remember(error);
       }
     }
   }
   check();
-  if (failed) throw Error("ORACLE_READ_FAILED_NO_RESULT");
+  if (failure) throw failure;
   return result;
 }

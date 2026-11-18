@@ -14,8 +14,12 @@ try {
     onClosing: () => parentPort.postMessage({ kind: "closing" }),
   });
   parentPort.postMessage({ kind: "result", result });
-} catch {
-  parentPort.postMessage({ kind: "failure" });
+} catch (error) {
+  parentPort.postMessage({
+    kind: "failure",
+    stage: error.stage,
+    driverCode: error.driverCode,
+  });
 } finally {
   parentPort.close();
 }

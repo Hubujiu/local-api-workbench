@@ -5,6 +5,7 @@ let worker,
   started = false,
   closing = false,
   candidate,
+  detail,
   failure = false;
 const kill = () => process.kill(process.pid, "SIGKILL");
 let cleanupTimer;
@@ -53,6 +54,7 @@ process.on("message", (message) => {
     if (value?.kind === "closing") return close();
     if (value?.kind === "failure") {
       failure = true;
+      detail = { stage: value.stage, driverCode: value.driverCode };
       close();
       return;
     }
@@ -73,7 +75,9 @@ process.on("message", (message) => {
       close();
     }
     send(
-      failure ? { kind: "failure" } : { kind: "result", result: candidate },
+      failure
+        ? { kind: "failure", ...detail }
+        : { kind: "result", result: candidate },
       () => {
         clearTimeout(totalTimer);
         clearTimeout(cleanupTimer);
