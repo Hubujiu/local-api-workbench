@@ -10,10 +10,10 @@
 
 ## 升级失败后恢复上一版
 
-升级返回 1603 后先等待 Windows Installer 完成回滚，再从开始菜单打开上一版并核对项目。如果 Windows 只保留了旧版的“已通告”注册，使用原先安装的同一版 MSI。先对照该版 Release 的 SHA256SUMS 和发布者签名，再在原 Windows 账号运行以下命令，将文件名替换为旧版完整路径。
+升级返回 1603 后先等待 Windows Installer 完成回滚，再从开始菜单打开上一版并核对项目。如果 Windows 只保留了旧版的“已通告”注册，从该版 Release 取回原 MSI 和 verification.json，核对 SHA256SUMS。关闭 Workbench，在原 Windows 账号以普通权限打开 PowerShell 7，从相同版本的源码目录运行恢复工具。
 
 ```powershell
-msiexec.exe /i "C:\Downloads\LocalAPI-0.1.0-windows-x64.msi" WORKBENCHRESTORE=1 ADDLOCAL=ALL
+.\scripts\recover_windows_release.ps1 -Media "C:\Downloads\LocalAPI-0.1.0-windows-x64.msi" -Verification "C:\Downloads\verification.json"
 ```
 
-安装器核对当前账号下该产品的通告状态和版本关系，使用原包恢复程序及卸载注册。验收记录会标明系统自行回滚或使用原版介质恢复，并核对恢复后的程序、项目、历史和后续卸载。
+恢复工具核对发布者、时间戳、安装包摘要、旧版程序清单，以及当前账号的产品注册。它先将程序目录整体保存在同一磁盘的 `LocalAPI-R-…` 目录，再通过 Windows Installer 注销旧通告并从原 MSI 全新安装。人工放入程序目录的文件可在输出的保留目录中取回。项目和历史位于独立的数据目录，验收会逐文件核对。

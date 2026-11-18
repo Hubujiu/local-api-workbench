@@ -14,7 +14,6 @@ from verify_portable_download import inventory_directory, require
 NS = 'http://schemas.microsoft.com/wix/2006/wi'
 FAMILY = uuid.UUID('18f3029b-3037-4b75-bb85-2037e7c8a364')
 APP_DIR = 'LocalAPI-Lifecycle-Candidate'
-ADVERTISED_RECOVERY = '(ProductState=1 AND WORKBENCHRESTORE="1" AND ADDLOCAL="ALL")'
 ET.register_namespace('', NS)
 
 
@@ -61,10 +60,9 @@ def prepare(payload, output, head, version, manifest_sha256, fixture_family=None
     for prop, value in [('ARPNOMODIFY', '1'), ('ARPNOREPAIR', '1')]:
         element(product, 'Property', Id=prop, Value=value)
     guards = {'NOT ALLUSERS': 'Per-user installation only.',
-              'NOT Installed OR REMOVE="ALL" OR ' + ADVERTISED_RECOVERY: 'Use the original installer to recover an advertised installation.',
-              'NOT WORKBENCHRESTORE OR (' + ADVERTISED_RECOVERY + ' AND NOT SAMEORNEWERPRODUCTS)': 'Recovery requires the advertised original version and no newer installation.',
+              'NOT Installed OR REMOVE="ALL"': 'Repair and modify are not supported.',
               'Installed OR NOT SAMEORNEWERPRODUCTS': 'Same or newer version is already installed.',
-              'Installed OR OLDERPRODUCTS OR NOT EXISTINGCANDIDATE OR ' + ADVERTISED_RECOVERY: 'A fresh installation directory is required.',
+              'Installed OR OLDERPRODUCTS OR NOT EXISTINGCANDIDATE': 'A fresh installation directory is required.',
               'NOT RollbackDisabled AND NOT DISABLEROLLBACK': 'Rollback must not be disabled.'}
     for condition, message in guards.items(): element(product, 'Condition', Message=message).text = condition
     upgrade = element(product, 'Upgrade', Id=upgrade_code)
@@ -165,9 +163,8 @@ def validate(receipt, tables):
     require(tables['DrLocator'] == [['ExistingCandidate', '', '[LocalAppDataFolder]' + receipt['directory'], '0']], 'Directory search changed')
     require(properties.get('SecureCustomProperties') == 'OLDERPRODUCTS;SAMEORNEWERPRODUCTS', 'Upgrade properties not secured')
     require({row[0] for row in tables['LaunchCondition']} == {
-        'NOT ALLUSERS', 'NOT Installed OR REMOVE="ALL" OR ' + ADVERTISED_RECOVERY,
-        'NOT WORKBENCHRESTORE OR (' + ADVERTISED_RECOVERY + ' AND NOT SAMEORNEWERPRODUCTS)',
-        'Installed OR NOT SAMEORNEWERPRODUCTS', 'Installed OR OLDERPRODUCTS OR NOT EXISTINGCANDIDATE OR ' + ADVERTISED_RECOVERY,
+        'NOT ALLUSERS', 'NOT Installed OR REMOVE="ALL"',
+        'Installed OR NOT SAMEORNEWERPRODUCTS', 'Installed OR OLDERPRODUCTS OR NOT EXISTINGCANDIDATE',
         'NOT RollbackDisabled AND NOT DISABLEROLLBACK'}, 'Lifecycle guards changed')
     upgrades = {r[-1]: r for r in tables['Upgrade']}
     require(set(upgrades) == {'OLDERPRODUCTS', 'SAMEORNEWERPRODUCTS'}, 'Unexpected upgrade selection')

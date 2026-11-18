@@ -11,6 +11,18 @@ namespace LocalApiMsiRegistration {
     }
     public static class Native {
         [DllImport("msi.dll", CharSet=CharSet.Unicode, ExactSpelling=true)]
+        private static extern uint MsiEnumRelatedProductsW(string upgradeCode, uint reserved, uint index, StringBuilder product);
+        public static string[] RelatedProducts(string family) {
+            var codes = new System.Collections.Generic.List<string>();
+            for (uint i = 0; ; i++) {
+                var code = new StringBuilder(39);
+                uint rc = MsiEnumRelatedProductsW(family, 0, i, code);
+                if (rc == 259) return codes.ToArray();
+                if (rc != 0) throw new InvalidOperationException("Cannot enumerate MSI product family: " + rc);
+                codes.Add(code.ToString());
+            }
+        }
+        [DllImport("msi.dll", CharSet=CharSet.Unicode, ExactSpelling=true)]
         private static extern uint MsiGetProductInfoExW(string productCode, string userSid,
             uint context, string property, StringBuilder value, ref uint length);
         public static PropertyResult QueryCurrentUser(string productCode, uint context, string property) {

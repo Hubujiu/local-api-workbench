@@ -137,8 +137,13 @@ async function registration(expected) {
       path.resolve(args[1]),
       "-Expected",
       expected,
+      ...(expected === "restore-old" ? ["-Evidence", evidence] : []),
     ],
-    { timeout: 30000, windowsHide: true, shell: false },
+    {
+      timeout: expected === "restore-old" ? 1_260_000 : 30_000,
+      windowsHide: true,
+      shell: false,
+    },
   );
   const observations = JSON.parse(stdout);
   steps.push({
@@ -173,9 +178,6 @@ async function install(item, label, remove = false, expectedExitCode = 0) {
     [
       remove ? "/x" : "/i",
       item.msi.path,
-      ...(label === "restore-original-registration"
-        ? ["WORKBENCHRESTORE=1", "ADDLOCAL=ALL"]
-        : []),
       "/qn",
       "/norestart",
       "REBOOT=ReallySuppress",
@@ -393,7 +395,18 @@ try {
         if (oldState === "1") {
           // Windows can restore all files but leave the old per-user MSI advertised.
           // Restore that precise product using the original, digest-checked media.
-          await install(old, "restore-original-registration");
+          const profileBefore = await inventory(profile);
+          const { backup } = await registration("restore-old");
+          assert.deepEqual(await inventory(profile), profileBefore);
+          assert.equal(
+            await readFile(path.join(backup, foreignName), "utf8"),
+            foreignBytes,
+          );
+          await packageInventory(old, false);
+          // Add the preserved fixture file back to exercise ownership on the next upgrade.
+          await writeFile(path.join(target, foreignName), foreignBytes, {
+            flag: "wx",
+          });
           result.rollbackRecovery = "original-media";
         } else {
           result.rollbackRecovery = "windows-installer";
