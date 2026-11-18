@@ -4,8 +4,13 @@ import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 
 // Only record the fixture's labels. Do not log other URLs, headers or bodies.
 const output = process.argv[2];
+const port = Number(process.argv[3] ?? 0);
+if (!Number.isSafeInteger(port) || port < 0 || port > 65535)
+  throw Error("Port must be an integer between 0 and 65535");
 if (!output)
-  throw Error("Usage: node scripts/observe-apipost-automation.mjs OUTPUT");
+  throw Error(
+    "Usage: node scripts/observe-apipost-automation.mjs OUTPUT [PORT]",
+  );
 mkdirSync(output, { recursive: true });
 const write = (name, value) =>
   writeFileSync(path.join(output, name), JSON.stringify(value, null, 2) + "\n");
@@ -29,7 +34,7 @@ const server = http.createServer((request, response) => {
   });
   response.end(JSON.stringify({ ok: allowed }));
 });
-server.listen(0, "127.0.0.1", () => {
+server.listen(port, "127.0.0.1", () => {
   const origin = "http://127.0.0.1:" + server.address().port;
   write("listen.json", { origin, pid: process.pid });
   write("loopback-postman.json", {

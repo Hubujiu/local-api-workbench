@@ -29,7 +29,7 @@ Owner 整项目出口使用 `GET /api/projects/{id}/export?format=apipost`。追
 
 ## 复现
 
-`node scripts/observe-apipost-automation.mjs <单独的输出目录>` 启动仅监听回环的记录器，写出一份含三个接口的 Postman 集合。导入原工具后按上表顺序新建手动用例，保存、执行、修改第一个接口，再执行和导出。接收器仅记录上述测试路径、HTTP 方法和到达时间。
+`node scripts/observe-apipost-automation.mjs <单独的输出目录> [端口]` 启动仅监听回环的记录器，写出一份含三个接口的 Postman 集合。省略端口可使用随机端口，重放本机留存的原始出口使用 9009。导入原工具后按上表顺序新建手动用例，保存、执行、修改第一个接口，再执行和导出。接收器仅记录上述测试路径、HTTP 方法和到达时间。
 
 仓库中的 [脱敏原厂出口](../tests/fixtures/apipost-cloud-827.json) 保留步骤、引用关系、运行配置和响应定义。项目标识、环境地址与监听端口已替换。回归使用临时项目和随机回环端口，并核对真实网络到达顺序、逐请求延时和两个出口的重导入。
 

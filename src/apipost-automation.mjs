@@ -492,7 +492,7 @@ export function exportAutomationPlans(
   const envs = new Set(document.global.envs.map((e) => e.env_id));
   return (project.plans || []).map((plan) => {
     const meta = readAutomationMetadata(plan.apipostAutomation);
-    if (!meta) throw Error("Apipost导出尚不能表达 plans；请使用项目备份");
+    if (!meta) throw Error("Apipost导出尚不能表达plans；请使用项目备份");
     check(
       !replay || !meta.requestIntervalMs,
       "8.2.7 桌面回放尚不能保留非零逐请求间隔，请使用保留引用的 Apipost JSON",

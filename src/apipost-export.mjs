@@ -229,6 +229,14 @@ export function exportApipost(project, options = {}) {
   )
     throw Error("原生继承图含已回收接口；请恢复后导出或使用完整项目备份");
   // This is a definition interchange, not a backup, execution archive or grant.
+  if (
+    populated(project.plans) &&
+    !(
+      Array.isArray(project.plans) &&
+      project.plans.every((plan) => plan?.apipostAutomation)
+    )
+  )
+    unsupported(project.plans, "plans");
   for (const key of ["apiResourceTrash", "parameterDictionary", "models"])
     unsupported(project[key], key);
   // false is meaningful here: absence enables Mock serving. Native definitions
