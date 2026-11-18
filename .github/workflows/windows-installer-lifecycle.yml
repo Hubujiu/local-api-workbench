@@ -1,0 +1,59 @@
+name: Windows installer lifecycle fixture
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-fixture:
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - name: Prepare disposable Debian host libraries
+        run: apt-get update && apt-get install -y --no-install-recommends python3 ca-certificates libglib2.0-0t64 libxml2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Materialize pinned Debian authoring tools without system installation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib, subprocess, urllib.request
+          root = pathlib.Path('${{ runner.temp }}') / 'msitools'
+          root.mkdir()
+          for item in json.loads(pathlib.Path('packaging/windows-msi/debian-toolchain-lock.json').read_text()):
+              path = root / pathlib.Path(item['Filename']).name
+              urllib.request.urlretrieve('https://deb.debian.org/debian/' + item['Filename'], path)
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == item['SHA256']
+              subprocess.run(['dpkg-deb', '-x', str(path), str(root / 'root')], check=True)
+          PY
+      - name: Compile and inspect two inert fixture versions
+        env:
+          LD_LIBRARY_PATH: ${{ runner.temp }}/msitools/root/usr/lib/x86_64-linux-gnu
+          LOCALAPI_MSI_TOOLS: ${{ runner.temp }}/msitools/root/usr/bin
+        run: |
+          python3 -m unittest discover -s tests -p test_portable_lifecycle_msi.py -v
+          python3 scripts/build_windows_lifecycle_fixture.py --output "${{ runner.temp }}/msi-fixture" --tools "$LOCALAPI_MSI_TOOLS"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: inert-msi-fixture
+          path: ${{ runner.temp }}/msi-fixture
+          retention-days: 7
+          if-no-files-found: error
+  native-lifecycle:
+    needs: build-fixture
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: inert-msi-fixture
+          path: ${{ runner.temp }}/msi-fixture
+      - name: Native install upgrade rollback and uninstall of inert fixture only
+        shell: pwsh
+        run: |
+          ./scripts/test_windows_msi_lifecycle.ps1 -FixtureDirectory "${{ runner.temp }}/msi-fixture" -EvidenceDirectory "${{ runner.temp }}/msi-evidence" -ExecuteInDisposableRunner
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: native-msi-evidence
+          path: ${{ runner.temp }}/msi-evidence
+          retention-days: 7
+          if-no-files-found: warn
