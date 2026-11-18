@@ -183,3 +183,52 @@ pass; local authoring/contract tests do not set it. This scenario tests rollback
 an installer failure after owned-file removal, **not** a failure after a new app has
 run data migrations. Real native execution of this optional full-product scenario
 is still required, as are signing, ICE, and genuine standard-user acceptance.
+
+## Read-only Windows 11 standard-user preflight (native testing pending)
+
+Hosted Windows administrator results are not Windows 11 standard-user acceptance.
+On a **separately prepared disposable Windows 11 VM**, already logged in through an
+interactive enabled ordinary local account outside Administrators, the manual gate is:
+
+```powershell
+node tests/desktop-installed-product-journey.mjs --plan C:\fixture\product-plan.json --expected-plan-sha256 PIN --execute-in-disposable-windows --require-standard-user
+```
+
+The optional `--exercise-product-rollback` flag can be added when the plan includes
+the pinned rollback fixture. Without `--require-standard-user`, existing behavior
+is unchanged and standard-user acceptance remains pending/false. This flag does not
+create an account, provision a VM, change permissions/group membership/UAC, filter
+an administrator token, sign a package, or configure a personal computer.
+
+Before any product/MSI execution, the read-only helper checks OS caption/version/build
+and **ProductType = 1**, thereby rejecting Windows Server even when its build number
+is newer. It requires Windows 11, the UAC `EnableLUA` DWORD set to 1, a primary
+non-elevated/unrestricted medium-integrity token with no linked elevated token,
+a nonzero interactive session and enabled INTERACTIVE SID, an enabled matching local
+account, and no administrator membership. Native token groups are inspected with
+all raw attributes: the Administrators SID is rejected even when deny-only. Batch
+and service logons, incomplete observations, and denied local-membership/CIM/native
+queries fail closed. UAC is observed only; no setting is changed or reboot attempted.
+
+Raw account/group observations stay in memory. Public preflight evidence contains
+only the required OS/UAC facts, token/elevation classification, administrator-SID
+presence/deny-only attributes, and a redacted user identity. It contains neither
+account/machine names nor the full group-SID list. Public query failures use only the fixed `NATIVE_OBSERVATION_UNAVAILABLE` category;
+assertion rejection uses a fixed fallback, never raw CIM/Get-LocalUser/native
+exception text or malformed-observation error messages that could expose names.
+
+`standardUserPreflightPassed` is separate from `standardUserAcceptance`. Passing
+preflight alone leaves acceptance pending. Only that same opt-in journey completing
+all native assertions and clean application shutdown can set full acceptance true;
+cleanup failure clears it. Mocked portable tests do not constitute native testing.
+No genuine Windows 11 standard-user run has yet been performed for this addition.
+
+API references: [GetTokenInformation](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-gettokeninformation),
+[TOKEN_GROUPS attributes](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-token_groups),
+[TOKEN_ELEVATION_TYPE](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ne-winnt-token_elevation_type),
+and [Win32_OperatingSystem](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-operatingsystem).
+
+This redaction applies to the **new preflight receipt only**. Existing lifecycle
+receipts, screenshots/traces, and MSI verbose logs can still contain local paths or
+registration SIDs. Keep raw evidence from any future real machine private and share
+only a separately redacted summary. This change does not rewrite prior evidence.

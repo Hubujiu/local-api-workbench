@@ -236,3 +236,19 @@ export function assertProductRollbackLog(text) {
     "Rollback activity evidence required",
   );
 }
+
+// Preflight is never acceptance by itself. Call only after journey and cleanup.
+export function standardUserAcceptance({
+  requested,
+  preflightPassed,
+  nativeJourneyPassed,
+  cleanupErrors,
+}) {
+  return (
+    requested === true &&
+    preflightPassed === true &&
+    nativeJourneyPassed === true &&
+    Array.isArray(cleanupErrors) &&
+    cleanupErrors.length === 0
+  );
+}

@@ -25,6 +25,7 @@ import { assertCleanDesktopExit } from "./helpers/desktop-restart-receipt.mjs";
 import { hardStopDesktopProcess } from "./helpers/desktop-hard-stop.mjs";
 import {
   assertProductRollbackLog,
+  standardUserAcceptance,
   assertRuntimeIdentity,
   inventory,
   loadProductPlan,
@@ -33,15 +34,22 @@ import {
 
 const args = process.argv.slice(2);
 assert.equal(
-  [5, 6].includes(args.length),
+  [5, 6, 7].includes(args.length),
   true,
   "Use --plan FILE --expected-plan-sha256 DIGEST --execute-in-disposable-windows",
 );
 assert.equal(args[0], "--plan");
 assert.equal(args[2], "--expected-plan-sha256");
 assert.equal(args[4], "--execute-in-disposable-windows");
-if (args.length === 6) assert.equal(args[5], "--exercise-product-rollback");
-const exerciseRollback = args.length === 6;
+const optionalFlags = new Set(args.slice(5));
+assert.equal(optionalFlags.size, args.length - 5, "Duplicate optional flag");
+for (const flag of optionalFlags)
+  assert.ok(
+    ["--exercise-product-rollback", "--require-standard-user"].includes(flag),
+    "Unknown optional flag",
+  );
+const exerciseRollback = optionalFlags.has("--exercise-product-rollback");
+const requireStandardUser = optionalFlags.has("--require-standard-user");
 assert.equal(process.platform, "win32", "Native disposable Windows required");
 const plan = await loadProductPlan(path.resolve(args[1]), args[3]);
 if (exerciseRollback)
@@ -85,6 +93,10 @@ const result = {
   nativeProductJourneyPassed: false,
   productRollbackVerified: false,
   rollbackRequested: exerciseRollback,
+  standardUserTesting: "pending",
+  standardUserPreflightPassed: false,
+  standardUserAcceptance: false,
+  standardUserPreflightRequested: requireStandardUser,
   signatureVerified: false,
   iceValidated: false,
 };
@@ -330,6 +342,33 @@ async function exportAll(host, minimumProjects = 2) {
   return values;
 }
 try {
+  if (requireStandardUser) {
+    const script = fileURLToPath(
+      new URL("../scripts/check_windows_standard_user.ps1", import.meta.url),
+    );
+    const { stdout } = await promisify(execFile)(
+      "pwsh.exe",
+      ["-NoProfile", "-NonInteractive", "-File", script],
+      { timeout: 30000, windowsHide: true, shell: false },
+    );
+    const preflight = JSON.parse(stdout);
+    result.standardUserPreflight = preflight;
+    result.standardUserPreflightPassed = preflight.preflightPassed === true;
+    await writeFile(
+      path.join(evidence, "windows-standard-user-preflight.json"),
+      JSON.stringify(preflight, null, 2),
+    );
+    assert.equal(
+      preflight.preflightPassed,
+      true,
+      preflight.rejection || "Standard-user preflight failed closed",
+    );
+    assert.equal(
+      preflight.standardUserTesting,
+      "pending",
+      "Preflight is not product acceptance",
+    );
+  }
   const databaseFile = path.join(root, "journey.sqlite");
   const db = new DatabaseSync(databaseFile);
   try {
@@ -503,8 +542,19 @@ try {
   if (cleanupErrors.length) {
     result.cleanupErrors = cleanupErrors;
     result.nativeProductJourneyPassed = false;
+    result.standardUserTesting = "pending";
+    result.standardUserAcceptance = false;
     process.exitCode = 1;
   }
+  result.standardUserAcceptance = standardUserAcceptance({
+    requested: requireStandardUser,
+    preflightPassed: result.standardUserPreflightPassed,
+    nativeJourneyPassed: result.nativeProductJourneyPassed,
+    cleanupErrors,
+  });
+  result.standardUserTesting = result.standardUserAcceptance
+    ? "passed-full-journey"
+    : "pending";
   // Keep synthetic profile, exports, traces, logs and uncertain MSI state for inspection.
   await writeFile(
     path.join(evidence, "product-lifecycle-result.json"),
