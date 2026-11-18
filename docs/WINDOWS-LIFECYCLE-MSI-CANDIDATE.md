@@ -52,7 +52,10 @@ unsigned and blocked from installation on the user's personal workstation.
 
 ## Repeatable disposable native runner
 
-`.github/workflows/windows-installer-lifecycle.yml` is **manual dispatch only**. Its
+`.github/workflows/windows-installer-lifecycle.yml` runs on **same-repository pull
+requests changing installer inputs**, or manual dispatch. Fork pull requests are
+skipped at both job gates. It uses read-only repository permission, no persisted
+checkout credentials, no deployment or publishing step, and no secret inputs. Its
 Linux build job creates two tiny, inert application fixtures in a fresh UUID-scoped
 family; the fake `.exe` is text, not executable code. It uploads only those fixtures.
 The Windows hosted job uses the OS Windows Installer and records:
@@ -75,7 +78,9 @@ Foreign-directory sentinels are retained by rename, not recursively removed.
 Hosted Windows runners may have elevated tokens. The JSON records this and does not
 turn a hosted fixture pass into standard-user acceptance. No local account creation,
 security-setting changes, personal Windows session or paid VM is requested by this
-workflow. Dispatch is not performed by adding this source file.
+workflow. A matching same-repository PR starts these disposable fixture jobs;
+manual dispatch remains available separately. Script bodies obtain temporary paths
+from environment variables, not interpolated workflow expressions.
 
 ## Remaining gates
 

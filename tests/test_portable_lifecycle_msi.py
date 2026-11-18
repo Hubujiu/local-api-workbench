@@ -57,6 +57,29 @@ class LifecycleMsiTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'digest'):
             prepare(payload, self.root / 'out', HEAD, '0.1.0', '0' * 64)
 
+    def test_workflow_runs_same_repository_pr_with_safe_path_handling(self):
+        source = (Path(__file__).resolve().parents[1] / '.github/workflows/windows-installer-lifecycle.yml').read_text()
+        self.assertIn('  pull_request:\n    paths:', source)
+        self.assertIn('  workflow_dispatch:', source)
+        self.assertNotIn('pull_request_target', source)
+        self.assertIn('contents: read', source)
+        self.assertNotIn('secrets.', source)
+        self.assertEqual(source.count("head.repo.full_name == github.repository"), 2)
+        self.assertEqual(source.count('persist-credentials: false'), 2)
+        self.assertIn("os.environ['RUNNER_TEMP']", source)
+        self.assertIn("Join-Path $env:RUNNER_TEMP 'msi-fixture'", source)
+        self.assertIn('export LOCALAPI_MSI_TOOLS="$RUNNER_TEMP/msitools/root/usr/bin"', source)
+        self.assertIn('path: ${{ steps.build.outputs.fixture_path }}', source)
+        in_run = False
+        for line in source.splitlines():
+            if line.startswith('        run: |'):
+                in_run = True
+                continue
+            if line.strip() and not line.startswith('          '):
+                in_run = False
+            if in_run:
+                self.assertNotIn('${{', line, 'Do not interpolate expressions into script source')
+
     @unittest.skipUnless(os.environ.get('LOCALAPI_MSI_TOOLS'), 'Verified Linux MSI toolchain not configured')
     def test_real_compilation_upgrade_transaction_and_mutations(self):
         payload, digest = self.source()
