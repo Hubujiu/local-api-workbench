@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { queryOracleRead } from "../src/oracle-read-process.mjs";
+import { OracleReadSessions } from "../src/oracle-read-sessions.mjs";
 test("opt-in actual Oracle Thin TCPS read-only exact NUMBER gate", async (t) => {
   if (
     process.env.LOCALAPI_ORACLE_REAL === undefined ||
@@ -18,14 +18,34 @@ test("opt-in actual Oracle Thin TCPS read-only exact NUMBER gate", async (t) => 
   )
     throw Error("ORACLE_REAL_GATE_CONFIG_REQUIRED");
   let stage = "config";
+  const sessions = new OracleReadSessions({ enabled: true });
   try {
     const config = JSON.parse(
       await readFile(process.env.LOCALAPI_ORACLE_REAL_CONFIG, "utf8"),
     );
     assert.deepEqual(Object.keys(config).sort(), ["connection", "disposable"]);
     assert.equal(config.disposable, true);
-    const query = (sql) =>
-      queryOracleRead({ connection: config.connection, sql });
+    const { id } = sessions.register("gate-owner", "gate-project", {
+      connection: config.connection,
+      relations: [
+        "sys.session_privs",
+        "sys.session_roles",
+        "workbench_gate.workbench_oracle_gate",
+      ],
+    });
+    const query = (sql, parameters = []) =>
+      sessions.query("gate-owner", "gate-project", id, { sql, parameters });
+    stage = "ownership";
+    await assert.rejects(
+      sessions.query("other-owner", "gate-project", id, {
+        sql: "SELECT privilege FROM sys.session_privs",
+      }),
+      /ORACLE_SESSION_UNAVAILABLE/,
+    );
+    await assert.rejects(
+      query("SELECT table_name FROM sys.all_tables"),
+      /ORACLE_SESSION_RELATION_DENIED/,
+    );
     stage = "permissions";
     const privs = await query("SELECT privilege FROM sys.session_privs");
     assert.ok(privs.rows.every((r) => r.PRIVILEGE === "CREATE SESSION"));
@@ -34,11 +54,10 @@ test("opt-in actual Oracle Thin TCPS read-only exact NUMBER gate", async (t) => 
       0,
     );
     stage = "fixture";
-    const result = await queryOracleRead({
-      connection: config.connection,
-      sql: "SELECT id, exact_amount FROM workbench_gate.workbench_oracle_gate WHERE id=:p0",
-      parameters: [1],
-    });
+    const result = await query(
+      "SELECT id, exact_amount FROM workbench_gate.workbench_oracle_gate WHERE id=:p0",
+      [1],
+    );
     assert.equal(result.rows.length, 1);
     assert.equal(result.rows[0].ID, "1");
     assert.equal(
@@ -46,7 +65,15 @@ test("opt-in actual Oracle Thin TCPS read-only exact NUMBER gate", async (t) => 
       "9007199254740993.123456789012345678",
     );
     assert.equal(result.truncated, false);
+    stage = "revocation";
+    sessions.revoke("gate-owner", "gate-project", id);
+    await assert.rejects(
+      query("SELECT privilege FROM sys.session_privs"),
+      /ORACLE_SESSION_UNAVAILABLE/,
+    );
   } catch {
     throw Error(`ORACLE_REAL_GATE_NO_ACCEPTANCE:${stage}`);
+  } finally {
+    sessions.close();
   }
 });

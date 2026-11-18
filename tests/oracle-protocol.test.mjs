@@ -68,3 +68,52 @@ test("abort during held TLS handshake kills owned Oracle process before returnin
   c.abort("private-secret");
   await assertion;
 });
+
+test("owned Oracle provider revocation cancels actual Thin TLS connection without replay", async (t) => {
+  const { OracleReadSessions } = await import(
+    "../src/oracle-read-sessions.mjs"
+  );
+  const sessions = new OracleReadSessions({ enabled: true });
+  let arrived;
+  const first = new Promise((r) => {
+    arrived = r;
+  });
+  const sockets = new Set();
+  let connections = 0;
+  const server = createServer((socket) => {
+    connections++;
+    sockets.add(socket);
+    socket.on("error", () => {});
+    socket.once("data", (b) => {
+      assert.equal(b[0], 22);
+      assert.ok(!b.includes(Buffer.from("private-secret")));
+      arrived();
+    });
+    socket.once("close", () => sockets.delete(socket));
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(async () => {
+    sessions.close();
+    for (const s of sockets) s.destroy();
+    await new Promise((r) => server.close(r));
+  });
+  const input = oracleInput();
+  input.connection.host = "127.0.0.1";
+  input.connection.port = server.address().port;
+  const { id } = sessions.register("owner", "project", {
+    connection: input.connection,
+    relations: ["fixture.items"],
+  });
+  const result = sessions.query("owner", "project", id, {
+    sql: input.sql,
+    parameters: input.parameters,
+  });
+  const assertion = assert.rejects(result, {
+    code: "ORACLE_SESSION_CANCELLED",
+  });
+  await first;
+  sessions.revoke("owner", "project", id);
+  await assertion;
+  assert.equal(connections, 1);
+  assert.deepEqual(sessions.list("owner", "project"), []);
+});

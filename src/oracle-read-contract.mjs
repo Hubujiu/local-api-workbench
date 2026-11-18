@@ -123,6 +123,7 @@ export function compileOracleRead(input) {
         .join(", ");
   }
   return {
+    relation: `${m[2].toUpperCase()}.${m[3].toUpperCase()}`,
     config: {
       user: c.user,
       password: c.password,
