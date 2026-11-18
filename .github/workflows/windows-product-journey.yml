@@ -27,6 +27,7 @@ jobs:
     outputs:
       head: ${{ steps.identity.outputs.head }}
       manifest_sha: ${{ steps.manifest.outputs.sha }}
+      version: ${{ steps.identity.outputs.version }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -35,7 +36,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "24.22.3"
-      - name: Require committed test-only source version and bind exact head
+      - name: Require committed candidate MSI version and bind exact head
         id: identity
         shell: pwsh
         env:
@@ -43,9 +44,10 @@ jobs:
         run: |
           $head = (git rev-parse HEAD).Trim()
           if ($LASTEXITCODE -ne 0 -or $head -cne $env:EXPECTED_HEAD) { throw 'Source head mismatch' }
-          node --input-type=module -e "import {desktopSourceVersion} from './scripts/desktop-package-version.mjs'; if (await desktopSourceVersion() !== '0.1.1') throw Error('Committed test-only 0.1.1 required');"
+          $version = node --input-type=module -e "import {desktopSourceVersion} from './scripts/desktop-package-version.mjs'; const v=await desktopSourceVersion(); const [a,b,c]=v.split('.').map(Number); if(a===0 && (b===0 || (b===1 && c===0))) throw Error('Candidate must be >=0.1.1'); console.log(v);"
           if ($LASTEXITCODE -ne 0) { throw 'Version-bound build prerequisite missing' }
           "head=$head" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
       - run: npm ci --ignore-scripts --no-audit
       - run: npm ci --prefix desktop --no-audit
       - run: npx --no install-electron
@@ -73,8 +75,90 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 3
-  author-pair:
+  build-baseline:
     needs: build-product
+    runs-on: windows-latest
+    timeout-minutes: 25
+    outputs:
+      head: ${{ steps.source.outputs.head }}
+      version: ${{ steps.source.outputs.version }}
+      manifest_sha: ${{ steps.attest.outputs.manifest_sha }}
+      provenance_sha: ${{ steps.attest.outputs.provenance_sha }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ needs.build-product.outputs.head }}
+          path: journey-authoring
+          persist-credentials: false
+      - name: Read dedicated exact-source lock (not historical archive hashes)
+        id: source
+        shell: pwsh
+        run: |
+          $lock = Get-Content -Raw journey-authoring/packaging/windows-msi/windows-baseline-source-lock.json | ConvertFrom-Json
+          if ($lock.repository -cne 'Hubujiu/local-api-workbench' -or $lock.head -cnotmatch '^[0-9a-f]{40}$' -or $lock.version -cne '0.1.0' -or $lock.nodeVersion -cne '24.22.3') { throw 'Invalid baseline source identity' }
+          "head=$($lock.head)" >> $env:GITHUB_OUTPUT
+          "version=$($lock.version)" >> $env:GITHUB_OUTPUT
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: Hubujiu/local-api-workbench
+          ref: ${{ steps.source.outputs.head }}
+          path: baseline-source
+          persist-credentials: false
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: "false"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.22.3"
+      - name: Verify exact historical source and locked dependency inputs
+        run: python journey-authoring/scripts/attest_windows_baseline_source.py --lock journey-authoring/packaging/windows-msi/windows-baseline-source-lock.json --source baseline-source
+      - run: npm ci --ignore-scripts --no-audit
+        working-directory: baseline-source
+      - run: npm ci --prefix desktop --no-audit
+        working-directory: baseline-source
+      - run: npx --no install-electron
+        working-directory: baseline-source/desktop
+      - name: Historical locked production dependencies
+        working-directory: baseline-source
+        run: |
+          node -e "const fs=require('fs');fs.mkdirSync('production');for(const f of ['package.json','package-lock.json'])fs.copyFileSync(f,'production/'+f)"
+          npm ci --omit=dev --ignore-scripts --prefix production --no-audit
+      - run: node scripts/build-desktop.mjs
+        working-directory: baseline-source
+      - run: node scripts/build-manifest.mjs
+        working-directory: baseline-source
+        env:
+          BUILD_HEAD: ${{ steps.source.outputs.head }}
+      - run: node scripts/verify-portable.mjs
+        working-directory: baseline-source
+      - name: Attest new source rebuild independently (not reproduction of original ZIP)
+        id: attest
+        shell: pwsh
+        env:
+          BUILDER_HEAD: ${{ needs.build-product.outputs.head }}
+        run: |
+          python journey-authoring/scripts/attest_windows_baseline_source.py --lock journey-authoring/packaging/windows-msi/windows-baseline-source-lock.json --source baseline-source --payload baseline-source/dist/LocalAPI --builder-head $env:BUILDER_HEAD --receipt source-rebuild.json
+          if ($LASTEXITCODE -ne 0) { throw 'Baseline rebuild verification failed' }
+          $receipt = Get-Content -Raw source-rebuild.json | ConvertFrom-Json
+          "manifest_sha=$($receipt.manifestSha256)" >> $env:GITHUB_OUTPUT
+          $sha = (Get-FileHash source-rebuild.json -Algorithm SHA256).Hash.ToLowerInvariant()
+          "provenance_sha=$sha" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-journey-baseline-source-rebuild
+          path: baseline-source/dist/LocalAPI
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-journey-baseline-provenance
+          path: source-rebuild.json
+          if-no-files-found: error
+          retention-days: 3
+  author-pair:
+    needs: [build-product, build-baseline]
     runs-on: ubuntu-latest
     container: debian:trixie
     timeout-minutes: 30
@@ -94,10 +178,14 @@ jobs:
         with:
           name: product-journey-new-portable
           path: ${{ runner.temp }}/new-portable
-      - name: Fetch independently pinned baseline only
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/download_pinned_windows_baseline.py --lock packaging/windows-msi/windows-baseline-lock.json --output "$RUNNER_TEMP/baseline"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: product-journey-baseline-source-rebuild
+          path: ${{ runner.temp }}/baseline-portable
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: product-journey-baseline-provenance
+          path: ${{ runner.temp }}/baseline-provenance
       - name: Materialize pinned authoring tools
         shell: bash
         run: |
@@ -109,6 +197,11 @@ jobs:
           EXERCISE_ROLLBACK: ${{ (inputs.exercise_rollback || contains(github.event.pull_request.labels.*.name, 'run-windows-product-rollback')) && 'true' || 'false' }}
           NEW_HEAD: ${{ needs.build-product.outputs.head }}
           NEW_MANIFEST_SHA: ${{ needs.build-product.outputs.manifest_sha }}
+          NEW_VERSION: ${{ needs.build-product.outputs.version }}
+          BASELINE_HEAD: ${{ needs.build-baseline.outputs.head }}
+          BASELINE_VERSION: ${{ needs.build-baseline.outputs.version }}
+          BASELINE_MANIFEST_SHA: ${{ needs.build-baseline.outputs.manifest_sha }}
+          BASELINE_PROVENANCE_SHA: ${{ needs.build-baseline.outputs.provenance_sha }}
         run: |
           export LD_LIBRARY_PATH="$RUNNER_TEMP/msitools/root/usr/lib/x86_64-linux-gnu"
           export PYTHONPATH=scripts
