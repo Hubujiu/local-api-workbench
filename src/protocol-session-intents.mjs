@@ -27,6 +27,7 @@ export class ProtocolSessionIntents {
     this.sessions = sessions;
     this.instanceId = randomUUID();
     this.entries = new Map();
+    this.operations = new Map();
     this.closing = false;
   }
   validateId(id) {
@@ -64,6 +65,14 @@ export class ProtocolSessionIntents {
       sessionId: entry.sessionId,
       session,
       retry_safe: false,
+      sendSequence: entry.sendSequence ?? 0,
+      sendReceipts: [...this.operations.values()]
+        .filter((op) => op.intentId === id)
+        .map(({ operationId, state, eventId }) => ({
+          operationId,
+          state,
+          eventId,
+        })),
     };
   }
   start(id, instanceId, definition) {
@@ -106,6 +115,80 @@ export class ProtocolSessionIntents {
       entry.phase = "unknown";
     }
     return this.read(id);
+  }
+  send(id, instanceId, sessionId, operationId, message) {
+    this.validateId(id);
+    const parts = typeof operationId === "string" ? operationId.split(":") : [];
+    const sequence = Number(parts[1]);
+    if (
+      parts.length !== 3 ||
+      parts[0] !== id ||
+      !uuid.test(parts[2]) ||
+      !Number.isSafeInteger(sequence) ||
+      sequence < 1 ||
+      parts[1] !== String(sequence)
+    )
+      fail(400, "发送操作须为当前意图、递增序号和随机 UUID");
+    this.instance(instanceId);
+    const intent = this.read(id);
+    if (intent.sessionId !== sessionId || !intent.session)
+      fail(409, "发送会话与连接意图不匹配");
+    const encoded = canonical(message === undefined ? "" : message);
+    if (Buffer.byteLength(encoded) > 3 * 1024 * 1024) fail(400, "协议消息过大");
+    const digest = createHash("sha256").update(encoded).digest("hex");
+    const key = id + ":" + operationId;
+    let op = this.operations.get(key);
+    if (op && op.digest !== digest) fail(409, "同一发送操作不能改变消息");
+    if (!op) {
+      if (this.closing || this.sessions.closing)
+        fail(503, "协议会话管理器正在关闭");
+      const entry = this.entries.get(id);
+      const previousSequence = entry.sendSequence ?? 0;
+      if (sequence <= previousSequence)
+        fail(
+          410,
+          "发送序号已使用或回执已退役；旧序号不会重新提交，远端结果须另行核对",
+        );
+      if (sequence !== previousSequence + 1)
+        fail(409, "发送序号不连续；请读取当前意图，不会自动重发");
+      if (this.operations.size >= 256) {
+        const retired = [...this.operations].find(
+          ([, receipt]) => receipt.state !== "pending",
+        );
+        if (!retired)
+          fail(429, "待完成发送已达256项；请查询或断开已有会话，不会重发");
+        this.operations.delete(retired[0]);
+      }
+      entry.sendSequence = sequence;
+      op = {
+        intentId: id,
+        operationId,
+        digest,
+        eventId: null,
+        state: "pending",
+      };
+      this.operations.set(key, op);
+      let submitted = false;
+      try {
+        this.sessions.send(sessionId, message, {
+          onSubmitted: ({ eventId }) => {
+            submitted = true;
+            op.eventId = eventId;
+          },
+          onComplete: ({ state }) => {
+            if (op.state === "pending")
+              op.state = state === "locally-written" ? state : "unknown";
+          },
+        });
+      } catch {
+        if (op.state === "pending")
+          op.state = submitted ? "unknown" : "failed-before-submit";
+      }
+    }
+    return {
+      ...this.sessions.snapshot(sessionId),
+      sendReceipt: { operationId, state: op.state, eventId: op.eventId },
+    };
   }
   stop(id, instanceId) {
     this.validateId(id);
