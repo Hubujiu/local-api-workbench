@@ -599,6 +599,7 @@ function persistGrpcStreamEvidence(id, state) {
       sessionId: state.sessionId || "",
       sessionIdKnown: !!state.sessionIdKnown,
       uncertainStart: !!state.uncertainStart,
+      startRecoveryId: state.startRecoveryId || "",
       uncertainSessions: state.uncertainSessions,
       persistenceProblems: state.persistenceProblems,
     }),
@@ -616,6 +617,8 @@ function restoreGrpcStreamEvidence(id, state) {
       value.version !== 1 ||
       !validId(value.definitionId) ||
       !validId(value.sessionId) ||
+      (value.startRecoveryId !== undefined &&
+        !validId(value.startRecoveryId)) ||
       typeof value.sessionIdKnown !== "boolean" ||
       typeof value.uncertainStart !== "boolean" ||
       [value.uncertainSessions, value.persistenceProblems].some(
@@ -635,6 +638,7 @@ function restoreGrpcStreamEvidence(id, state) {
       "persistenceProblems",
     ])
       state[key] = value[key];
+    state.startRecoveryId = value.startRecoveryId || "";
     state.notice = "已恢复操作标记；请显式读取会话核对，不会自动连接或重发。";
   } catch {
     state.uncertainStart = true;

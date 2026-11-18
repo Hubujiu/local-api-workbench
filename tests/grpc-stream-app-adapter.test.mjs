@@ -275,3 +275,22 @@ test("restored pending stop cannot be hidden even when sessionIdKnown field is f
   assert.throws(() => r.controller.edit("sessionId", ""));
   await assert.rejects(() => r.controller.start());
 });
+
+test("actual adapter persists late creation correlation and restores it without adopting unrelated state", async () => {
+  const { r, calls, storage } = harness(),
+    original = r.state;
+  const start = r.controller.start();
+  await passSchema(calls);
+  r.leave();
+  calls[1].resolve(snap());
+  await start;
+  const restored = r.restore();
+  assert.equal(restored.startRecoveryId, "session");
+  assert.equal(restored.uncertainStart, true);
+  assert.equal(restored.sessionId, "");
+  assert.equal(original.lateResult.id, "session");
+  assert.doesNotMatch(
+    [...storage.values()].join(),
+    /requestMessages|metadata|messages|proto/,
+  );
+});

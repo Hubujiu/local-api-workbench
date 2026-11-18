@@ -477,3 +477,68 @@ test("cancellation intent binds manual ID before uncertain dispatch", async () =
   assert.equal(x.state.sessionIdKnown, true);
   assert.throws(() => x.c.edit("sessionId", "other"), /不能更换/);
 });
+
+test("late creation receipt is recovered by exact-ID read without another start", async () => {
+  const d = deferred();
+  const x = setup({ post: () => d.promise });
+  const start = x.c.start();
+  await new Promise((resolve) => setImmediate(resolve));
+  invalidateGrpcStream(x.state);
+  d.resolve(view());
+  await start;
+  assert.equal(x.state.startRecoveryId, "s1");
+  assert.equal(x.state.sessionId, "");
+  assert.equal(x.state.uncertainStart, true);
+  await x.c.poll();
+  assert.equal(x.state.uncertainStart, false);
+  assert.equal(x.state.sessionId, "s1");
+  assert.deepEqual(x.calls, [["grpc-sessions/s1"]]);
+});
+test("manual reads cannot replace missing or mismatched creation correlation", async () => {
+  const x = setup();
+  x.state.uncertainStart = true;
+  x.c.edit("sessionId", "s1");
+  await x.c.poll();
+  await x.c.poll();
+  assert.equal(x.state.uncertainStart, true);
+  x.state.startRecoveryId = "original";
+  await assert.rejects(x.c.poll(), /原创建回执/);
+  assert.equal(x.calls.length, 2);
+});
+test("failed recovery persistence keeps unknown start, and recovery never clears unknown sends", async () => {
+  let fail = true;
+  const x = setup({ persistEvidence: () => !fail });
+  x.state.uncertainStart = true;
+  x.state.startRecoveryId = "s1";
+  x.state.uncertainSessions = ["s1"];
+  await x.c.poll();
+  assert.equal(x.state.uncertainStart, true);
+  fail = false;
+  await x.c.poll();
+  assert.equal(x.state.uncertainStart, false);
+  assert.deepEqual(x.state.uncertainSessions, ["s1"]);
+  await assert.rejects(x.c.send(), /未知/);
+});
+test("new start clears an older correlation before uncertain dispatch", async () => {
+  const x = setup({
+    post: async () => {
+      throw Error("lost new response");
+    },
+  });
+  x.state.startRecoveryId = "s1";
+  x.state.sessionId = "s1";
+  x.state.sessionIdKnown = true;
+  x.state.session = view({
+    lifecycle: "terminal",
+    recordSaved: true,
+    receiptState: "saved",
+  });
+  await x.c.start();
+  assert.equal(x.state.sessionId, "");
+  assert.equal(x.state.sessionIdKnown, false);
+  assert.equal(x.state.uncertainStart, true);
+  assert.equal(x.state.startRecoveryId, "");
+  x.c.edit("sessionId", "s1");
+  await x.c.poll();
+  assert.equal(x.state.uncertainStart, true);
+});
