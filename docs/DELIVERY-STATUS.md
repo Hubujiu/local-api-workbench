@@ -1,8 +1,8 @@
 # 交付状态与验收索引
 
-## 当前集成候选
+## 当前主线与整合证据
 
-开发与逐次验收集中在 [整合 PR #280](https://github.com/Hubujiu/local-api-workbench/pull/280)。主线的实时便携下载及 SHA-256 可由 `node scripts/delivery-index.mjs` 读取。下面的历史检查点保留各自的版本和适用范围。
+[整合 PR #280](https://github.com/Hubujiu/local-api-workbench/pull/280) 已进入 `main` 的 `f3254e6aa61d399acc8b4d1485d787a537a75251`。该合并提交的文件树与候选 `25865de` 相同，但合并前的候选验收和 [main 自身运行](https://github.com/Hubujiu/local-api-workbench/actions/runs/44273358459) 分开记账。主线实时便携下载及 SHA-256 由 `node scripts/delivery-index.mjs` 读取，只有 main 检查与产物可用时才作为当前主线下载。
 
 | 范围 | 已实现与实测 | 尚需的证据 |
 | --- | --- | --- |
@@ -13,7 +13,7 @@
 
 数据库字段与实库复现步骤见[企业数据库接入](ENTERPRISE-DATABASE-PREVIEW.md)。签名和草稿入口见 [Windows 正式发行](WINDOWS-RELEASE.md)。
 
-### 精确验收记录（未合入主线）
+### 合并前的精确候选验收
 
 - 集成候选 `25865de0def4919b238ecc77a7cb948210d6596a`：[required 汇总](https://github.com/Hubujiu/local-api-workbench/actions/runs/44268568032/job/134686951127)及同轮 47 个任务均通过。该工作流不包含独立的 Windows 产品安装旅程或企业实库验收。
 - Windows 普通账户候选 `25865de0def4919b238ecc77a7cb948210d6596a`：下载核对过的[原始证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/44268567980/artifacts/14414410105) SHA-256 为 `d8883bc7f9b4f180c8a4aa19666fb5ad2fad94b10af2b3974e26156e0cc56b71`。记录显示宿主为 ARM64，软件包为 x64，账号非管理员，且未验证签名。故障注入返回预期的 1603；安装器随后使用原始介质成功恢复 0.1.0，验证了旧版启动以及项目和历史记录保留，之后正常升级、卸载、重装并最终清理。此结果只覆盖该候选和环境，不替代原生 x64 或发行签名验收。
@@ -23,7 +23,7 @@
 
 更新：2026-11-18。当前单机版基线、免费边界和待闭环验收见[单机功能对照](STANDALONE-PARITY.md)。下列各次历史 CI 仍按原日期记账。这里区分“已实现”“精确候选已验证”和“完整产品已交付”。当前仍在开发，尚未正式发行；不按 PR 数量或测试数量计算完成率。
 
-## 当前整合基线
+## #280 合并前的主线基线
 
 - `main` 精确提交 `f59b11ac3dc96c567db155dd871ef08ba445937c`，tree `4869acc4fc433b16b1d6b62750c310884c6f2f96`，由 [#264](https://github.com/Hubujiu/local-api-workbench/pull/264) 合并；[主线 CI](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449) 47/47 jobs 成功，46 个产物。不能把当前文档 PR 或后续功能 PR 视为继承这一结果。
 - [Windows 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852416)、[macOS 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852333)、[Linux 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852444)及[汇总闸门](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134215707659) 均成功。平台包、外层摘要和到期时间见[单一下载入口](PORTABLE-QUICKSTART.md)。这不是原生 Windows 生命周期、完整产品验收或正式发行。
