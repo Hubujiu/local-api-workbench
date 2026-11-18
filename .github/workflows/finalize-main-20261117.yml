@@ -1,0 +1,59 @@
+name: Finalize main consolidation 20261117
+
+on:
+  push:
+    branches:
+      - maintenance/finalize-main-20261117
+    paths:
+      - .github/workflows/finalize-main-20261117.yml
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: finalize-main-consolidation-20261117
+  cancel-in-progress: false
+
+jobs:
+  archive-and-clean:
+    if: github.repository == 'Hubujiu/local-api-workbench' && github.ref == 'refs/heads/maintenance/finalize-main-20261117'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the exact maintenance commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Verify cleanup behavior against isolated Git fixtures
+        run: python .maintenance/main-consolidation-20261117/test_cleanup.py
+      - name: Verify main CI, archive every old head, and verify recovery bundle
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python .maintenance/main-consolidation-20261117/cleanup.py --manifest .maintenance/main-consolidation-20261117/manifest.json --output cleanup-evidence --phase prepare
+      - name: Retain verified backup before deleting any branch
+        id: backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-consolidation-backup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: cleanup-evidence/
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+      - name: Delete only unchanged archived refs in one atomic transaction
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLEANUP_BACKUP_ARTIFACT_ID: ${{ steps.backup.outputs.artifact-id }}
+          CLEANUP_BACKUP_ARTIFACT_URL: ${{ steps.backup.outputs.artifact-url }}
+          CLEANUP_BACKUP_ARTIFACT_DIGEST: ${{ steps.backup.outputs.artifact-digest }}
+        run: python .maintenance/main-consolidation-20261117/cleanup.py --manifest .maintenance/main-consolidation-20261117/manifest.json --output cleanup-evidence --phase apply
+      - name: Retain final outcome or failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-consolidation-result-${{ github.run_id }}-${{ github.run_attempt }}
+          path: cleanup-evidence/
+          if-no-files-found: warn
+          retention-days: 90
+          compression-level: 0
