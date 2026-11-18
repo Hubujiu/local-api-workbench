@@ -25,7 +25,7 @@ npm start
 
 Git 共享的是定义，不是完整备份。提交前检查 URL、环境、认证等定义是否包含凭据；默认忽略本地历史、历史清单和事务日志，但不会替你取消已有追踪记录。需要恢复历史时，请在应用内导出完整项目备份。新版在成功保存时把旧有文件布局升级为格式 3，保留完整本地历史；旧版程序不能打开格式 3。升级前如需回退，先保留完整备份和旧目录的副本，不用 Git 克隆替代备份。
 
-桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。候选包须对应后端检查点中已核验的组合提交，不能把单功能 PR 的产物当成完整组合。Windows 便携包从该提交成功的 Actions 运行下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
+桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。当前 `main` 整合基线和可试用的三平台包集中在[便携候选下载](docs/PORTABLE-QUICKSTART.md)；交付状态见[验收索引](docs/DELIVERY-STATUS.md)。Windows 需完整解压后运行 `LocalAPI.exe`，无需另装 Node.js。便携包未正式签名，不要绕过系统安全警告。
 
 以下两段保留旧阶段记录，不是当前候选结论；最新精确状态以上方验收入口为准。
 
