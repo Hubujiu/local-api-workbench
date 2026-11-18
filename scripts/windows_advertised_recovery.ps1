@@ -17,7 +17,11 @@ function Restore-AdvertisedProduct {
   Assert-MsiRegistrationReceipt $old $Version $true -AllowAdvertised
   if (@($old.contexts | Where-Object context -eq 2)[0].state -ne '1') { throw 'Only advertised installations require this recovery' }
   $family = @([LocalApiMsiRegistration.Native]::RelatedProducts($UpgradeCode.ToString('B').ToUpperInvariant()))
-  if ($family.Count -ne 1 -or [guid]$family[0] -ne $ProductCode) { throw 'Ambiguous or newer registered product in the family' }
+  # A rolled-back advertisement can lose its upgrade-family index. The product
+  # itself must have the exact advertised registration checked above.
+  foreach ($related in $family) {
+    if ([guid]$related -ne $ProductCode) { throw 'Another product is registered in the recovery family' }
+  }
   $manifest = Join-Path $target 'build-manifest.json'
   if ((Get-FileHash -LiteralPath $manifest).Hash -ne $ManifestSha -or (Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json).version -cne $Version) { throw 'Restored files and original MSI identity differ' }
   # A sibling rename keeps program and user-added files together even if MSI fails.

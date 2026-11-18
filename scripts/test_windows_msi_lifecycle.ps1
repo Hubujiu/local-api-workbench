@@ -129,7 +129,7 @@ try {
     [IO.File]::WriteAllText((Join-Path $target 'foreign-sentinel.txt'), 'retain foreign fixture')
     $script:foreignHash = (Get-FileHash -LiteralPath (Join-Path $target 'foreign-sentinel.txt') -Algorithm SHA256).Hash.ToLowerInvariant()
     Invoke-Msi 'reject-existing-directory' $oldPath $true 1603
-    if ((Get-Content -LiteralPath (Join-Path $evidence 'reject-existing-directory.log') -Raw) -notmatch 'A fresh candidate directory is required') { throw 'Missing directory refusal evidence' }
+    if ((Get-Content -LiteralPath (Join-Path $evidence 'reject-existing-directory.log') -Raw) -notmatch 'A fresh installation directory is required') { throw 'Missing directory refusal evidence' }
     Assert-Registered $old $false; Assert-Inventory $null $true
     Move-Item -LiteralPath $target -Destination "$target.retained-before"
     Invoke-Msi 'install-old' $oldPath $true 0
