@@ -26,6 +26,9 @@ class ProductWorkflowTests(unittest.TestCase):
         self.assertEqual(source.count('GH_TOKEN:'), 1)
         self.assertIn('standardUserAcceptance=$false', source)
         self.assertIn('Committed test-only 0.1.1 required', source)
+        self.assertIn("needs.author-pair.outputs.rollback_enabled == 'true' && 55 || 40", source)
+        self.assertIn("'run-windows-product-rollback'", source)
+        self.assertIn("$journeyArgs += '--exercise-product-rollback'", source)
         self.assertIn('PLAN_SHA: ${{ needs.author-pair.outputs.plan_sha }}', source)
         in_run = False
         for line in source.splitlines():

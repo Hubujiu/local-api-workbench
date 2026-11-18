@@ -137,6 +137,33 @@ export async function loadProductPlan(filename, expectedSha) {
     plan.packages[0].contract.productCode,
     plan.packages[1].contract.productCode,
   );
+  if (plan.rollbackFixture !== undefined) {
+    const fixture = plan.rollbackFixture;
+    assert.equal(fixture.kind, "localapi-product-rollback-fixture-v1");
+    for (const key of ["msi", "receipt"]) {
+      assert.match(fixture[key].sha256, digestPattern);
+      assert.ok(
+        fixture[key].file.startsWith("faults/"),
+        "Fault must be in dedicated test-only directory",
+      );
+      const file = containedPath(root, fixture[key].file);
+      await noAlias(file);
+      const bytes = await readFile(file);
+      assert.equal(
+        sha(bytes),
+        fixture[key].sha256,
+        "Fault artifact digest mismatch",
+      );
+      fixture[key].path = file;
+      if (key === "receipt") fixture.contract = JSON.parse(bytes);
+    }
+    validateRollbackReceipt(
+      fixture.contract,
+      fixture,
+      plan.packages[1],
+      plan.family,
+    );
+  }
   return plan;
 }
 export function assertRuntimeIdentity(actual, expected) {
@@ -152,5 +179,60 @@ export function assertRuntimeIdentity(actual, expected) {
   assert.equal(
     path.resolve(actual.appPath).toLowerCase(),
     path.resolve(expected.appPath).toLowerCase(),
+  );
+}
+
+export function validateRollbackReceipt(receipt, fixture, next, family) {
+  assert.equal(receipt.kind, "localapi-product-rollback-fixture-v1");
+  assert.equal(receipt.sourceMsiSha256, next.msi.sha256);
+  assert.equal(fixture.sourceMsiSha256, next.msi.sha256);
+  assert.equal(receipt.sourceReceiptSha256, next.receipt.sha256);
+  assert.equal(receipt.msiSha256, fixture.msi.sha256);
+  assert.equal(receipt.family, family);
+  assert.equal(receipt.version, next.version);
+  assert.equal(receipt.head, next.head);
+  assert.equal(receipt.productCode, next.contract.productCode);
+  assert.equal(receipt.allOtherTablesUnchanged, true);
+  assert.equal(receipt.payloadUnchanged, true);
+  assert.equal(receipt.nativeRollbackVerified, false);
+  assert.match(receipt.cabinetSha256, digestPattern);
+  assert.notEqual(receipt.originalPackageCode, receipt.faultPackageCode);
+  for (const code of [receipt.originalPackageCode, receipt.faultPackageCode])
+    assert.match(
+      code,
+      /^\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}$/,
+    );
+  assert.deepEqual(receipt.fault, {
+    action: "ProductRollbackProbe",
+    type: 19,
+    condition: "OLDERPRODUCTS",
+    sequence: 4001,
+    message: "Deliberate full-product rollback probe after old product removal",
+  });
+}
+export function assertProductRollbackLog(text) {
+  const removal = text.search(
+    /^Action ended [^\r\n]+: RemoveExistingProducts\. Return value 1\./m,
+  );
+  const faultStart = text.search(
+    /^Action start [^\r\n]+: ProductRollbackProbe\./m,
+  );
+  const faultEnd = text.search(
+    /^Action ended [^\r\n]+: ProductRollbackProbe\. Return value 3\./m,
+  );
+  assert.ok(
+    removal >= 0 && faultStart > removal && faultEnd > faultStart,
+    "Fault must occur after completed old-product removal",
+  );
+  assert.ok(
+    text.includes(
+      "Deliberate full-product rollback probe after old product removal",
+    ),
+    "Expected test-only failure message required",
+  );
+  assert.match(
+    text.slice(faultEnd),
+    /Executing op: RollbackInfo\(/,
+    "Rollback activity evidence required",
   );
 }

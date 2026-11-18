@@ -32,7 +32,13 @@ def main():
         outputs.append((output, hashlib.sha256(msi.read_bytes()).hexdigest(), hashlib.sha256((output / 'build-input.json').read_bytes()).hexdigest()))
     old, new = outputs
     result = bundle(old[0], new[0], old[1], new[1], root / 'product-bundle', old_receipt_digest=old[2], new_receipt_digest=new[2])
+    rollback = os.environ.get('EXERCISE_ROLLBACK', 'false')
+    require(rollback in ('true', 'false'), 'Explicit boolean rollback opt-in required')
+    if rollback == 'true':
+        from prepare_product_rollback_fixture import add_to_bundle
+        result['planSha256'] = add_to_bundle(root / 'product-bundle', new[0], new[1], new[2], tools)
     with open(os.environ['GITHUB_OUTPUT'], 'a') as file:
+        file.write('rollback_enabled=' + rollback + '\n')
         file.write('plan_sha=' + result['planSha256'] + '\n')
         file.write('bundle_path=' + str(root / 'product-bundle') + '\n')
     print(json.dumps(result, indent=2))

@@ -24,6 +24,7 @@ import { exerciseRestartJourney } from "./helpers/restart-journey-ui.mjs";
 import { assertCleanDesktopExit } from "./helpers/desktop-restart-receipt.mjs";
 import { hardStopDesktopProcess } from "./helpers/desktop-hard-stop.mjs";
 import {
+  assertProductRollbackLog,
   assertRuntimeIdentity,
   inventory,
   loadProductPlan,
@@ -32,15 +33,22 @@ import {
 
 const args = process.argv.slice(2);
 assert.equal(
-  args.length,
-  5,
+  [5, 6].includes(args.length),
+  true,
   "Use --plan FILE --expected-plan-sha256 DIGEST --execute-in-disposable-windows",
 );
 assert.equal(args[0], "--plan");
 assert.equal(args[2], "--expected-plan-sha256");
 assert.equal(args[4], "--execute-in-disposable-windows");
+if (args.length === 6) assert.equal(args[5], "--exercise-product-rollback");
+const exerciseRollback = args.length === 6;
 assert.equal(process.platform, "win32", "Native disposable Windows required");
 const plan = await loadProductPlan(path.resolve(args[1]), args[3]);
+if (exerciseRollback)
+  assert.ok(
+    plan.rollbackFixture,
+    "Explicit rollback requested but pinned fault fixture missing",
+  );
 assert.ok(path.isAbsolute(process.env.LOCALAPPDATA));
 await noAlias(process.env.LOCALAPPDATA);
 const target = path.join(process.env.LOCALAPPDATA, plan.directory);
@@ -75,6 +83,8 @@ const result = {
   target,
   steps,
   nativeProductJourneyPassed: false,
+  productRollbackVerified: false,
+  rollbackRequested: exerciseRollback,
   signatureVerified: false,
   iceValidated: false,
 };
@@ -135,7 +145,7 @@ async function registration(expected) {
     observations: JSON.parse(stdout),
   });
 }
-async function install(item, label, remove = false) {
+async function install(item, label, remove = false, expectedExitCode = 0) {
   // Recheck pinned bytes immediately before the external installer invocation.
   assert.equal(
     createHash("sha256")
@@ -149,6 +159,7 @@ async function install(item, label, remove = false) {
     label,
     startedAt: new Date().toISOString(),
     timeoutMs: MSI_OPERATION_TIMEOUT_MS,
+    expectedExitCode,
     outcome: "running",
     profilePreserved: false,
   };
@@ -172,7 +183,7 @@ async function install(item, label, remove = false) {
     const [code, signal] = await waitForMsiExit(child, label);
     Object.assign(operation, { exitCode: code, signal, outcome: "exited" });
     assert.equal(signal, null);
-    assert.equal(code, 0, "MSI operation failed: " + label);
+    assert.equal(code, expectedExitCode, "MSI operation failed: " + label);
     assert.deepEqual(
       await inventory(profile),
       before,
@@ -294,7 +305,7 @@ async function launch(item, generation, foreign) {
   });
   return Object.assign(host, { page, token, url: new URL(page.url()).origin });
 }
-async function exportAll(host) {
+async function exportAll(host, minimumProjects = 2) {
   const values = await host.page.evaluate(async () => {
     const headers = {
       "x-local-token": sessionStorage.getItem("local-api-token"),
@@ -313,8 +324,8 @@ async function exportAll(host) {
     return exports.sort((a, b) => a.id.localeCompare(b.id));
   });
   assert.ok(
-    values.length >= 2 && values.some((p) => p.runs?.length > 0),
-    "Retained original/restored project and history required",
+    values.length >= minimumProjects && values.some((p) => p.runs?.length > 0),
+    "Retained project and execution history required",
   );
   return values;
 }
@@ -348,21 +359,64 @@ try {
     restart: async () => {
       const previous = host,
         count = hits.length;
+      let mostRecentToken = previous.token;
+      const beforeRollback = exerciseRollback
+        ? await exportAll(previous, 1)
+        : null;
       await previous.quit();
       await assert.rejects(
         fetch(previous.url + "/api/session", {
           signal: AbortSignal.timeout(5000),
         }),
       );
+      if (exerciseRollback) {
+        await install(
+          { ...next, msi: plan.rollbackFixture.msi },
+          "rollback-probe",
+          false,
+          1603,
+        );
+        assertProductRollbackLog(
+          (await readFile(path.join(evidence, "rollback-probe.log"))).toString(
+            "utf16le",
+          ),
+        );
+        await registration("old");
+        await packageInventory(old, true);
+        const restored = await launch(old, "rollback-restored", true);
+        assert.notEqual(restored.token, previous.token);
+        assert.equal(hits.length, count, "Rollback must not replay traffic");
+        assert.deepEqual(
+          await exportAll(restored, 1),
+          beforeRollback,
+          "Rollback must restore original full project exports and history",
+        );
+        await writeFile(
+          path.join(evidence, "rollback-restored-exports.json"),
+          JSON.stringify(beforeRollback, null, 2),
+        );
+        await restored.page.screenshot({
+          path: path.join(evidence, "rollback-restored-old-product.png"),
+        });
+        await restored.quit();
+        mostRecentToken = restored.token;
+        result.productRollbackVerified = true;
+        steps.push({
+          label: "actual-old-product-rollback-verified",
+          failedMsiSha256: plan.rollbackFixture.msi.sha256,
+          sourceMsiSha256: next.msi.sha256,
+        });
+      }
       await install(next, "upgrade");
       await registration("new");
       host = await launch(next, 2, true);
       assert.notEqual(host.child.pid, previous.child.pid);
       assert.notEqual(host.token, previous.token);
+      assert.notEqual(host.token, mostRecentToken);
       assert.equal(
         (
           await fetch(host.url + "/api/session", {
-            headers: { "x-local-token": previous.token },
+            headers: { "x-local-token": mostRecentToken },
             signal: AbortSignal.timeout(5000),
           })
         ).status,
