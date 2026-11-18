@@ -61,7 +61,7 @@ family; the fake `.exe` is text, not executable code. It uploads only those fixt
 The Windows hosted job uses the OS Windows Installer and records:
 
 1. Existing foreign directory refusal.
-2. First install, exact file inventory and product registration.
+2. First install, exact file inventory and current-user unmanaged MSI registration.
 3. Deliberately failed major upgrade, original product restored with exact old bytes.
 4. Successful upgrade, new bytes and registration, old registration removed.
 5. Downgrade refusal with no changed bytes.
@@ -82,9 +82,29 @@ workflow. A matching same-repository PR starts these disposable fixture jobs;
 manual dispatch remains available separately. Script bodies obtain temporary paths
 from environment variables, not interpolated workflow expressions.
 
+## Native registration observation correction
+
+The first hosted fixture run `44227089437` successfully rejected the occupied directory
+(exit 1603), then installed the old package (exit 0). Its verbose log records successful
+RegisterProduct/PublishProduct and overall installation. The harness nevertheless failed
+because it assumed registration must be visible at one hard-coded HKCU uninstall key.
+That key's absence is not an authoritative Windows Installer inventory result. The
+original failed run is retained; later source fixes do not change its outcome.
+
+Registration checks now call `MsiGetProductInfoExW` with NULL SID (current user).
+They require installed State `5` and matching VersionString in USERUNMANAGED context
+`2`, and ERROR_UNKNOWN_PRODUCT `1605` in USERMANAGED `1` and MACHINE `4`. Before first
+installation and after removal, all three contexts must return `1605`. Advertised state,
+wrong version, access failures, unknown properties and other API errors cannot pass as
+installed or absent. Each successful assertion records the native receipt. A separate
+PowerShell contract test exercises those rejection cases without querying a real product.
+
+Specification: https://learn.microsoft.com/en-us/windows/win32/api/msi/nf-msi-msigetproductinfoexw
+
 ## Remaining gates
 
-Native Windows results are **not available in this local implementation turn**.
+The original hosted run failed at registration observation. The corrected native
+registration and remaining upgrade/rollback path **still require a new native run**.
 Linux compilation and table checks do not establish Windows behavior. Before personal
 or production installation, obtain native fixture results, ICE validation, full real
 payload standard-user installation/upgrade/uninstall, running-program/locked-file

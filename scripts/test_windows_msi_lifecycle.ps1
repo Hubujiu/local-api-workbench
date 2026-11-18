@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if (-not $ExecuteInDisposableRunner) { throw 'Explicit disposable-runner execution switch required' }
 if (-not $IsWindows) { throw 'Native Windows required' }
+. (Join-Path $PSScriptRoot 'windows_msi_registration.ps1')
 $fixture = (Resolve-Path -LiteralPath $FixtureDirectory).Path
 $plan = Get-Content -LiteralPath (Join-Path $fixture 'native-plan.json') -Raw | ConvertFrom-Json
 if ($plan.kind -ne 'localapi-inert-msi-lifecycle-v1' -or $plan.packages.Count -ne 2) { throw 'Not the generated inert fixture plan' }
@@ -40,7 +41,7 @@ foreach ($p in $plan.packages) {
     Assert-NoReparse $path
     if ((Get-Item -LiteralPath $path).Length -gt 1048576 -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $p.sha256) { throw 'Fixture MSI digest or size mismatch' }
     if (@($p.fileHashes.PSObject.Properties).Count -ne 7) { throw 'Only inert seven-file fixtures allowed' }
-    if (Test-Path "Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\{$($p.productCode)}") { throw 'Fixture already registered' }
+    Assert-MsiProductRegistration $p.productCode $p.version $false | Out-Null
 }
 New-Item -ItemType Directory -Path $evidence | Out-Null
 $sentinel = Join-Path $evidence 'synthetic-project.json'
@@ -50,8 +51,8 @@ $steps = [Collections.Generic.List[object]]::new()
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $result = [ordered]@{ kind='native-inert-msi-lifecycle'; family=$family; nativeFixturePassed=$false; productAcceptance=$false; standardUserProcess=(-not $admin); iceValidated=$false; signatureVerified=$false; steps=$steps }
 function Assert-Registered($Package, [bool]$Expected) {
-    $actual = Test-Path "Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\{$($Package.productCode)}"
-    if ($actual -ne $Expected) { throw "Unexpected product registration: $($Package.version)" }
+    $receipt = Assert-MsiProductRegistration $Package.productCode $Package.version $Expected
+    $steps.Add([ordered]@{ name='registration'; expectedInstalled=$Expected; receipt=$receipt })
 }
 function Invoke-Msi([string]$Label, [string]$Package, [bool]$Install, [int]$ExpectedExitCode) {
     Assert-NoReparse $target
