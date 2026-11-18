@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { querySQLiteBounded, mutateSQLiteBounded } from "../src/database.mjs";
+import { querySQLiteBounded, mutateSQLite } from "../src/database.mjs";
 test("SQLite preserves signed64 IDs and blobs across explicit write, read and JSON roundtrip", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "db-values-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -14,7 +14,9 @@ test("SQLite preserves signed64 IDs and blobs across explicit write, read and JS
     "CREATE TABLE sample(id INTEGER PRIMARY KEY,payload BLOB,label TEXT)",
   );
   db.close();
-  const written = await mutateSQLiteBounded(
+  // Value-layer write coverage is synchronous; the owner HTTP test below
+  // separately verifies real bounded write-result IPC with the same exact values.
+  const written = mutateSQLite(
     file,
     "INSERT INTO sample VALUES(?,?,?) RETURNING id,payload,label",
     [
@@ -114,13 +116,16 @@ test("SQLite HTTP read/write and project database operations retain exact values
     { type: "int64", value: "9007199254740993" },
     { type: "blob", base64: "AAH/" },
   ];
-  await post("database", {
+  const written = await post("database", {
     type: "sqlite",
     filename: file,
     allowWrite: true,
-    sql: "INSERT INTO sample VALUES(?,?)",
+    sql: "INSERT INTO sample VALUES(?,?) RETURNING id,payload",
     parameters,
   });
+  assert.equal(written.committed, true);
+  assert.equal(written.rows[0].id, "9007199254740993");
+  assert.deepEqual(written.rows[0].payload, parameters[1]);
   const selected = await post("database", {
     type: "sqlite",
     filename: file,
