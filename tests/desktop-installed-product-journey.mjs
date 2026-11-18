@@ -140,10 +140,12 @@ async function registration(expected) {
     ],
     { timeout: 30000, windowsHide: true, shell: false },
   );
+  const observations = JSON.parse(stdout);
   steps.push({
     label: "registration-" + expected,
-    observations: JSON.parse(stdout),
+    observations,
   });
+  return observations;
 }
 async function install(item, label, remove = false, expectedExitCode = 0) {
   // Recheck pinned bytes immediately before the external installer invocation.
@@ -171,6 +173,9 @@ async function install(item, label, remove = false, expectedExitCode = 0) {
     [
       remove ? "/x" : "/i",
       item.msi.path,
+      ...(label === "restore-original-registration"
+        ? ["WORKBENCHRESTORE=1", "ADDLOCAL=ALL"]
+        : []),
       "/qn",
       "/norestart",
       "REBOOT=ReallySuppress",
@@ -381,6 +386,18 @@ try {
             "utf16le",
           ),
         );
+        const [previousProduct] = await registration("after-failure");
+        const oldState = previousProduct.contexts.find(
+          (entry) => entry.context === 2,
+        ).state;
+        if (oldState === "1") {
+          // Windows can restore all files but leave the old per-user MSI advertised.
+          // Restore that precise product using the original, digest-checked media.
+          await install(old, "restore-original-registration");
+          result.rollbackRecovery = "original-media";
+        } else {
+          result.rollbackRecovery = "windows-installer";
+        }
         await registration("old");
         await packageInventory(old, true);
         const restored = await launch(old, "rollback-restored", true);

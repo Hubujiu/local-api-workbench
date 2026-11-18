@@ -41,11 +41,13 @@ function Read-MsiProductRegistration([string]$ProductCode) {
     )
     return [ordered]@{ productCode=$code; queryScope='current-user-and-machine'; currentUserSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; contexts=$contexts }
 }
-function Assert-MsiRegistrationReceipt($Receipt, [string]$Version, [bool]$Expected) {
+function Assert-MsiRegistrationReceipt($Receipt, [string]$Version, [bool]$Expected, [switch]$AllowAdvertised) {
     $contexts = @($Receipt.contexts)
     if ($contexts.Count -ne 3 -or (@($contexts | ForEach-Object { $_.context } | Sort-Object) -join ',') -ne '1,2,4') { throw 'Incomplete MSI context observation' }
     foreach ($entry in $contexts) {
         if ($entry.context -eq 2 -and $Expected) {
+            if ($AllowAdvertised -and $entry.stateError -eq 0 -and $entry.state -eq '1' -and
+                (($entry.versionError -eq 1608 -and -not $entry.version) -or ($entry.versionError -eq 0 -and $entry.version -eq $Version))) { continue }
             if ($entry.stateError -ne 0 -or $entry.state -ne '5' -or $entry.versionError -ne 0 -or $entry.version -ne $Version) {
                 throw "Expected current-user unmanaged installed product $Version; observed $($entry | ConvertTo-Json -Compress)"
             }

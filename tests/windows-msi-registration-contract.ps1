@@ -10,6 +10,13 @@ function Receipt([int]$StateError=0, [string]$State='5', [int]$VersionError=0, [
 }
 Assert-MsiRegistrationReceipt (Receipt) '0.1.0' $true
 Assert-MsiRegistrationReceipt (Receipt -StateError 1605) '0.1.0' $false
+$advertised = Receipt -State '1' -VersionError 1608 -Version ''
+Assert-MsiRegistrationReceipt $advertised '0.1.0' $true -AllowAdvertised
+foreach ($invalid in @((Receipt -State '1' -Version '0.2.0'), (Receipt -State '1' -MachineError 0), (Receipt -State '1' -VersionError 5))) {
+    $rejected = $false
+    try { Assert-MsiRegistrationReceipt $invalid '0.1.0' $true -AllowAdvertised } catch { $rejected = $true }
+    if (-not $rejected) { throw 'Advertised recovery accepted ambiguous registration' }
+}
 $cases = @(
     @{ value=(Receipt -State '1'); expected=$true },
     @{ value=(Receipt -StateError 5); expected=$true },
@@ -28,4 +35,4 @@ foreach ($case in $cases) {
     try { Assert-MsiRegistrationReceipt $case.value '0.1.0' $case.expected } catch { $refused = $true }
     if (-not $refused) { throw 'Invalid registration observation was accepted' }
 }
-Write-Output 'MSI registration contract: 13 cases passed; no native product query performed'
+Write-Output 'MSI registration contract passed, including advertised recovery observations'

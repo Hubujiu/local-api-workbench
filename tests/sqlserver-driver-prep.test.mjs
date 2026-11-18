@@ -472,7 +472,11 @@ test("exact output reaches Tedious boundary only as generated VarChar projection
         );
       } else {
         assert.match(r.sql, /CONVERT\(varchar\(41\), \[amount\]\)/);
-        assert.match(r.sql, /CONVERT\(varchar\(34\), \[stamp\], 127\)/);
+        assert.match(
+          r.sql,
+          /CONVERT\(varchar\(34\), CASE WHEN \[stamp\] IS NULL/,
+        );
+        assert.match(r.sql, /DATENAME\(TZOFFSET, \[stamp\]\)/);
         result(
           r,
           [col("amount", "VarChar", 41), col("stamp", "VarChar", 34)].map(
