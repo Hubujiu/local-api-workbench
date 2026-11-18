@@ -56,7 +56,9 @@ const profile = path.join(root, "synthetic-profile");
 const evidence = path.join(root, "evidence");
 await mkdir(profile);
 await mkdir(evidence);
-const { _electron: electron } = await import("playwright");
+const { _electron: electron } = await import(
+  "../packaging/windows-msi/journey-tools/node_modules/playwright/index.mjs"
+);
 const hits = [],
   errors = [],
   hosts = [],

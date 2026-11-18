@@ -599,6 +599,9 @@ function persistGrpcStreamEvidence(id, state) {
       sessionId: state.sessionId || "",
       sessionIdKnown: !!state.sessionIdKnown,
       uncertainStart: !!state.uncertainStart,
+      startRecoveryId: state.startRecoveryId || "",
+      creationIntentId: state.creationIntentId || "",
+      creationInstanceId: state.creationInstanceId || "",
       uncertainSessions: state.uncertainSessions,
       persistenceProblems: state.persistenceProblems,
     }),
@@ -616,6 +619,11 @@ function restoreGrpcStreamEvidence(id, state) {
       value.version !== 1 ||
       !validId(value.definitionId) ||
       !validId(value.sessionId) ||
+      (value.startRecoveryId !== undefined &&
+        !validId(value.startRecoveryId)) ||
+      [value.creationIntentId, value.creationInstanceId].some(
+        (x) => x !== undefined && !validId(x),
+      ) ||
       typeof value.sessionIdKnown !== "boolean" ||
       typeof value.uncertainStart !== "boolean" ||
       [value.uncertainSessions, value.persistenceProblems].some(
@@ -635,6 +643,9 @@ function restoreGrpcStreamEvidence(id, state) {
       "persistenceProblems",
     ])
       state[key] = value[key];
+    state.startRecoveryId = value.startRecoveryId || "";
+    state.creationIntentId = value.creationIntentId || "";
+    state.creationInstanceId = value.creationInstanceId || "";
     state.notice = "已恢复操作标记；请显式读取会话核对，不会自动连接或重发。";
   } catch {
     state.uncertainStart = true;
@@ -677,6 +688,7 @@ function bindGrpcStreamWorkbench() {
       throw Error("项目或面板已变化，未应用迟到结果");
   };
   bindGrpcStream(root, {
+    creationIntents: true,
     state,
     definitions: owner.settings?.grpcDefinitions || [],
     assertCurrent: current,
@@ -720,12 +732,18 @@ function bindGrpcStreamWorkbench() {
     },
     get: (action) => {
       current();
-      if (!/^grpc-sessions\/[A-Za-z0-9_-]+$/.test(action))
+      if (
+        !/^(?:grpc-sessions\/[A-Za-z0-9_-]+|grpc-creation-intents\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+)$/.test(
+          action,
+        )
+      )
         throw Error("未知gRPC会话读取");
       return api("/projects/" + owner.id + "/" + action);
     },
     post: async (action, body) => {
       current();
+      if (action === "grpc-creation-intents")
+        return api("/projects/" + owner.id + "/" + action, "POST", body);
       if (
         !/^grpc-sessions(?:\/[A-Za-z0-9_-]+\/(?:send|half-close|cancel|reconcile))?$/.test(
           action,

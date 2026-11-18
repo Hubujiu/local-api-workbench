@@ -3,6 +3,8 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { desktopLayout } from "../desktop/build-layout.mjs";
 import { inspectPortableTree } from "./portable-integrity.mjs";
+import { desktopSourceVersion } from "./desktop-package-version.mjs";
+const version = await desktopSourceVersion();
 const layout = desktopLayout();
 await mkdir(layout.root, { recursive: true });
 await cp("desktop/node_modules/electron/dist", layout.root, {
@@ -45,7 +47,7 @@ await writeFile(
   path.join(layout.app, "package.json"),
   JSON.stringify({
     name: "local-api-workbench",
-    version: "0.1.0",
+    version,
     type: "module",
     main: "desktop/main.mjs",
   }),

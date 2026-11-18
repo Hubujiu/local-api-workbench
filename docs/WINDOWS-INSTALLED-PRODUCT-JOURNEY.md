@@ -79,3 +79,34 @@ acceptance, locked-file/concurrent installer races, data migration compatibility
 and product-level injected failure recovery remain separate gates. This harness
 never sets signature/ICE success. Native rollback is covered only by the separate
 inert transaction harness until a product-specific failure scenario is implemented.
+
+## Hosted opt-in derivative
+
+`windows-product-journey.yml` provides three disposable jobs: Windows builds the
+new portable from the exact same-repository PR head; Linux verifies the pinned old
+artifacts and compiles a fresh same-family MSI pair; Windows runs this harness.
+It never publishes releases/tags/packages and has read-only repository credentials.
+The baseline is fixed in `packaging/windows-msi/windows-baseline-lock.json`: source
+`f59b11ac3dc96c567db155dd871ef08ba445937c`, run `44130790449`, portable artifact
+`14350955078`, independent metadata artifact `14349438597`, all pinned SHA-256.
+Expired/unavailable or mismatching baseline artifacts fail closed, never fall back
+to another release. New payload integrity is pinned to the producing job's manifest
+hash; bundle integrity is pinned to the Linux job's plan hash independently of the
+transferred artifact. Downloaded MSI code never executes in the authoring job.
+
+Prerequisites: the PR must include the source-bound desktop version fix from #276,
+and a **committed test-only 0.1.1** version in root and desktop package/lock metadata.
+The workflow refuses 0.1.0 or inconsistent metadata. It does not stamp versions or
+claim an uncommitted tree matches a commit. Incorporate actual newer source changes;
+a version-only bump does not establish meaningful product compatibility coverage.
+For a same-repository PR, explicitly apply the `run-windows-product-journey` label.
+Fork PRs never run this workflow. Manual dispatch is also supported once the workflow
+is available for dispatch. This gate is separate from the tiny inert rollback gate.
+
+Playwright is pinned by the independent tooling lock; local native runners must run
+`npm ci --ignore-scripts --prefix packaging/windows-msi/journey-tools` first. No
+browser downloads are required. GitHub-hosted Windows may run with an administrator
+token: `product-runner-context.json` records the token classification and explicitly
+sets standard-user acceptance false. Evidence artifacts are retained for three days.
+A hosted successful run would establish only the assertions in this journey, not
+signature, ICE, injected product rollback, or standard-user acceptance.
