@@ -166,6 +166,19 @@ export async function verifyMCPDatabaseFlow(
       false,
     );
     policy = await configure();
+    const previousEpoch = policy.databaseGrantEpoch;
+    assert(Number.isInteger(previousEpoch));
+    const previousToken = policy.token;
+    policy = await configure();
+    assert(policy.databaseGrantEpoch > previousEpoch);
+    assert.equal(policy.token, previousToken);
+    const currentConfig = await fetch(app.url + "/api/mcp/config", {
+      headers: headers(),
+    });
+    assert.equal(
+      (await currentConfig.json()).databaseGrantEpoch,
+      policy.databaseGrantEpoch,
+    );
     // An authorization change while a local grant body is still streaming must
     // not silently attach that old request to the replacement MCP token.
     const serialized = JSON.stringify(grantInput);

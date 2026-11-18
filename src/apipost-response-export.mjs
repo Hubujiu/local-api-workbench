@@ -131,7 +131,32 @@ export function exportApipostResponses(request, { rewriteSchema } = {}) {
       },
     };
   });
-  if ([...definitions.values()].some((d) => !d.used))
-    throw Error("原生响应定义须有明确正文示例；不会丢弃无示例schema");
+  for (const [key, definition] of definitions) {
+    if (definition.used) continue;
+    if (!definition.name.trim() || definition.name.length > 200)
+      throw Error("原生无正文响应定义需要明确名称且最多200字符");
+    const separator = key.indexOf(":"),
+      status = key.slice(0, separator),
+      media = key.slice(separator + 1);
+    output.push({
+      example_id:
+        "definition_" +
+        createHash("sha256")
+          .update(String(request.id) + "\0" + key)
+          .digest("hex")
+          .slice(0, 24),
+      raw_parameter: [],
+      expect: {
+        is_default: -1,
+        verify_type: "schema",
+        mock: "",
+        name: definition.name,
+        code: status,
+        content_type: formats[media],
+        schema: definition.schema,
+      },
+    });
+  }
+  if (output.length > 100) throw Error("原生响应示例与无正文定义合计最多100项");
   return { is_check_result: -1, example: output };
 }

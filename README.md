@@ -8,6 +8,10 @@
 
 历史 0.1.0 候选记录见 [历史交付清单](docs/DELIVERY.md)，旧逐项清单见 [历史功能对照](docs/PARITY-CURRENT.md) 与 [历史核验摘要](docs/CURRENT-PARITY.md)。可运行、某次 CI 通过或下面的能力列表均不等于完整复刻交付。
 
+## 下载和发行
+
+运行 `node scripts/delivery-index.mjs` 可查询此刻 main 对应的三平台下载地址、SHA-256 与到期时间。Windows 正式发行通过签名、升级回滚及普通用户验收后生成 Release 草稿。候选版本与正式版各有独立入口。[便携包下载](docs/PORTABLE-QUICKSTART.md) · [Windows 正式发行](docs/WINDOWS-RELEASE.md) · [企业数据库只读预览](docs/ENTERPRISE-DATABASE-PREVIEW.md)
+
 ## 启动
 
 安装 Node.js 24 LTS，首次安装依赖需联网；安装后可离线运行：
@@ -25,7 +29,7 @@ npm start
 
 Git 共享的是定义，不是完整备份。提交前检查 URL、环境、认证等定义是否包含凭据；默认忽略本地历史、历史清单和事务日志，但不会替你取消已有追踪记录。需要恢复历史时，请在应用内导出完整项目备份。新版在成功保存时把旧有文件布局升级为格式 3，保留完整本地历史；旧版程序不能打开格式 3。升级前如需回退，先保留完整备份和旧目录的副本，不用 Git 克隆替代备份。
 
-桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。候选包须对应后端检查点中已核验的组合提交，不能把单功能 PR 的产物当成完整组合。Windows 便携包从该提交成功的 Actions 运行下载 LocalAPI-Windows-portable，完整解压后运行 LocalAPI.exe；不要只复制 exe。无需另装 Node.js。包尚未签名，若系统阻止运行，请先核对来源和 build-manifest.json，不要绕过系统安全警告。
+桌面包装：在 `desktop/` 执行 `npm ci`、`npm start`。安装 Electron 时需要网络，运行时不需要；数据保存在 Electron userData/projects。当前 `main` 整合基线和可试用的三平台包集中在[便携候选下载](docs/PORTABLE-QUICKSTART.md)；交付状态见[验收索引](docs/DELIVERY-STATUS.md)。Windows 需完整解压后运行 `LocalAPI.exe`，无需另装 Node.js。便携包未正式签名，不要绕过系统安全警告。
 
 以下两段保留旧阶段记录，不是当前候选结论；最新精确状态以上方验收入口为准。
 
@@ -33,7 +37,7 @@ Git 共享的是定义，不是完整备份。提交前检查 URL、环境、认
 
 历史阶段候选记录（对应上一段所述阶段，不是 2026-11-13 当前状态）：补保图API软回收／恢复：保留binding、请求ID、own配置和旧case／plan／history；stored tombstone阻断live／cURL及伪造旧bound调用，精确已存冻结请求仍可执行。owner、既有MCP回收权限、真实CLI、备份重启与repeat交叉已本地验证；普通PUT不能切换回收状态，native批次历史不静默清除。永久清除、解绑、目录回收仍拒绝，原生出口不冒充完整历史备份。另仅为配额断言增加失败诊断，未改runtime／预算或降低预期，不声称已修根因。**该历史记录时点的组合 CI 尚待；当前精确状态见顶部验收入口，不将此句视作最新 CI 状态。**
 
-仍未完整交付：原生automated_testings装配/非空项目样本缺证；部分协议和原生交换语义不能保真；SQL Server、Oracle、达梦provider尚未实现（不只是差测试），SQL Server运行许可确认另行待定；原版完整 GUI 与暂停专项未完成；旧阶段前端暂停描述不代表当前开发状态。SQLite额外能力不抵消原版数据库缺口。六模块已验证流程及剩余拒绝边界见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)，不按测试数量折算完成率。
+当前集成候选已接入 SQL Server、Oracle 和达梦的只读查询，并提供按项目的 GUI 和 MCP 授权。各数据库的支持版本、传输和实测范围见[企业数据库说明](docs/ENTERPRISE-DATABASE-PREVIEW.md)。非空 `automated_testings` 的装配、部分原生交换语义以及同版本原厂运行对照仍有缺口，详见[交付矩阵](docs/DELIVERY-STATUS.md)。
 
 ## 已实现的核心
 
@@ -96,7 +100,7 @@ node tests/ui-smoke.mjs
 
 - 原版 GUI 的当前完整流程尚未验收，像素一致性和签名发行未完成；已新增的协议界面及历史旅程以精确候选证据为准，不能代替完整 GUI 验收。
 - 独立 XML／运行时专项未完成；PR37 实验默认关闭、未进入生产组合。历史失败不因后续 CI 通过而改判，既有 Windows XML 预算超时的根因不宣称已解决。
-- 全量专有行为、全部原生数据变体和所有外部 MCP 客户端未完整验证；SQL Server／Oracle／达梦的provider与实际验证仍缺失，许可和运行条件须另行确认，不冒充完成。
+- 全量专有行为、全部原生数据变体和所有外部 MCP 客户端未完整验证；SQL Server、Oracle 和达梦已接入只读预览，各自的真实服务兼容性待实测。
 - 本地循环 OpenAPI 引用可保留，外部引用不自动拉取。原生定义交换无法保留的依赖、历史来源或配置明确拒绝，完整状态使用 Workbench 备份。
 - SSE/WebSocket/TCP 提供有界采集与交互会话，最长15分钟、总计8MiB、最近200条消息，不代表全部协议扩展。
 - 不包含付款、License 激活、在线团队/账号协同或商业 AI 服务，不绕过原版授权。

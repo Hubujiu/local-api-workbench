@@ -3,6 +3,8 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { desktopLayout } from "../desktop/build-layout.mjs";
 import { inspectPortableTree } from "./portable-integrity.mjs";
+import { desktopSourceVersion } from "./desktop-package-version.mjs";
+const version = await desktopSourceVersion();
 const layout = desktopLayout();
 await mkdir(layout.root, { recursive: true });
 await cp("desktop/node_modules/electron/dist", layout.root, {
@@ -25,11 +27,26 @@ if (process.platform === "darwin") {
   );
 }
 await mkdir(layout.app, { recursive: true });
+const nativeDirectory = path.resolve("src/vendor/dameng-native");
 for (const entry of ["src", "public", "scripts", "LICENSE"])
   await cp(entry, path.join(layout.app, entry), {
     recursive: true,
     verbatimSymlinks: true,
+    filter: (source) =>
+      path.resolve(source) !== nativeDirectory &&
+      path.basename(source) !== "__pycache__" &&
+      !/\.py[co]$/i.test(source),
   });
+// WSL and Windows can build different helpers in the same source checkout.
+const nativeTarget = path.join(layout.app, "src/vendor/dameng-native");
+await mkdir(nativeTarget, { recursive: true });
+for (const file of [
+  process.platform === "win32"
+    ? "workbench-dameng-read.exe"
+    : "workbench-dameng-read",
+  "THIRD-PARTY-NOTICES.txt",
+])
+  await cp(path.join(nativeDirectory, file), path.join(nativeTarget, file));
 await cp("production/node_modules", path.join(layout.app, "node_modules"), {
   recursive: true,
   verbatimSymlinks: true,
@@ -45,7 +62,7 @@ await writeFile(
   path.join(layout.app, "package.json"),
   JSON.stringify({
     name: "local-api-workbench",
-    version: "0.1.0",
+    version,
     type: "module",
     main: "desktop/main.mjs",
   }),

@@ -17,7 +17,7 @@ export {
 } from "./redis-commands.mjs";
 import net from "node:net";
 import tls from "node:tls";
-import { X509Certificate } from "node:crypto";
+import { databaseCertificates } from "./database-ca.mjs";
 const MAX_REPLY = 2 * 1024 * 1024,
   MAX_BULK = 1024 * 1024;
 export function parseRESP(buffer) {
@@ -185,38 +185,6 @@ export async function queryRedis(input, { signal } = {}) {
   checkDatabaseSignal(signal);
   return executeRedis(input, redisCommand(input), false, signal);
 }
-function validateRedisCA(ca) {
-  const invalid = () =>
-    Error("Redis CA须为完整PEM证书集合，不得包含无效证书或额外内容");
-  if (
-    ca !== undefined &&
-    (typeof ca !== "string" || Buffer.byteLength(ca) > 65536)
-  )
-    throw invalid();
-  // The existing editor sends an empty CA field for default trust/no TLS.
-  if (ca === undefined || ca === "") return;
-  const certificates =
-    /-----BEGIN CERTIFICATE-----([A-Za-z0-9+/=\t \r\n]+)-----END CERTIFICATE-----/g;
-  const whitespace = /^[\t \r\n]*$/;
-  let cursor = 0,
-    count = 0;
-  for (const match of ca.matchAll(certificates)) {
-    if (!whitespace.test(ca.slice(cursor, match.index))) throw invalid();
-    const encoded = match[1].replace(/[\t \r\n]/g, "");
-    const der = Buffer.from(encoded, "base64");
-    if (!encoded || der.toString("base64") !== encoded) throw invalid();
-    try {
-      // OpenSSL can silently ignore junk PEM blocks and trailing DER bytes.
-      // Parse each certificate independently and require the complete bytes.
-      if (!new X509Certificate(der).raw.equals(der)) throw invalid();
-    } catch {
-      throw invalid();
-    }
-    cursor = match.index + match[0].length;
-    count++;
-  }
-  if (!count || !whitespace.test(ca.slice(cursor))) throw invalid();
-}
 async function executeRedis(input, command, writing, signal, ownership) {
   checkDatabaseSignal(signal);
   const host = input.host === undefined ? "127.0.0.1" : input.host,
@@ -247,7 +215,10 @@ async function executeRedis(input, command, writing, signal, ownership) {
         Buffer.byteLength(input[key]) > 8192)
     )
       throw Error("Redis认证参数无效");
-  validateRedisCA(input.ca);
+  databaseCertificates(
+    input.ca,
+    "Redis CA须为完整PEM证书集合，不得包含无效证书或额外内容",
+  );
   const commands = [];
   if (input.user || input.password)
     commands.push(

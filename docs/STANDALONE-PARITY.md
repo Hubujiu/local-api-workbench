@@ -1,6 +1,6 @@
 # Apipost 单机版功能对照与交付门槛
 
-核对日期：2026-11-17。Workbench 对照版本：[#259](https://github.com/Hubujiu/local-api-workbench/pull/259) `19bd7cbd57c99804fb712430ea6f8ede498938b0`。本文是当前验收清单，不代表新版本已发行。[历史 98 项矩阵](PARITY-CURRENT.md)保留各项细节和历史证据，不能当作今天的验收结果。
+核对日期：2026-11-17。Workbench 对照版本：[#259](https://github.com/Hubujiu/local-api-workbench/pull/259) `19bd7cbd57c99804fb712430ea6f8ede498938b0`。此表保留目标范围，当前集成进度见[交付矩阵](DELIVERY-STATUS.md)，不代表新版本已发行。[历史 98 项矩阵](PARITY-CURRENT.md)保留各项细节和历史证据，不能当作今天的验收结果。
 
 ## 范围和判定
 
@@ -22,9 +22,9 @@
 | MCP 2.0 | 单机明确：新版官网列 30 个工具 | 有 stdio/可选本机 HTTP、项目授权以及 OpenAPI、环境/服务/变量、计划/结果入口。使用新版官网逐工具映射到相同用户操作，实测只读/写入/执行授权、撤销和正常客户端；不按数量推断对齐。 |
 | AI HTTP 执行计划 | 单机明确：[独立执行计划帮助](https://offline.apipost.net/help/executions/) | 有请求快照、重复步骤、串行、变量和详细历史。最终用本机合成流程验证：原接口改动不影响旧快照、步骤脚本不隐式借用接口脚本、失败继续、最近 50 次及授权结果读取。本工具附加的协议、条件和失败策略单列保留。 |
 | 单机项目迁移 | 单机明确的是项目文件和迁移工作流，不等于兼容所有历史/联网格式 | 有 OpenAPI/Postman/cURL、备份以及部分 Apipost 原生格式；缺全版本验证，非空联网版 `automated_testings` 仍拒绝。单机版 2.0 AI 执行计划的原生导出及往返语义需独立取样；不能用旧联网样本替代。 |
-| 数据库连接与联动 | 单机帮助明确保留；[通用数据库文档](https://wiki.apipost.cn/docs/http_debug/database/)的逐数据库合同仍待单机版核对 | PostgreSQL/MySQL/Redis/MongoDB/ClickHouse 有入口及历史实库证据，SQLite 是额外能力；SQL Server 有受控准备层但未注册，真实服务测试门槛未闭合。Oracle/达梦未实现。分别验证可分发客户端、真实 TLS/凭据隔离、调用/结果/取消和前后置绑定。不以 SQLite 替代目标数据库。 |
+| 数据库连接与联动 | 单机帮助明确保留；[通用数据库文档](https://wiki.apipost.cn/docs/http_debug/database/)的逐数据库合同仍待单机版核对 | SQL Server、Oracle 与达梦 DM8 已接入手动查询、项目临时连接、CLI 和 MCP 授权。实库兼容性分别验收。Oracle 与达梦还按表名及有效期限制连接。[连接字段和实库步骤](ENTERPRISE-DATABASE-PREVIEW.md) |
 | 非 HTTP 协议 | [通用更新日志](https://wiki.apipost.cn/docs/changelog/)不能单独证明当前单机包的协议范围 | Workbench 已有多种非 HTTP 协议；逐协议、逐行为核对连接、流、历史和错误；不把部分 gRPC/Socket.IO 旅程推广为全面兼容。 |
-| 桌面、断网与发行 | 单机产品核心；分别核对平台和安装介质，不用开发依赖或远程账号替代 | 三平台便携包有实际重启证据；Windows 11 用户报告完成 #258 首装，同机 #259 只读工具单独确认 18,141 个载荷文件和清单一致，无 .pending。不是独立观察安装器、首次启动、升级、卸载、签名或全新机器验收；见[安装发行协议](INSTALLER-RELEASE-ACCEPTANCE.md)。 |
+| 桌面、断网与发行 | 单机产品核心；分别核对平台和安装介质，不用开发依赖或远程账号替代 | 三平台便携包已有下载重启证据。Windows 的升级、故障回滚、卸载和重装已在托管系统验证。正式产品系列具有签名、普通用户验收和草稿入口。[发行说明](WINDOWS-RELEASE.md) |
 | 传统团队/测试角色自动化 | 单机旧总览明确舍弃，**不等于不支持上面的本地 AI 执行计划** | 联网团队自动化/云调度不冒充单机目标。已有本地执行能力不回退，另列特定的合法数据迁移需求。 |
 
 ## 完成规则

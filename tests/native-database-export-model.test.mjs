@@ -4,6 +4,8 @@ import { importIntoProject, snapshotPlan } from "../src/core.mjs";
 import { exportApipost } from "../src/apipost-export.mjs";
 import { exportApipostDirectory } from "../src/apipost-directory-export.mjs";
 import { nativeDatabaseFixture } from "./fixtures/apipost-database.mjs";
+import { nativeRedisFixture } from "./fixtures/apipost-redis.mjs";
+import { nativeMongoFixture } from "./fixtures/apipost-mongodb.mjs";
 
 // Independently authored format fixtures. These model checks do not execute
 // scripts, SQL, HTTP, the original app or grant a connection. Real providers are
@@ -13,6 +15,52 @@ const formats = [
   ["directory", exportApipostDirectory],
 ];
 const rebind = { databaseMode: "rebind" };
+for (const [format, encode] of formats) {
+  for (const [type, source] of [
+    [
+      "redis",
+      nativeRedisFixture("https://example.invalid/", {
+        method: "hget",
+        query: '{"key":"库存","field":"a:b"}',
+      }),
+    ],
+    [
+      "mongodb",
+      nativeMongoFixture("https://example.invalid/", {
+        filter: { name: { $in: ["一", "two"] } },
+      }),
+    ],
+  ])
+    test(
+      format +
+        " preserves native " +
+        type +
+        " task, extraction scope and rebind across two generations",
+      () => {
+        let project = empty();
+        importIntoProject(project, source);
+        const operation = (p) =>
+          p.requests[0].nativeTasks.before.find((t) => t.type === "database")
+            .data;
+        const { connectionId, ...expected } = operation(project);
+        for (let i = 0; i < 2; i++) {
+          const exported = encode(project, rebind);
+          assert.doesNotMatch(
+            JSON.stringify(exported),
+            /private-host\.invalid|discard-this-fictional-password/,
+          );
+          project = empty("next-" + i);
+          importIntoProject(project, exported);
+          const { connectionId: id, ...actual } = operation(project);
+          assert.deepEqual(actual, expected);
+          assert.equal(
+            project.settings.apipostDatabases.find((d) => d.id === id)?.type,
+            type,
+          );
+        }
+      },
+    );
+}
 const task = (id, type, data, enabled = 1) => ({
   id,
   name: id,

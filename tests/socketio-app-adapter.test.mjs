@@ -27,11 +27,23 @@ const definition = {
 };
 const snapshot = {
   id: "session-id",
+  ownerSequence: 0,
   type: "socketio",
   state: "open",
   events: [],
   definition,
 };
+async function reserve(h) {
+  assert.match(h.calls[0].url, /socketio-creation-intents$/);
+  h.calls[0].resolve({
+    instanceId: crypto.randomUUID(),
+    intentId: crypto.randomUUID(),
+    phase: "reserved",
+    definitionId: definition.id,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(h.calls[1].url, /socketio-sessions$/);
+}
 function harness() {
   const calls = [],
     storage = new Map(),
@@ -103,27 +115,29 @@ test("actual adapter persists secret-free pending intent before start and preser
   r.state.auth = '{"token":"private"}';
   r.state.key = "secret-key";
   const p = r.controller.connect();
+  await reserve(h);
   const stored = [...h.storage.values()].join("");
   assert(!stored.includes("private"));
   assert(!stored.includes("secret-key"));
   assert.match(stored, /"uncertainStart":true/);
-  h.calls[0].reject(Error("lost"));
+  h.calls[1].reject(Error("lost"));
   await p;
   assert.equal(r.state.uncertainStart, true);
   assert.equal(r.restore().uncertainStart, true);
   await assert.rejects(() => r.controller.connect());
-  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls.length, 2);
 });
 test("actual adapter keeps successful start separate from connected and restores id without traffic", async () => {
   const h = harness(),
     r = h.runtime;
   const p = r.controller.connect();
-  h.calls[0].resolve({ ...snapshot, state: "connecting" });
+  await reserve(h);
+  h.calls[1].resolve({ ...snapshot, state: "connecting" });
   await p;
   const saved = r.restore();
   assert.equal(saved.session.id, "session-id");
   assert.equal(saved.session.state, "connecting");
-  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls.length, 2);
   await assert.rejects(() => r.controller.connect());
 });
 test("actual adapter allows stop and GET after execution uncertainty without new effect admission", async () => {
@@ -158,8 +172,9 @@ test("actual adapter isolates late start and clears runtime inputs on navigation
     r = h.runtime;
   r.state.auth = '{"token":"private"}';
   const p = r.controller.connect();
+  await reserve(h);
   r.leave();
-  h.calls[0].resolve(snapshot);
+  h.calls[1].resolve(snapshot);
   await p;
   assert.equal(r.state.session, null);
   assert.equal(r.state.auth, "{}");
@@ -335,4 +350,35 @@ test("actual ack late result cannot mutate departed view and stop still dispatch
   await p;
   assert.equal(r.state.result, null);
   assert.deepEqual(r.state.stopProblems, ["session-id"]);
+});
+test("actual adapter persists ack identity only and restores lost response correlation", async () => {
+  const { runtime: r, calls, storage } = harness();
+  r.state.session = structuredClone(snapshot);
+  r.state.session.events = [{ direction: "received", ackId: "original-ack" }];
+  r.state.incomingAckId = "original-ack";
+  r.state.incomingAckArgs = '["PRIVATE_ACK_BODY"]';
+  const pending = r.controller.acknowledge();
+  assert.equal(calls.length, 1);
+  assert.deepEqual(r.restore().pendingAckRecovery, {
+    sessionId: "session-id",
+    ackId: "original-ack",
+  });
+  assert.doesNotMatch([...storage.values()].join(), /PRIVATE_ACK_BODY/);
+  calls[0].reject(Error("lost response"));
+  await pending;
+  const read = r.controller.poll();
+  calls[1].resolve({
+    ...snapshot,
+    events: [
+      {
+        direction: "ack-sent",
+        ackId: "original-ack",
+        localSubmission: "submitted",
+      },
+    ],
+  });
+  await read;
+  assert.deepEqual(r.state.uncertainSessions, []);
+  assert.equal(r.restore().pendingAckRecovery, null);
+  assert.equal(calls.length, 2);
 });

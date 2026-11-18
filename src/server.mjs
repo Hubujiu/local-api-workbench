@@ -1,3 +1,8 @@
+import { listenForWorkbench } from "./workbench-listener.mjs";
+import { GrpcOwnerOperations } from "./grpc-owner-operations.mjs";
+import { SessionCreationIntents } from "./grpc-creation-intents.mjs";
+import { sqlServerPreviewEnabled } from "./sqlserver-provider.mjs";
+import { enterpriseCapabilities } from "./enterprise-database.mjs";
 import { ProtocolSessionIntents } from "./protocol-session-intents.mjs";
 import { beginLoadReport, finishLoadReport } from "./load-report-evidence.mjs";
 import { requirePostmanEnvironmentText } from "./postman-environment-import.mjs";
@@ -176,7 +181,14 @@ export async function createApp({
 
   const grpcSlots = new GrpcSlots();
   const grpcSessions = new GrpcSessions({ store, slots: grpcSlots });
+  const grpcOwnerOperations = new GrpcOwnerOperations(grpcSessions);
+  const grpcCreationIntents = new SessionCreationIntents(grpcSessions);
   const socketioSessions = new SocketIOSessions();
+  const socketioCreationIntents = new SessionCreationIntents({
+    start: (projectId, definition, input, observer) =>
+      socketioSessions.start(projectId, { ...definition, ...input }, observer),
+    snapshot: (projectId, id) => socketioSessions.ownerSnapshot(projectId, id),
+  });
   const oauth = new OAuthManager();
   const oauth1 = new OAuth1Manager();
   const databaseSessions = new DatabaseSessions({
@@ -823,6 +835,17 @@ export async function createApp({
       if (parts[0] === "api") {
         if (req.headers["x-local-token"] !== token)
           return json(res, 403, { error: "Session token required" });
+        if (parts[1] === "database-capabilities") {
+          res.setHeader("Cache-Control", "no-store");
+          if (u.pathname !== "/api/database-capabilities" || u.search)
+            return json(res, 400, { error: "能力查询路径无效" });
+          if (req.method !== "GET")
+            return json(res, 405, { error: "Method not allowed" });
+          return json(res, 200, {
+            sqlserverReadOnlyPreview: sqlServerPreviewEnabled(),
+            ...enterpriseCapabilities(),
+          });
+        }
         if (parts[1] === "protocol-session-intents") {
           res.setHeader("Cache-Control", "no-store");
           try {
@@ -874,12 +897,31 @@ export async function createApp({
           if (req.method === "GET")
             return json(res, 200, protocolSessions.snapshot(parts[2]));
           const data = await body(req);
-          if (parts[3] === "send")
-            return json(
-              res,
-              200,
-              protocolSessions.send(parts[2], data.message),
-            );
+          if (parts[3] === "send") {
+            res.setHeader("Cache-Control", "no-store");
+            try {
+              return json(
+                res,
+                200,
+                data.operationId !== undefined ||
+                  data.intentId !== undefined ||
+                  data.instanceId !== undefined
+                  ? protocolIntents.send(
+                      data.intentId,
+                      data.instanceId,
+                      parts[2],
+                      data.operationId,
+                      data.message,
+                    )
+                  : protocolSessions.send(parts[2], data.message),
+              );
+            } catch (error) {
+              return json(res, error.intentStatus || 400, {
+                error: error.message,
+                retry_safe: false,
+              });
+            }
+          }
           if (parts[3] === "stop") {
             protocolSessions.stop(parts[2]);
             return json(res, 200, protocolSessions.snapshot(parts[2]));
@@ -1048,6 +1090,7 @@ export async function createApp({
             endpoint: base + "/mcp",
             dataRoot: store.root,
             warning: mcpWarning,
+            databaseGrantEpoch: mcpDatabaseGrants.capture(),
             token: mcpToken,
             lastActivity: mcpLastActivity,
             activities: [
@@ -1130,9 +1173,12 @@ export async function createApp({
           // never start/send execution.
           const evidenceOnly =
             parts[4] &&
-            ((action === "protocol-sessions" &&
-              ((req.method === "GET" && !parts[5]) ||
-                (req.method === "POST" && parts[5] === "stop"))) ||
+            ((action === "grpc-creation-intents" &&
+              req.method === "GET" &&
+              parts.length === 6) ||
+              (action === "protocol-sessions" &&
+                ((req.method === "GET" && !parts[5]) ||
+                  (req.method === "POST" && parts[5] === "stop"))) ||
               (action === "grpc-sessions" &&
                 ((req.method === "GET" && !parts[5]) ||
                   (req.method === "POST" &&
@@ -1709,6 +1755,29 @@ export async function createApp({
               200,
               (p.protocolRuns || []).filter((x) => x.type === "socketio"),
             );
+          if (action === "socketio-creation-intents") {
+            res.setHeader("Cache-Control", "no-store");
+            if (req.method === "GET" && parts.length === 6)
+              return json(
+                res,
+                200,
+                socketioCreationIntents.read(p.id, parts[5], parts[4]),
+              );
+            if (req.method !== "POST" || parts.length !== 4)
+              throw Error("Socket.IO 创建意图路径无效");
+            const data = await body(req);
+            if (Object.keys(data).length !== 1)
+              throw Error("创建意图仅接受已保存的定义 ID");
+            const definition = p.settings.socketioDefinitions?.find(
+              (d) => d.id === data.definitionId,
+            );
+            if (!definition) throw Error("Socket.IO 定义不存在");
+            return json(
+              res,
+              200,
+              socketioCreationIntents.acquire(p.id, definition),
+            );
+          }
           if (action === "socketio-sessions") {
             const sessionId = parts[4],
               operation = parts[5];
@@ -1717,8 +1786,8 @@ export async function createApp({
                 res,
                 200,
                 sessionId
-                  ? socketioSessions.snapshot(p.id, sessionId)
-                  : socketioSessions.list(p.id),
+                  ? socketioSessions.ownerSnapshot(p.id, sessionId)
+                  : socketioSessions.list(p.id, { owner: true }),
               );
             if (req.method === "POST") {
               const data = await body(req);
@@ -1728,6 +1797,7 @@ export async function createApp({
                     (k) =>
                       ![
                         "definitionId",
+                        "creationIntent",
                         "auth",
                         "query",
                         "headers",
@@ -1742,18 +1812,25 @@ export async function createApp({
                   (x) => x.id === data.definitionId,
                 );
                 if (!definition) throw Error("Socket.IO定义不存在");
-                const { definitionId, ...input } = data;
+                const { definitionId, creationIntent, ...input } = data;
                 return json(
                   res,
                   200,
-                  socketioSessions.start(p.id, { ...definition, ...input }),
+                  creationIntent === undefined
+                    ? socketioSessions.start(p.id, { ...definition, ...input })
+                    : socketioCreationIntents.start(
+                        p.id,
+                        definition,
+                        input,
+                        creationIntent,
+                      ),
                 );
               }
               if (operation === "send")
                 return json(
                   res,
                   200,
-                  await socketioSessions.send(p.id, sessionId, data),
+                  await socketioSessions.sendFromOwner(p.id, sessionId, data),
                 );
               if (operation === "ack")
                 return json(
@@ -1807,12 +1884,57 @@ export async function createApp({
               }
             }
           }
+          if (action === "grpc-creation-intents") {
+            res.setHeader("Cache-Control", "no-store");
+            if (req.method === "GET" && parts.length === 6) {
+              const receipt = grpcCreationIntents.read(
+                p.id,
+                parts[5],
+                parts[4],
+              );
+              return json(
+                res,
+                200,
+                receipt.session
+                  ? {
+                      ...receipt,
+                      session: grpcOwnerOperations.withReceipts(
+                        p.id,
+                        receipt.session,
+                      ),
+                    }
+                  : receipt,
+              );
+            }
+            if (req.method !== "POST" || parts.length !== 4)
+              throw Error("gRPC创建意图路径无效");
+            const input = await body(req);
+            if (
+              !input ||
+              Object.keys(input).some((key) => key !== "definitionId")
+            )
+              throw Error("gRPC创建意图仅接受定义ID");
+            const definition = (p.settings.grpcDefinitions || []).find(
+              (item) => item.id === input.definitionId,
+            );
+            if (!definition) throw Error("gRPC定义不存在或不属于此项目");
+            return json(
+              res,
+              200,
+              grpcCreationIntents.acquire(p.id, definition),
+            );
+          }
           if (action === "grpc-sessions") {
+            res.setHeader("Cache-Control", "no-store");
             const sessionId = parts[4],
               operation = parts[5];
             if (parts.length > 6) throw Error("gRPC会话路径无效");
             if (sessionId && req.method === "GET" && !operation)
-              return json(res, 200, grpcSessions.snapshot(p.id, sessionId));
+              return json(
+                res,
+                200,
+                grpcOwnerOperations.snapshot(p.id, sessionId),
+              );
             if (req.method !== "POST") throw Error("gRPC会话操作无效");
             const input = await body(req);
             if (!input || typeof input !== "object" || Array.isArray(input))
@@ -1821,9 +1943,13 @@ export async function createApp({
               if (
                 Object.keys(input).some(
                   (key) =>
-                    !["definitionId", "message", "metadata", "tls"].includes(
-                      key,
-                    ),
+                    ![
+                      "definitionId",
+                      "message",
+                      "metadata",
+                      "tls",
+                      "creationIntent",
+                    ].includes(key),
                 )
               )
                 throw Error("gRPC会话仅接受已保存定义及临时消息/凭据");
@@ -1836,39 +1962,79 @@ export async function createApp({
                   .filter((key) => Object.hasOwn(input, key))
                   .map((key) => [key, input[key]]),
               );
+              const opened = input.creationIntent
+                ? grpcCreationIntents.start(
+                    p.id,
+                    definition,
+                    options,
+                    input.creationIntent,
+                  )
+                : grpcSessions.start(p.id, definition, options);
               return json(
                 res,
                 200,
-                grpcSessions.start(p.id, definition, options),
+                grpcOwnerOperations.withReceipts(p.id, opened),
               );
             }
             // Check ownership even for an invalid operation; IDs never cross projects.
             grpcSessions.get(p.id, sessionId);
             if (operation === "send") {
               if (
-                Object.keys(input).some((key) => key !== "message") ||
+                Object.keys(input).some(
+                  (key) => !["message", "ownerOperation"].includes(key),
+                ) ||
                 !Object.hasOwn(input, "message")
               )
                 throw Error("gRPC会话send须且仅须message");
               return json(
                 res,
                 200,
-                grpcSessions.send(p.id, sessionId, input.message),
+                input.ownerOperation
+                  ? grpcOwnerOperations.execute(
+                      p.id,
+                      sessionId,
+                      "send",
+                      input.message,
+                      input.ownerOperation,
+                    )
+                  : grpcOwnerOperations.withReceipts(
+                      p.id,
+                      grpcSessions.send(p.id, sessionId, input.message),
+                    ),
               );
             }
-            if (Object.keys(input).length)
-              throw Error("gRPC会话终止操作不接受额外字段");
-            if (operation === "half-close")
-              return json(res, 200, grpcSessions.halfClose(p.id, sessionId));
-            if (operation === "cancel")
-              return json(res, 200, await grpcSessions.cancel(p.id, sessionId));
-            if (operation === "reconcile")
+            if (
+              operation === "half-close" &&
+              input.ownerOperation &&
+              Object.keys(input).length === 1
+            )
               return json(
                 res,
                 200,
-                await grpcSessions.reconcile(p.id, sessionId),
+                grpcOwnerOperations.execute(
+                  p.id,
+                  sessionId,
+                  "half-close",
+                  undefined,
+                  input.ownerOperation,
+                ),
               );
-            throw Error("未知gRPC会话操作");
+            if (Object.keys(input).length)
+              throw Error("gRPC会话终止操作不接受额外字段");
+            const result =
+              operation === "half-close"
+                ? grpcSessions.halfClose(p.id, sessionId)
+                : operation === "cancel"
+                  ? await grpcSessions.cancel(p.id, sessionId)
+                  : operation === "reconcile"
+                    ? await grpcSessions.reconcile(p.id, sessionId)
+                    : null;
+            if (!result) throw Error("未知gRPC会话操作");
+            return json(
+              res,
+              200,
+              grpcOwnerOperations.withReceipts(p.id, result),
+            );
           }
           if (action === "grpc-runs" && req.method === "GET")
             return json(
@@ -2797,6 +2963,31 @@ export async function createApp({
       grpcSessions,
     })))
   );
+  try {
+    await listenForWorkbench(server, port);
+  } catch (error) {
+    if (
+      error.code !== "EADDRINUSE" ||
+      requestedPort !== 0 ||
+      !persistedMCP?.remember
+    )
+      throw error;
+    await mcpPublication.run(async () => {
+      mcp.enabled = false;
+      mcpToken = "";
+      mcpWarning =
+        "保存的本地端口被占用，已改用新端口并关闭MCP。请重新授权并复制连接配置。";
+      await listenForWorkbench(server, 0);
+      await saveMCPConfig(path.resolve(root), {
+        ...mcp,
+        token: "",
+        port: server.address().port,
+      });
+    });
+  }
+
+  // Only the final listener owns application shutdown. Rebinding an OS-assigned
+  // port above must not tear down protocol sessions or agent permissions.
   server.on("close", () => {
     closeManualImports();
     void autoImports.close();
@@ -2824,37 +3015,6 @@ export async function createApp({
       Promise.resolve(protocolShutdown).then(() => callback?.(error));
     });
   };
-  const listen = (listenPort) =>
-    new Promise((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(listenPort, "127.0.0.1", () => {
-        server.off("error", reject);
-        resolve();
-      });
-    });
-  try {
-    await listen(port);
-  } catch (error) {
-    if (
-      error.code !== "EADDRINUSE" ||
-      requestedPort !== 0 ||
-      !persistedMCP?.remember
-    )
-      throw error;
-    await mcpPublication.run(async () => {
-      mcp.enabled = false;
-      mcpToken = "";
-      mcpWarning =
-        "保存的本地端口被占用，已改用新端口并关闭MCP。请重新授权并复制连接配置。";
-      await listen(0);
-      await saveMCPConfig(path.resolve(root), {
-        ...mcp,
-        token: "",
-        port: server.address().port,
-      });
-    });
-  }
-
   let appClose;
   const close = () =>
     (appClose ??= new Promise((resolve, reject) => {

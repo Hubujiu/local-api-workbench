@@ -326,6 +326,42 @@ export class SocketIOSessions {
       connected: !!s.connected,
     });
   }
+  ownerSnapshot(projectId, id) {
+    const s = this.get(projectId, id);
+    return {
+      ...this.snapshot(projectId, id),
+      ownerSequence: s.ownerSequence ?? 0,
+      ownerSends: [...(s.ownerSends?.values() ?? [])].map((r) => ({ ...r })),
+    };
+  }
+  async sendFromOwner(projectId, id, data) {
+    const { ownerOperation, ...input } = data;
+    if (ownerOperation === undefined) return this.send(projectId, id, input);
+    const session = this.get(projectId, id);
+    const sequence = (session.ownerSequence ?? 0) + 1;
+    if (
+      !Number.isSafeInteger(sequence) ||
+      ownerOperation?.sequence !== sequence ||
+      typeof ownerOperation.id !== "string" ||
+      !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(
+        ownerOperation.id,
+      )
+    )
+      throw socketIOError("Socket.IO 操作序列无效或已使用，请只读刷新");
+    session.ownerSequence = sequence;
+    const ledger = (session.ownerSends ??= new Map());
+    if (ledger.size >= 128) ledger.delete(ledger.keys().next().value);
+    const receipt = { sequence, id: ownerOperation.id, status: "pending" };
+    ledger.set(sequence, receipt);
+    try {
+      const result = await this.send(projectId, id, input);
+      receipt.status = result.status;
+      return { ...result, ownerOperation: { ...receipt } };
+    } catch (error) {
+      receipt.status = "unknown";
+      throw error;
+    }
+  }
   record(s, direction, event, args, extra = {}) {
     if (s.sequence >= 10000)
       throw socketIOError("Socket.IO会话事件总数超过10000项");
@@ -361,10 +397,14 @@ export class SocketIOSessions {
     socket.removeAllListeners();
     s.socket = null;
   }
-  list(projectId) {
+  list(projectId, { owner = false } = {}) {
     return [...this.sessions.values()]
       .filter((s) => s.projectId === projectId)
-      .map((s) => this.snapshot(projectId, s.id));
+      .map((s) =>
+        owner
+          ? this.ownerSnapshot(projectId, s.id)
+          : this.snapshot(projectId, s.id),
+      );
   }
   fail(s, error) {
     if (["closed", "error"].includes(s.state)) return;
@@ -374,7 +414,7 @@ export class SocketIOSessions {
     clearTimeout(s.deadline);
     this.release(s);
   }
-  start(projectId, input) {
+  start(projectId, input, { onSubmitted } = {}) {
     if (typeof projectId !== "string" || !projectId || projectId.length > 200)
       throw socketIOError("Socket.IO项目标识无效");
     const { definition, options } = connection(input);
@@ -452,6 +492,7 @@ export class SocketIOSessions {
         this.fail(s, error);
       }
     });
+    onSubmitted?.({ sessionId: s.id });
     socket.connect();
     return this.snapshot(projectId, s.id);
   }
@@ -536,9 +577,14 @@ export class SocketIOSessions {
     if (!pending || pending.deadline <= monotonicNow())
       throw socketIOError("Socket.IO确认标识不存在或已过期");
     const args = jsonData(input.args, true);
-    this.record(s, "ack-sent", "ack", input.args, { ackId: input.ackId });
+    this.record(s, "ack-sent", "ack", input.args, {
+      ackId: input.ackId,
+      localSubmission: "unknown",
+    });
+    const receipt = s.events.at(-1);
     s.pending.delete(input.ackId);
     pending.callback(...args);
+    receipt.localSubmission = "submitted";
     return { acknowledged: true };
   }
   stop(projectId, id) {

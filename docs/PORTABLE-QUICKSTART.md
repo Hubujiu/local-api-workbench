@@ -1,30 +1,30 @@
 # 便携候选试用：先核版本，再用独立数据目录启动
 
-这是开发候选的操作指南，不是正式发行公告。没有安装器、自动更新或正式签名/公证保证；CI 中三平台通过不等于任意用户机器都兼容。当前完整产品缺口见 [交付矩阵](DELIVERY-STATUS.md)。
+本指南适用于开发候选的便携 ZIP，下载后手动校验和解压。每用户 MSI 的升级、卸载、回滚和签名流程见 [Windows 安装与发行](WINDOWS-RELEASE.md)。各平台与版本的实测范围见[交付矩阵](DELIVERY-STATUS.md)。
+
+## 查询当前 main
+
+运行 `node scripts/delivery-index.mjs` 可获取 GitHub 上当前 main 的精确提交、源码树、成功的 CI 运行、三个下载地址、到期时间和 SHA-256。产物过期或 main 尚在构建时，命令会报告具体原因。[Windows 正式发行入口](WINDOWS-RELEASE.md)
 
 ## 选择一个精确候选
 
-不要从不同运行混用可执行文件、manifest 或证据。通过该候选 PR 的原 Actions 运行页下载对应平台 artifact；可能需要 GitHub 登录，工作流当前保留产物 7 天。过期或缺少产物就停止，不拿旧包替代新版本。
+不要从不同运行混用可执行文件、manifest 或证据。通过 `main` 的原 Actions 运行下载对应平台 artifact；可能需要 GitHub 登录。过期或缺少产物就停止，不拿旧包替代这一基线。
 
-当前试用候选：[#247](https://github.com/Hubujiu/local-api-workbench/pull/247)，head `794cff388991bcb4535aebc3810e8bac118ddaca`，tree `f3eff2505633cc2afb013834f70ceddd057e6280`，原运行 [43674731764](https://github.com/Hubujiu/local-api-workbench/actions/runs/43674731764) attempt 1，46/46 jobs 成功。2026-11-15 通过 GitHub API 复核 head、全部 jobs、产物元数据及真实下载后重启日志。三平台均出现 `DOWNLOADED_DESKTOP_RESTART_JOURNEY_PASS` 和 `DOWNLOADED_DESKTOP_CRASH_JOURNEY_PASS`；不能只凭上传成功判断可用。
+当前试用基线：`main` 整合提交 `f59b11ac3dc96c567db155dd871ef08ba445937c`，tree `4869acc4fc433b16b1d6b62750c310884c6f2f96`，[原运行 44130790449](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449) 47/47 jobs 成功。该运行的三平台下载验证与重启 jobs 均通过。这是开发候选，不是 release。
 
-下载以下**平台便携包**，不要误下载 `desktop-build-metadata` 或 `downloaded-portable-journey` 证据包。链接可能需要 GitHub 登录；先确认系统及架构匹配。
+| 平台与便携包下载                                                                                             | 到期（UTC）          | 完整展开后的入口        |
+| ------------------------------------------------------------------------------------------------------------ | -------------------- | ----------------------- |
+| [Windows x64](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/artifacts/14350955078) | 2026-11-24T16:56:47Z | `LocalAPI/LocalAPI.exe` |
+| [macOS arm64](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/artifacts/14348309920) | 2026-11-24T16:56:25Z | `LocalAPI/LocalAPI.app` |
+| [Linux x64](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/artifacts/14349842125)   | 2026-11-24T16:54:50Z | `LocalAPI/LocalAPI`     |
 
-| 平台/架构与 artifact 下载                                                                                                  | 到期时间（UTC，API 当前值） | 完整展开后的启动入口    |
-| -------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ----------------------- |
-| [Windows x64 · 14145941820](https://github.com/Hubujiu/local-api-workbench/actions/runs/43674731764/artifacts/14145941820) | 2026-11-22T04:01:58Z        | `LocalAPI/LocalAPI.exe` |
-| [macOS arm64 · 14145651954](https://github.com/Hubujiu/local-api-workbench/actions/runs/43674731764/artifacts/14145651954) | 2026-11-22T04:05:35Z        | `LocalAPI/LocalAPI.app` |
-| [Linux x64 · 14144819637](https://github.com/Hubujiu/local-api-workbench/actions/runs/43674731764/artifacts/14144819637)   | 2026-11-22T04:00:41Z        | `LocalAPI/LocalAPI`     |
+不要误下 metadata 或验证日志包。架构以包内 `LocalAPI/build-manifest.json` 为准。以下为 GitHub 公布的外层 artifact ZIP SHA-256，不是内部压缩包或可执行文件的摘要，也不是发布者签名。本次更新未重新下载这三个 ZIP 计算字节摘要。
 
-API 读取时三个包均 `expired=false`。过期后不保证可下载；停止并取得新的精确已验候选，不自行混用别的运行。以下 SHA-256 是 GitHub API 的外层 artifact ZIP 摘要，不是内部 tar.gz 或可执行文件摘要，也不是代码签名；本次文档更新未在本机重新下载并计算 ZIP 字节。
+- `LocalAPI-Linux-portable`：`sha256:1f60da065d87e9617c2fd2355ee4a69ba28d71187ac1dc2c5b6e6517624b30f0`
+- `LocalAPI-Windows-portable`：`sha256:380da9823403679ff7ead1a24a62f38f4526bc0046e4b0bc73c3326ca829b1bb`
+- `LocalAPI-macOS-portable`：`sha256:252ae1fcde6176be4bfb9a518ee86c751be6b84af53f5da87d9ee0d2271df2b0`
 
-- `LocalAPI-Linux-portable`：`sha256:b61de141a80d9019943eb53c519ff4aa5779140c529586aad3e57122b9a236b7`
-- `LocalAPI-Windows-portable`：`sha256:32ae23b07e11edb61c9419aaf0add8a82fab6700da3d2ac59100289934175b06`
-- `LocalAPI-macOS-portable`：`sha256:9cabfd149d961a3df8887b8efb9a9d74ec1587ef9ca37605438576cf9006677b`
-
-历史基线仍保留：#239 head `3a8d9ee8e66b1744e11256396635663621f32b35`、tree `914276d5ebc4b1a169220d1025dcb35bcb85efcd`、[原运行 43466017423](https://github.com/Hubujiu/local-api-workbench/actions/runs/43466017423) 曾为 46/46，Windows/macOS/Linux 包 ID 分别为 `14057898061` / `14058157104` / `14059630386`。此历史记录不是当前下载推荐；旧超时与上传失败不能由新绿灯改判。
-
-#247 运行 `43674731764` 的实际架构为 Windows x64、Linux x64、macOS arm64。架构仍必须核对该包 `LocalAPI/build-manifest.json`，不依据 artifact 名称猜测。平台名不意味着同时包含 x64 和 ARM 版本。
+旧候选请查[历史验收记录](DELIVERY-STATUS.md)，不作为当前下载。
 
 CI 的协议草稿关闭旅程通过真实 Electron 关闭事件和取消结果验证，但 OS 对话框响应由测试适配；不代表人工点击原生安全警告/系统模态已验。便携包仍非安装器，无正式签名/公证保证，完整产品未交付。
 
@@ -42,8 +42,8 @@ Get-FileHash -Algorithm SHA256 'C:\Downloads\LocalAPI-Windows-portable.zip'
 2. **进阶完整性检查**：从同一精确提交取得源码，安装 Python 3.12（仅此校验工具需要；运行桌面程序不需要 Node/npm/Python）。在源码根目录执行以下命令，将平台换成 `win32`、`darwin` 或 `linux`，路径换成自己的绝对路径：
 
    ```text
-   python scripts/verify_portable_download.py "<外层ZIP解压目录>" --platform <平台> --head 794cff388991bcb4535aebc3810e8bac118ddaca
-   python scripts/materialize_portable_download.py "<外层ZIP解压目录>" "<不存在的新启动目录>" --platform <平台> --head 794cff388991bcb4535aebc3810e8bac118ddaca
+   python scripts/verify_portable_download.py "<外层ZIP解压目录>" --platform <平台> --head f59b11ac3dc96c567db155dd871ef08ba445937c
+   python scripts/materialize_portable_download.py "<外层ZIP解压目录>" "<不存在的新启动目录>" --platform <平台> --head f59b11ac3dc96c567db155dd871ef08ba445937c
    ```
 
    若系统仅提供 `python3`，将命令中的 `python` 换成 `python3`。校验和展开期间不要修改输入目录。新启动目录的父目录必须已存在、由你控制，且各级路径不能是符号链接或 Windows reparse point。后一个命令在新启动目录中直接放置程序内容，因此入口没有额外的 `LocalAPI/` 前缀。任一校验失败就停止，不跳过、不补文件凑通过。哈希只能证明一致性，不是发布者数字签名。

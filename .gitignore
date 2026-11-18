@@ -5,3 +5,6 @@ test-results/
 
 dist/
 production/
+__pycache__/
+native/dameng/target/
+src/vendor/dameng-native/

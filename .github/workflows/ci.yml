@@ -57,6 +57,9 @@ jobs:
       - run: node tests/ui-smoke.mjs
         env:
           PLAYWRIGHT_BUNDLED: "1"
+      - run: node tests/sqlserver-owner-ui.mjs
+        env:
+          PLAYWRIGHT_BUNDLED: "1"
       - run: node tests/gui-restart-journey.mjs
         env:
           PLAYWRIGHT_BUNDLED: "1"
@@ -98,6 +101,8 @@ jobs:
         run: |
           node -e "const fs=require('fs');fs.mkdirSync('production',{recursive:true});for(const f of ['package.json','package-lock.json'])fs.copyFileSync(f,'production/'+f)"
           npm ci --omit=dev --ignore-scripts --prefix production --no-audit
+      - run: npm run build:dameng
+      - run: node --test tests/dameng-native-protocol.test.mjs tests/enterprise-database.test.mjs
       - run: node scripts/build-desktop.mjs
       - run: node tests/mcp-production-smoke.mjs
       - run: node scripts/build-manifest.mjs
@@ -329,10 +334,12 @@ jobs:
         env:
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          $output = python scripts/stage_windows_payload.py "${{ runner.temp }}/localapi-downloaded-portable" "${{ runner.temp }}/localapi-launch-package" --head "$env:EXPECTED_HEAD" --expected-version 0.1.0 --arch x64
+          $expectedVersion = (Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json).version
+          if ($expectedVersion -isnot [string] -or $expectedVersion -cnotmatch '\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\z') { throw "Missing or invalid source package version" }
+          $output = python scripts/stage_windows_payload.py "${{ runner.temp }}/localapi-downloaded-portable" "${{ runner.temp }}/localapi-launch-package" --head "$env:EXPECTED_HEAD" --expected-version "$expectedVersion" --arch x64
           if ($LASTEXITCODE -ne 0) { throw "Windows payload staging failed" }
           $stage = $output | ConvertFrom-Json
-          if ($stage.kind -ne 'windows-payload-staging' -or $stage.head -ne $env:EXPECTED_HEAD -or $stage.platform -ne 'win32' -or $stage.arch -ne 'x64' -or $stage.version -ne '0.1.0' -or $stage.applicationName -ne 'local-api-workbench' -or $stage.entrypoint -ne 'desktop/main.mjs' -or $stage.installationPerformed -isnot [bool] -or $stage.signatureVerified -isnot [bool] -or $stage.installationPerformed -cne $false -or $stage.signatureVerified -cne $false) { throw "Windows staging evidence mismatch" }
+          if ($stage.kind -ne 'windows-payload-staging' -or $stage.head -ne $env:EXPECTED_HEAD -or $stage.platform -ne 'win32' -or $stage.arch -ne 'x64' -or $stage.version -cne $expectedVersion -or $stage.applicationName -ne 'local-api-workbench' -or $stage.entrypoint -ne 'desktop/main.mjs' -or $stage.installationPerformed -isnot [bool] -or $stage.signatureVerified -isnot [bool] -or $stage.installationPerformed -cne $false -or $stage.signatureVerified -cne $false) { throw "Windows staging evidence mismatch" }
           Write-Output "DOWNLOADED_PORTABLE_MATERIALIZED_PASS $output"
           Write-Output "WINDOWS_PAYLOAD_STAGED_PASS $output"
       - uses: actions/setup-node@v4

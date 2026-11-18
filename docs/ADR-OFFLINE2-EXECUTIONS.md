@@ -361,3 +361,31 @@ readback and missing/index rejection, project/disk immutability and no execution
 records. Those application workflows are syntax-checked only locally and await
 ordinary CI on the published exact commit; no new runtime evidence is claimed
 before that result. Existing payloads, limits and test timeouts are unchanged.
+
+## Bounded authentication overrides in frozen steps
+
+The directory flow importer now translates explicit input.auth overrides for
+native kv (header/query), OAuth1 and bootstrap Digest using the same validators
+as native HTTP resources. Previously it rejected these definitions even when
+the resource converter and the directory exporter could represent them.
+The override applies to the frozen step, not the live API or the next step.
+OAuth2 acquisition and other authentication overrides remain outside this
+increment; unsupported or malformed active definitions still reject the whole
+import before project mutation.
+
+OAuth1 parameter flags are preserved, not inferred. Digest permits credentials,
+algorithm and retry policy only, never cached challenge/nonce state. API-key
+query encoding retains the existing Apipost spelling, including literal plus
+characters; this is not URLSearchParams form encoding. Import/export does not
+contact endpoints or acquire credentials. Explicit saved auth can contain
+secrets, so the existing export sharing caution still applies.
+
+New independently authored synthetic fixtures exercise directory import,
+directory re-export/reimport, durable restore and restart. Real local HTTP
+execution verifies frozen header/query API keys and OAuth1 output stay stable
+and do not leak into later steps; the fixture is not an OAuth authorization
+server. Digest coverage here verifies definition/retry-policy round trips and
+cached-state rejection, not a new native Digest handshake. Existing original
+flow fixtures and Digest adapter tests are regression coverage. No original
+application was run for this increment; no claim of arbitrary native project
+or nonempty automated_testings interoperability is made.

@@ -2192,3 +2192,30 @@ input[data-select-case] {
 #dialog-content textarea[data-control-key] {
   min-height: 52px;
 }
+
+#mcp-db-fields {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+#mcp-db-fields label {
+  display: block;
+}
+#mcp-db-fields input:not([type="checkbox"]),
+#mcp-db-fields select,
+#mcp-db-fields textarea {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+}
+#mcp-db-remote > label,
+#mcp-db-list > .row {
+  margin-bottom: 12px;
+}
+#mcp-db-list code {
+  overflow-wrap: anywhere;
+}

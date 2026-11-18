@@ -59,6 +59,9 @@ export function createSocketIOState() {
     incomingAckId: "",
     incomingAckArgs: "[]",
     incomingAckReceipts: [],
+    pendingAckRecovery: null,
+    pendingSendRecovery: null,
+    creationIntent: null,
     expectAck: true,
     ackTimeoutMs: 5000,
     sessions: [],
@@ -97,6 +100,9 @@ export function selectSocketIO(state, definition) {
     stopProblems: state.stopProblems,
     stopReceipts: state.stopReceipts,
     incomingAckReceipts: state.incomingAckReceipts,
+    pendingAckRecovery: state.pendingAckRecovery,
+    pendingSendRecovery: state.pendingSendRecovery,
+    creationIntent: state.creationIntent,
   };
   Object.assign(state, createSocketIOState(), keep);
   if (definition) {
@@ -109,7 +115,8 @@ export function invalidateSocketIO(state) {
   state.revision++;
   for (const k of ["auth", "query", "headers"]) state[k] = "{}";
   for (const k of ["ca", "cert", "key"]) state[k] = "";
-  if (state.pending?.kind === "connect") state.uncertainStart = true;
+  if (state.pending?.kind === "connect" && state.pending.submitted)
+    state.uncertainStart = true;
   if (
     ["send", "ack"].includes(state.pending?.kind) &&
     !state.uncertainSessions.includes(state.pending.sessionId)
@@ -247,13 +254,17 @@ export function createSocketIOController(options) {
         throw Error("视图已变化，迟到结果未应用");
     };
     try {
-      if (["connect", "send", "ack"].includes(kind)) {
+      if (
+        ["send", "ack"].includes(kind) ||
+        (kind === "connect" && !options.ownerReceipts)
+      ) {
+        state.pending.submitted = true;
         uncertain(kind, id);
         persist();
       }
       return await work(current);
     } catch (error) {
-      uncertain(kind, id);
+      if (kind !== "connect" || state.pending?.submitted) uncertain(kind, id);
       note();
       try {
         current();
@@ -303,6 +314,32 @@ export function createSocketIOController(options) {
     if (!state.saved || state.draftDirty) throw Error("请先保存定义");
     const body = { definitionId: state.saved.id, ...credentials(state) };
     return operation("connect", async (current) => {
+      if (options.ownerReceipts) {
+        const r = await post("socketio-creation-intents", {
+          definitionId: body.definitionId,
+        });
+        current();
+        if (
+          r?.phase !== "reserved" ||
+          r.definitionId !== body.definitionId ||
+          ![r.instanceId, r.intentId].every(
+            (id) => typeof id === "string" && /^[a-f0-9-]{36}$/.test(id),
+          )
+        )
+          throw Error("Socket.IO 创建意图回执无效");
+        state.creationIntent = {
+          instanceId: r.instanceId,
+          intentId: r.intentId,
+          definitionId: r.definitionId,
+        };
+        body.creationIntent = {
+          instanceId: r.instanceId,
+          intentId: r.intentId,
+        };
+        state.uncertainStart = true;
+        state.pending.submitted = true;
+        persist();
+      }
       const value = await post("socketio-sessions", body);
       try {
         current();
@@ -346,6 +383,42 @@ export function createSocketIOController(options) {
     refresh();
   }
   async function poll() {
+    if (state.uncertainStart && state.creationIntent) {
+      const intent = state.creationIntent;
+      return operation("refresh", async (current) => {
+        const r = await get(
+          "socketio-creation-intents/" +
+            intent.instanceId +
+            "/" +
+            intent.intentId,
+        );
+        current();
+        if (
+          r?.instanceId !== intent.instanceId ||
+          r.intentId !== intent.intentId ||
+          r.definitionId !== intent.definitionId
+        )
+          throw Error("Socket.IO 创建意图不匹配");
+        if (r.sessionId && r.session?.definition?.id === intent.definitionId) {
+          state.session = snapshot(r.session, r.sessionId);
+        } else if (
+          !["expired", "failed-before-submit"].includes(r.phase) ||
+          r.sessionId
+        ) {
+          throw Error("创建结果仍未知，请稍后只读刷新");
+        }
+        state.uncertainStart = false;
+        try {
+          persist();
+        } catch (error) {
+          state.uncertainStart = true;
+          throw error;
+        }
+        state.notice = r.sessionId
+          ? "已按原创建回执恢复会话。"
+          : "已确认原创建意图未提交。";
+      });
+    }
     const id = state.session?.id;
     if (!id) throw Error("请先选择会话");
     return operation(
@@ -354,7 +427,68 @@ export function createSocketIOController(options) {
         const value = await get("socketio-sessions/" + encodeURIComponent(id));
         current();
         state.session = snapshot(value, id);
-        state.notice = "已只读刷新；不会清除未知发送标记，或补存执行记录。";
+        const sent = state.pendingSendRecovery;
+        if (
+          sent?.sessionId === id &&
+          !state.uncertainStart &&
+          !state.stopProblems.includes(id) &&
+          state.session.ownerSends?.some(
+            (r) =>
+              r.id === sent.id &&
+              r.sequence === sent.sequence &&
+              ["sent", "acknowledged", "ack-rejected"].includes(r.status),
+          )
+        ) {
+          state.uncertainSessions = state.uncertainSessions.filter(
+            (x) => x !== id,
+          );
+          state.pendingSendRecovery = null;
+          try {
+            persist();
+          } catch (error) {
+            uncertain("send", id);
+            state.pendingSendRecovery = sent;
+            throw error;
+          }
+          state.notice = "已核对原发送的本地回执。远端业务结果请单独确认。";
+          return;
+        }
+        const pending = state.pendingAckRecovery;
+        const confirmed =
+          pending?.sessionId === id &&
+          !state.uncertainStart &&
+          !state.stopProblems.includes(id) &&
+          state.session.events.some(
+            (e) =>
+              e.direction === "ack-sent" &&
+              e.ackId === pending.ackId &&
+              e.localSubmission === "submitted",
+          );
+        if (confirmed) {
+          if (
+            !state.incomingAckReceipts.some(
+              (e) => e.sessionId === id && e.ackId === pending.ackId,
+            )
+          ) {
+            if (state.incomingAckReceipts.length >= 1000)
+              throw Error("确认回执达到上限，保留未知标记");
+            state.incomingAckReceipts.push({ ...pending });
+          }
+          state.uncertainSessions = state.uncertainSessions.filter(
+            (x) => x !== id,
+          );
+          state.pendingAckRecovery = null;
+          try {
+            persist();
+          } catch (error) {
+            uncertain("ack", id);
+            state.pendingAckRecovery = pending;
+            throw error;
+          }
+        }
+        state.notice = confirmed
+          ? "已只读核对原入站确认的本机提交回执，未重发；不代表远端收到或业务成功。"
+          : "已只读刷新；未知发送标记保持，不会补存执行记录。";
       },
       id,
     );
@@ -380,9 +514,23 @@ export function createSocketIOController(options) {
       args,
       ...(state.expectAck ? { ackTimeoutMs: Number(state.ackTimeoutMs) } : {}),
     };
+    if (options.ownerReceipts) {
+      const sequence = s.ownerSequence + 1;
+      if (!Number.isSafeInteger(sequence) || sequence < 1)
+        throw Error("请先只读刷新会话取得发送序列");
+      body.ownerOperation = { sequence, id: crypto.randomUUID() };
+    }
     return operation(
       "send",
       async (current) => {
+        state.pendingAckRecovery = null;
+        if (body.ownerOperation) {
+          state.pendingSendRecovery = {
+            sessionId: s.id,
+            ...body.ownerOperation,
+          };
+        }
+        persist();
         const result = await post(
           "socketio-sessions/" + encodeURIComponent(s.id) + "/send",
           body,
@@ -410,6 +558,15 @@ export function createSocketIOController(options) {
           (result.status === "acknowledged" && !Array.isArray(result.args))
         )
           throw Error("发送回执无效");
+        if (body.ownerOperation) {
+          if (
+            result.ownerOperation?.id !== body.ownerOperation.id ||
+            result.ownerOperation.sequence !== body.ownerOperation.sequence ||
+            result.ownerOperation.status !== result.status
+          )
+            throw Error("原发送回执不匹配，请只读刷新");
+          s.ownerSequence = body.ownerOperation.sequence;
+        }
         state.result = result;
         if (result.remoteOutcome === "unknown") uncertain("send", s.id);
         else if (!state.stopProblems.includes(s.id))
@@ -463,6 +620,9 @@ export function createSocketIOController(options) {
     return operation(
       "ack",
       async (current) => {
+        state.pendingAckRecovery = { sessionId: s.id, ackId };
+        state.pendingSendRecovery = null;
+        persist();
         const result = await post(
           "socketio-sessions/" + encodeURIComponent(s.id) + "/ack",
           { ackId, args },
@@ -477,6 +637,7 @@ export function createSocketIOController(options) {
           throw Error("确认回执无效");
         // Suppress this consumed ID even before the next read. This is local receipt, not delivery proof.
         state.incomingAckReceipts.push({ sessionId: s.id, ackId });
+        state.pendingAckRecovery = null;
         state.result = {
           ackId,
           locallySubmitted: true,
@@ -490,6 +651,7 @@ export function createSocketIOController(options) {
           persist();
         } catch (e) {
           uncertain("ack", s.id);
+          state.pendingAckRecovery = { sessionId: s.id, ackId };
           throw e;
         }
         state.notice =
@@ -512,6 +674,8 @@ export function createSocketIOController(options) {
     let storageFailed = false;
     if (!parallel) setBusy(true, "stop");
     state.stopPending = { token, id };
+    state.pendingAckRecovery = null;
+    state.pendingSendRecovery = null;
     uncertain("send", id);
     if (!state.stopProblems.includes(id)) state.stopProblems.push(id);
     try {

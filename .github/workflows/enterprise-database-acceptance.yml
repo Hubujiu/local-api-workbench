@@ -1,0 +1,75 @@
+name: Disposable enterprise database acceptance
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+    inputs:
+      vendor_terms_accepted:
+        description: "Use SQL Server Developer and Oracle Database Free under their development/test terms"
+        type: boolean
+        required: true
+        default: false
+      dameng_terms_accepted:
+        description: "Use DM8 Developer under its development/test terms"
+        type: boolean
+        required: false
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: enterprise-database-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-service:
+    if: >-
+      github.repository == 'Hubujiu/local-api-workbench' &&
+      (inputs.vendor_terms_accepted ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'run-enterprise-database-acceptance') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'run-enterprise-database-acceptance')))
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [sqlserver, oracle]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.22.3"
+      - run: npm ci --ignore-scripts --no-audit
+      - name: Test exact source against a verified native TLS connection
+        env:
+          ENGINE: ${{ matrix.engine }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          WORKBENCH_DB_TERMS: accepted
+        run: bash tests/enterprise-services/run.sh
+  real-dameng:
+    if: >-
+      github.repository == 'Hubujiu/local-api-workbench' &&
+      (inputs.dameng_terms_accepted ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'run-dameng-database-acceptance') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'run-dameng-database-acceptance')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.22.3"
+      - run: npm ci --ignore-scripts --no-audit
+      - run: node scripts/build-dameng.mjs
+      - name: Test the compiled reader against the official DM8 service
+        env:
+          ENGINE: dameng
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          WORKBENCH_DB_TERMS: accepted
+        run: bash tests/enterprise-services/run.sh

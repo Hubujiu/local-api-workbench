@@ -309,13 +309,19 @@ test(
       planId: "plan",
       schedule: {
         initialVUs: 2,
-        stages: [{ durationSeconds: 1, targetVUs: 2 }],
+        // Finish at the iteration cap even when the two script workers start cold.
+        stages: [{ durationSeconds: 10, targetVUs: 2 }],
         maxIterations: 4,
       },
     });
     assert.equal(response.status, 200, await response.clone().text());
     const text = await response.text();
-    assert.match(text, /event: reportEnd/);
+    const finalEvent = /^event: reportEnd\ndata: (.+)$/m.exec(text);
+    assert.ok(finalEvent, "missing final staged-load report");
+    const report = JSON.parse(finalEvent[1]);
+    assert.equal(report.stopReason, "iteration-limit");
+    assert.equal(report.completed, 4);
+    assert.equal(report.failed, 0);
     assert.deepEqual(seen, ["/1", "/1", "/1", "/1"]);
     assert.equal(
       (await app.store.get(p.id)).postmanCollections.items[0].variables.counter,

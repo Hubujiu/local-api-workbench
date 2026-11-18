@@ -1,3 +1,5 @@
+import { queryRemoteDatabase } from "../src/remote-database.mjs";
+import { DatabaseSessions } from "../src/database-sessions.mjs";
 // Opt-in only. Never provisions a database, downloads a server or accepts terms.
 import test from "node:test";
 import { readFile } from "node:fs/promises";
@@ -18,14 +20,16 @@ import {
 const requireGate = (condition) => {
   if (!condition) throw Error("SQLSERVER_REAL_GATE_ASSERTION_FAILED");
 };
-async function permissions(connection) {
+async function permissions(connection, progress) {
   const port = createTediousSQLServerPort(
     sqlServerConnectionContract(connection),
   );
   let columns,
     rows = [];
   try {
+    progress("connect");
     await port.connect();
+    progress("submitted");
     await port.query(
       { sql: GATE_PERMISSIONS, parameters: [] },
       {
@@ -39,6 +43,7 @@ async function permissions(connection) {
         },
       },
     );
+    progress("returned");
     requireGate(rows.length === 1);
     requireRestrictedPermissions(rows[0]);
   } finally {
@@ -102,6 +107,13 @@ test("opt-in real SQL Server READ_ONLY prepared read and READ_WRITE dispatch rej
     t.skip("real service not opted in; no SQL Server acceptance evidence");
     return;
   }
+  const previousPreview = process.env.LOCALAPI_SQLSERVER_PREVIEW;
+  process.env.LOCALAPI_SQLSERVER_PREVIEW = "read-only";
+  t.after(() => {
+    if (previousPreview === undefined)
+      delete process.env.LOCALAPI_SQLSERVER_PREVIEW;
+    else process.env.LOCALAPI_SQLSERVER_PREVIEW = previousPreview;
+  });
   let stage = "config";
   // All errors and assertions are deliberately redacted: no driver config,
   // hostname, credentials, raw error causes, query parameters or rows in TAP.
@@ -112,9 +124,13 @@ test("opt-in real SQL Server READ_ONLY prepared read and READ_WRITE dispatch rej
       ),
     );
     stage = "permissions-read-only";
-    await permissions(config.readOnly);
+    await permissions(config.readOnly, (step) => {
+      stage = "permissions-read-only-" + step;
+    });
     stage = "permissions-read-write";
-    await permissions(config.readWrite);
+    await permissions(config.readWrite, (step) => {
+      stage = "permissions-read-write-" + step;
+    });
     stage = "read-only-direct";
     const positive = await dispatch(config.readOnly);
     requireGate(!positive.rejected && positive.connections === 1);
@@ -129,6 +145,105 @@ test("opt-in real SQL Server READ_ONLY prepared read and READ_WRITE dispatch rej
         parameters: [1],
       }),
     );
+    stage = "exact-decimal-process";
+    const decimalQuery =
+      "SELECT id, payload FROM dbo.workbench_sqlserver_gate WHERE exact_amount=@p0";
+    for (const [value, match] of [
+      ["9007199254740993.123456789012345678", true],
+      ["9007199254740993.123456789012345679", false],
+    ]) {
+      const result = await runSQLServerPreparationProcess({
+        connection: config.readOnly,
+        sql: decimalQuery,
+        parameters: [{ type: "decimal", value, precision: 38, scale: 18 }],
+      });
+      if (match) exactResult(result);
+      else requireGate(result.rows.length === 0 && result.truncated === false);
+    }
+    stage = "public-provider-exact-decimal-temporal-output";
+    for (const id of [1, 2]) {
+      const output = await queryRemoteDatabase({
+        type: "sqlserver",
+        ...config.readOnly,
+        sql: "SELECT exact_amount, exact_stamp, exact_offset, exact_clock, exact_day FROM dbo.workbench_sqlserver_gate WHERE id=@p0",
+        parameters: [id],
+      });
+      requireGate(output.rows.length === 1 && output.truncated === false);
+      requireGate(
+        JSON.stringify(Object.values(output.rows[0])) ===
+          JSON.stringify(
+            id === 1
+              ? [
+                  "9007199254740993.123456789012345678",
+                  "2026-11-18T02:03:04.1234567",
+                  "2026-11-18T02:03:04.1234567+05:30",
+                  "02:03:04.1234567",
+                  "0001-01-01",
+                ]
+              : [null, null, null, null, null],
+          ),
+      );
+    }
+    stage = "public-provider-negative-and-utc-offset";
+    for (const [id, expected] of [
+      [3, "2024-02-29T23:59:58.1234567-07:30"],
+      [4, "2024-02-29T23:59:58.1234567Z"],
+    ]) {
+      const output = await queryRemoteDatabase({
+        type: "sqlserver",
+        ...config.readOnly,
+        sql: "SELECT exact_offset FROM dbo.workbench_sqlserver_gate WHERE id=@p0",
+        parameters: [id],
+      });
+      requireGate(
+        output.rows.length === 1 &&
+          output.rows[0].exact_offset === expected &&
+          output.truncated === false,
+      );
+    }
+    stage = "public-session-owned-provider";
+    const sessions = new DatabaseSessions();
+    try {
+      const grant = sessions.register("real-gate", {
+        type: "sqlserver",
+        name: "disposable-fixture",
+        ...config.readOnly,
+      });
+      exactResult(
+        await sessions.query("real-gate", {
+          connectionId: grant.id,
+          sql: GATE_SQL,
+          parameters: [1],
+        }),
+      );
+      sessions.revoke("real-gate", grant.id);
+      let revoked = false;
+      try {
+        await sessions.query("real-gate", {
+          connectionId: grant.id,
+          sql: GATE_SQL,
+          parameters: [1],
+        });
+      } catch {
+        revoked = true;
+      }
+      requireGate(revoked);
+    } finally {
+      sessions.close();
+    }
+    stage = "public-provider-read-write-denied";
+    let publicDenied = false;
+    try {
+      await queryRemoteDatabase({
+        type: "sqlserver",
+        ...config.readWrite,
+        sql: GATE_SQL,
+        parameters: [1],
+      });
+    } catch {
+      publicDenied = true;
+    }
+    requireGate(publicDenied);
     stage = "read-write";
     const negative = await dispatch(config.readWrite);
     requireGate(

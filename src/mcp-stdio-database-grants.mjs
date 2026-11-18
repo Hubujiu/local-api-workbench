@@ -3,6 +3,8 @@ import { constants } from "node:fs";
 import { MCPDatabaseGrants } from "./mcp-database-grants.mjs";
 import { assertDatabaseBindingRequirements } from "./database-sessions.mjs";
 import { databaseSSHConfig } from "./database-ssh.mjs";
+import { sqlServerPreviewEnabled } from "./sqlserver-provider.mjs";
+import { enterpriseConnection } from "./enterprise-database.mjs";
 
 const MAX_BYTES = 1024 * 1024,
   MAX_GRANTS = 20,
@@ -18,6 +20,10 @@ const MAX_BYTES = 1024 * 1024,
     "database",
     "ca",
     "authSource",
+    "relations",
+    "serverDN",
+    "clientCert",
+    "clientKey",
     "ssl",
     "ssh",
   ]),
@@ -28,6 +34,9 @@ const MAX_BYTES = 1024 * 1024,
     "redis",
     "mongodb",
     "clickhouse",
+    "sqlserver",
+    "oracle",
+    "dameng",
   ]);
 
 const plain = (value) =>
@@ -178,6 +187,14 @@ function prepareConfig(input) {
       types.has(input.type),
   );
   const config = structuredClone(input);
+  if (config.type === "sqlserver") requireValue(sqlServerPreviewEnabled());
+  if (config.type === "oracle" || config.type === "dameng") {
+    try {
+      enterpriseConnection(config);
+    } catch {
+      requireValue(false);
+    }
+  }
   for (const key of [
     "filename",
     "host",
@@ -185,6 +202,8 @@ function prepareConfig(input) {
     "password",
     "database",
     "ca",
+    "clientCert",
+    "clientKey",
     "authSource",
   ])
     if (Object.hasOwn(config, key))
@@ -205,8 +224,8 @@ function prepareConfig(input) {
       !Object.hasOwn(config, "filename") &&
         typeof config.host === "string" &&
         !!config.host.trim() &&
-        typeof config.database === "string" &&
-        !!config.database.trim(),
+        (config.type === "dameng" ||
+          (typeof config.database === "string" && !!config.database.trim())),
     );
     if (config.type === "postgres")
       requireValue(typeof config.user === "string" && !!config.user.trim());

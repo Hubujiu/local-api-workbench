@@ -4,7 +4,8 @@ import { desktopLayout } from "../../desktop/build-layout.mjs";
 
 export function desktopJourneyOptions(args, platform = process.platform) {
   let crash = false,
-    packageRoot;
+    packageRoot,
+    profileReceipt;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--crash") {
@@ -17,6 +18,13 @@ export function desktopJourneyOptions(args, platform = process.platform) {
         packageRoot && path.isAbsolute(packageRoot),
         "Absolute extracted package root required",
       );
+    } else if (arg === "--retain-profile-receipt") {
+      assert.equal(profileReceipt, undefined, "Duplicate profile receipt");
+      profileReceipt = args[++i];
+      assert.ok(
+        profileReceipt && path.isAbsolute(profileReceipt),
+        "Absolute receipt path required",
+      );
     } else {
       throw Error("Unknown journey option");
     }
@@ -24,6 +32,7 @@ export function desktopJourneyOptions(args, platform = process.platform) {
   const layout = desktopLayout(platform);
   return {
     crash,
+    ...(profileReceipt && { profileReceipt }),
     downloaded: packageRoot !== undefined,
     executable:
       packageRoot === undefined

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import nodeHttp from "node:http";
+import { listenForWorkbench } from "../src/workbench-listener.mjs";
 import { runPlan, snapshotPlan } from "../src/core.mjs";
 import { executeWireFlow, wirePlanCredentials } from "../src/wire-plan.mjs";
 import { ProjectCommitUncertain } from "../src/project-commit-outcome.mjs";
@@ -64,7 +65,7 @@ async function peer(t, reply = (s, data) => s.end(`data: ${data}\n\n`)) {
     res.flushHeaders();
     reply(res, data);
   });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  await listenForWorkbench(server, 0);
   t.after(async () => {
     server.closeAllConnections();
     await new Promise((r) => server.close(r));

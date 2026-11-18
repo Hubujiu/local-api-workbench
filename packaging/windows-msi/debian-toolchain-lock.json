@@ -1,0 +1,38 @@
+[
+  {
+    "Package": "libgcab-1.0-0",
+    "Version": "1.6-1+b3",
+    "Filename": "pool/main/g/gcab/libgcab-1.0-0_1.6-1+b3_amd64.deb",
+    "SHA256": "da0c5707a3f4e19cf2a10e310d44ec18b6bc66c7abac5054d2130345c65ffef6"
+  },
+  {
+    "Package": "msitools",
+    "Version": "0.106+repack-1",
+    "Filename": "pool/main/m/msitools/msitools_0.106+repack-1_amd64.deb",
+    "SHA256": "e0ed499506109b9ba28bcb7b0dcf9fcb2f094703721b835c33a0bef004513f69"
+  },
+  {
+    "Package": "wixl",
+    "Version": "0.106+repack-1",
+    "Filename": "pool/main/m/msitools/wixl_0.106+repack-1_amd64.deb",
+    "SHA256": "79a743974007a76cbb3344354ca3246ef212318fdf60f80dfbf65d5e9f7ef150"
+  },
+  {
+    "Package": "wixl-data",
+    "Version": "0.106+repack-1",
+    "Filename": "pool/main/m/msitools/wixl-data_0.106+repack-1_all.deb",
+    "SHA256": "f7e09495f694ac792ab21dcb1518b469f4206491822d10039f3cdb8521c728f3"
+  },
+  {
+    "Package": "libmsi-1.0-0",
+    "Version": "0.106+repack-1",
+    "Filename": "pool/main/m/msitools/libmsi-1.0-0_0.106+repack-1_amd64.deb",
+    "SHA256": "6accb125b906b780c197eb2d5ab7e38f9e5d4b53f7543ba783235f503959169f"
+  },
+  {
+    "Package": "libgsf-1-114",
+    "Version": "1.14.53-1",
+    "Filename": "pool/main/libg/libgsf/libgsf-1-114_1.14.53-1_amd64.deb",
+    "SHA256": "5e17ffb14343ee891da0abce4e32511c2d07dac964dc293ec740e78f89ed061c"
+  }
+]
