@@ -25,7 +25,8 @@ process supervisor rather than calling the lower-level injected port test seam.
    0..precision), temporal scale (0..7). Regenerate approved projections:
    decimal/numeric -> varchar(41); date -> varchar(10), style 23;
    time -> varchar(16), style 126; datetime2 -> varchar(27), style 126;
-   datetimeoffset -> varchar(34), style 127.
+   datetimeoffset -> varchar(34) using the stored local datetime2 at catalog scale
+   (style 126) followed by DATENAME(TZOFFSET) or `Z` for UTC.
 4. Tedious receives strings, not Decimal->Number or temporal->Date conversions.
    Strings/null are validated, never rounded or converted through JavaScript Date.
    Fractional trailing zero omission allowed by server styles is not treated as a
@@ -49,12 +50,13 @@ database administration.
 
 ## Evidence and remaining gate
 
-Local tests use inert synthetic catalog/result exchanges. They prove dispatch,
-projection construction, validation and closure ordering, **not SQL Server's actual
-formatting, TDS or TLS**. The opt-in real-service test now expects decimal(38,18),
-datetime2(7), datetimeoffset(7) with +05:30, time(7), year-0001 date and SQL NULLs from
-the explicit disposable fixture. This gate was not run here. No general/default enablement
-until it passes on supported SQL Server and packaged Windows targets.
+Local tests cover projection construction, validation, dispatch and closure ordering.
+The opt-in real-service test reads decimal(38,18), datetime2(7), datetimeoffset(7)
+with `+05:30`, `-07:30` and UTC, time(7), a year-0001 date and SQL NULLs from a
+disposable SQL Server. The hosted test also checks the stored offsets independently
+with DATEPART before executing the workbench projection. See the `real-service
+(sqlserver)` job on the exact candidate commit for its outcome. Windows packaged
+coverage has its own release check.
 
 Unsupported output types still fail closed: money/smallmoney, float/real,
 legacy datetime/smalldatetime, XML/LOB, CLR/alias types and arbitrary expressions.

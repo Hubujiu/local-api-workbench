@@ -66,7 +66,15 @@ test("exact projections use bounded server type metadata, explicit widths and st
   const p = exactProjectionPlan(plan, schema);
   assert.match(p.sql, /CONVERT\(varchar\(41\), \[amount\]\)/);
   assert.match(p.sql, /CONVERT\(varchar\(27\), \[stamp\], 126\)/);
-  assert.match(p.sql, /CONVERT\(varchar\(34\), \[offset_stamp\], 127\)/);
+  assert.match(
+    p.sql,
+    /CONVERT\(varchar\(34\), CASE WHEN \[offset_stamp\] IS NULL THEN NULL/,
+  );
+  assert.match(p.sql, /CONVERT\(datetime2\(7\), \[offset_stamp\]\), 126\)/);
+  assert.match(
+    p.sql,
+    /DATEPART\(TZOFFSET, \[offset_stamp\]\) = 0 THEN 'Z' ELSE DATENAME\(TZOFFSET, \[offset_stamp\]\)/,
+  );
   assert.match(p.sql, /CONVERT\(varchar\(16\), \[clock\], 126\)/);
   assert.match(p.sql, /CONVERT\(varchar\(10\), \[day\], 23\)/);
   assert.match(p.sql, /ORDER BY \[items\]\.\[amount\] ASC$/);

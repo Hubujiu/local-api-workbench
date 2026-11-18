@@ -7,7 +7,7 @@
 | 范围 | 已实现与实测 | 尚需的证据 |
 | --- | --- | --- |
 | 协议恢复 | TCP、WebSocket、gRPC 流和 Socket.IO 的创建、发送或确认可以根据各自的回执重查。Socket.IO 的真实网络用例覆盖创建和发送响应丢失、重复提交拒绝。 | 当前集成提交的三平台界面与桌面运行 |
-| MCP 数据库 | 设置页有按项目的独立临时授权、列表、撤销和凭据清理。SQL Server、Oracle、DM8 在主机启用后可从手动页及 MCP 配置。 | 三种真实数据库分别记录服务器版本、TLS 与实际返回值 |
+| MCP 数据库 | 设置页有按项目的独立临时授权、列表、撤销和凭据清理。SQL Server、Oracle、DM8 在主机启用后可从手动页及 MCP 配置。Oracle 26ai Free 23.26.4 已通过 TCPS、精确 NUMBER、授权和撤权的[实库检查](https://github.com/Hubujiu/local-api-workbench/actions/runs/44254323682/job/134632241617)。 | SQL Server 的时区偏移和 DM8 厂商服务的 TLS、类型与返回值需分别核对；最新提交的工作流结果见整合 PR。 |
 | Windows | 已开发每用户 MSI 的安装、升级、失败回滚、卸载、重装、正式产品系列及开始菜单入口。0.1.0 → 0.1.1 的完整候选操作已在托管 Windows 成功。[原始运行](https://github.com/Hubujiu/local-api-workbench/actions/runs/44234347878/job/134573838947) | 当前候选的普通用户运行、最终签名介质及正式环境实测 |
 | 原生往返 | 冻结继承认证、仅 schema 响应定义、冻结数据库任务来源和顺序、Redis GET/HGET/EXISTS、MongoDB findone 已实现。两种导出格式均有跨两代重导入的回归测试。 | 原厂同版本运行证据及非空原生自动化图的设置、引用与调度语义 |
 

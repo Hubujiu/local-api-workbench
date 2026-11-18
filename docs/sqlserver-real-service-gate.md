@@ -10,7 +10,7 @@
 仅在已获授权、许可条件已处理的独立可丢弃 SQL Server 实例上准备。勿指向用户现有业务数据库。
 
 1. 管理员预先创建 `localapi_gate_ro` 与 `localapi_gate_rw` 两个隔离空库。在各库执行
-   `tests/fixtures/sqlserver-real-service.sql`，建立同一合成表及两行固定数据（精确类型与 NULL）；脚本遇已有对象会拒绝，不覆盖。
+   `tests/fixtures/sqlserver-real-service.sql`，建立同一合成表及四行固定数据，覆盖精确类型、NULL、正负时区偏移和 UTC。脚本遇已有对象会拒绝覆盖。
 2. 管理员建立专用 SQL 登录和两个库中对应用户，仅授权该表 SELECT；不要使用 sa、sysadmin、
    db_owner 或业务登录。无需提供管理员凭据给测试。先配置用户权限，再把 ro 库设为 READ_ONLY，
    rw 库保持 READ_WRITE；此状态操作由有权管理员执行，测试不执行 ALTER DATABASE。

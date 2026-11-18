@@ -78,13 +78,20 @@ export function exactProjectionPlan(plan, metadata) {
     ) {
       if (m.scale < 0 || m.scale > 7 || (m.type === "date" && m.scale !== 0))
         fail();
-      const [length, style] = {
-        date: [10, 23],
-        time: [16, 126],
-        datetime2: [27, 126],
-        datetimeoffset: [34, 127],
-      }[m.type];
-      sql = `CONVERT(varchar(${length}), ${expression}, ${style})`;
+      if (m.type === "datetimeoffset") {
+        // Style 127 converts the instant to UTC. Casting to datetime2 first
+        // retains the stored wall clock, including all seven fractional digits.
+        const wallClock = `CONVERT(varchar(27), CONVERT(datetime2(${m.scale}), ${expression}), 126)`;
+        const offset = `CASE WHEN DATEPART(TZOFFSET, ${expression}) = 0 THEN 'Z' ELSE DATENAME(TZOFFSET, ${expression}) END`;
+        sql = `CONVERT(varchar(34), CASE WHEN ${expression} IS NULL THEN NULL ELSE ${wallClock} + ${offset} END)`;
+      } else {
+        const [length, style] = {
+          date: [10, 23],
+          time: [16, 126],
+          datetime2: [27, 126],
+        }[m.type];
+        sql = `CONVERT(varchar(${length}), ${expression}, ${style})`;
+      }
     } else if (
       [
         "bigint",

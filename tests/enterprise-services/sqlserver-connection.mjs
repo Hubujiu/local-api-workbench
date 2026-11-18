@@ -47,6 +47,14 @@ try {
   const { rows } = await select(GATE_PERMISSIONS);
   assert.equal(rows.length, 1);
   requireRestrictedPermissions(rows[0]);
+  stage = "fixture-offset-minutes";
+  const offsets = await select(
+    "SELECT id, DATEPART(TZOFFSET, exact_offset) AS minutes FROM dbo.workbench_sqlserver_gate ORDER BY id",
+  );
+  assert.deepEqual(
+    offsets.rows.map((row) => row.minutes),
+    [330, null, -450, 0],
+  );
   stage = "catalog";
   const plan = await compileSQLServerRead(
     "SELECT exact_amount, exact_stamp, exact_offset, exact_clock, exact_day FROM dbo.workbench_sqlserver_gate WHERE id=@p0",

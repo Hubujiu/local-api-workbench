@@ -184,6 +184,23 @@ test("opt-in real SQL Server READ_ONLY prepared read and READ_WRITE dispatch rej
           ),
       );
     }
+    stage = "public-provider-negative-and-utc-offset";
+    for (const [id, expected] of [
+      [3, "2024-02-29T23:59:58.1234567-07:30"],
+      [4, "2024-02-29T23:59:58.1234567Z"],
+    ]) {
+      const output = await queryRemoteDatabase({
+        type: "sqlserver",
+        ...config.readOnly,
+        sql: "SELECT exact_offset FROM dbo.workbench_sqlserver_gate WHERE id=@p0",
+        parameters: [id],
+      });
+      requireGate(
+        output.rows.length === 1 &&
+          output.rows[0].exact_offset === expected &&
+          output.truncated === false,
+      );
+    }
     stage = "public-session-owned-provider";
     const sessions = new DatabaseSessions();
     try {

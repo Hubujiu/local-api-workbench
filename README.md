@@ -37,7 +37,7 @@ Git 共享的是定义，不是完整备份。提交前检查 URL、环境、认
 
 历史阶段候选记录（对应上一段所述阶段，不是 2026-11-13 当前状态）：补保图API软回收／恢复：保留binding、请求ID、own配置和旧case／plan／history；stored tombstone阻断live／cURL及伪造旧bound调用，精确已存冻结请求仍可执行。owner、既有MCP回收权限、真实CLI、备份重启与repeat交叉已本地验证；普通PUT不能切换回收状态，native批次历史不静默清除。永久清除、解绑、目录回收仍拒绝，原生出口不冒充完整历史备份。另仅为配额断言增加失败诊断，未改runtime／预算或降低预期，不声称已修根因。**该历史记录时点的组合 CI 尚待；当前精确状态见顶部验收入口，不将此句视作最新 CI 状态。**
 
-仍未完整交付：原生automated_testings装配/非空项目样本缺证；部分协议和原生交换语义不能保真；SQL Server、Oracle、达梦provider尚未实现（不只是差测试），SQL Server运行许可确认另行待定；原版完整 GUI 与暂停专项未完成；旧阶段前端暂停描述不代表当前开发状态。SQLite额外能力不抵消原版数据库缺口。六模块已验证流程及剩余拒绝边界见[后端检查点](docs/BACKEND-CHECKPOINT-2026-10-25.md)，不按测试数量折算完成率。
+当前集成候选已接入 SQL Server、Oracle 和达梦的只读查询，并提供按项目的 GUI 和 MCP 授权。各数据库的支持版本、传输和实测范围见[企业数据库说明](docs/ENTERPRISE-DATABASE-PREVIEW.md)。非空 `automated_testings` 的装配、部分原生交换语义以及同版本原厂运行对照仍有缺口，详见[交付矩阵](docs/DELIVERY-STATUS.md)。
 
 ## 已实现的核心
 
