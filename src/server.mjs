@@ -1067,6 +1067,7 @@ export async function createApp({
             endpoint: base + "/mcp",
             dataRoot: store.root,
             warning: mcpWarning,
+            databaseGrantEpoch: mcpDatabaseGrants.capture(),
             token: mcpToken,
             lastActivity: mcpLastActivity,
             activities: [
