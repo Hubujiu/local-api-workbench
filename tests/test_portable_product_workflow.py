@@ -1,9 +1,13 @@
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+
+SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
+sys.path.insert(0, str(SCRIPTS))
 import compile_hosted_product_pair
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,8 +48,8 @@ class ProductWorkflowTests(unittest.TestCase):
 
     def test_pair_compiler_uses_one_fresh_family_and_independent_job_pins(self):
         with tempfile.TemporaryDirectory() as name:
-            root = Path(name)
-            env = {'RUNNER_TEMP': name, 'NEW_HEAD': 'a'*40, 'NEW_MANIFEST_SHA': 'b'*64, 'NEW_VERSION': '0.2.0', 'GITHUB_OUTPUT': str(root/'outputs')}
+            root = Path(name).resolve()
+            env = {'RUNNER_TEMP': str(root), 'NEW_HEAD': 'a'*40, 'NEW_MANIFEST_SHA': 'b'*64, 'NEW_VERSION': '0.2.0', 'GITHUB_OUTPUT': str(root/'outputs')}
             lock = compile_hosted_product_pair.read_lock(ROOT/'packaging/windows-msi/windows-baseline-source-lock.json')
             receipt = dict(schemaVersion=1,kind='source-rebuild',repository=lock['repository'],sourceUrl=lock['sourceUrl'],head=lock['head'],version=lock['version'],nodeVersion=lock['nodeVersion'],sourceFiles=lock['files'],builderHead='a'*40,manifestSha256='d'*64,historicalArchiveReproduced=False)
             import hashlib

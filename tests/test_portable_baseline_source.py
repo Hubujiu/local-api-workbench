@@ -1,9 +1,13 @@
 import hashlib
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+
+SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
+sys.path.insert(0, str(SCRIPTS))
 from attest_windows_baseline_source import read_lock, verify_source, validate_receipt, attest
 from test_portable_windows_stage import package
 from test_portable_download import make_directory
