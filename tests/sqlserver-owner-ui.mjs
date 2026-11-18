@@ -5,6 +5,7 @@ import { mkdtemp, rm, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createApp } from "../src/server.mjs";
+import { damengPreviewEnabled } from "../src/dameng-process.mjs";
 const require = createRequire(import.meta.url);
 let chromium;
 try {
@@ -20,6 +21,7 @@ delete process.env.LOCALAPI_SQLSERVER_PREVIEW;
 const app = await createApp({ root, port: 0 });
 let browser;
 const secret = "INERT_GUI_SQLSERVER_PASSWORD_9210";
+const secrets = [secret];
 try {
   browser = await chromium.launch({
     executablePath: process.env.PLAYWRIGHT_BUNDLED
@@ -163,8 +165,10 @@ try {
   );
   await page.unroute("**/api/database-capabilities");
   const oracleGate = process.env.LOCALAPI_ORACLE_PREVIEW;
+  const damengGate = process.env.LOCALAPI_DAMENG_PREVIEW;
   try {
     process.env.LOCALAPI_ORACLE_PREVIEW = "read-only";
+    process.env.LOCALAPI_DAMENG_PREVIEW = "read-only";
     await open();
     await page.selectOption("#db-type", "oracle");
     await page.fill("#db-host", "db.invalid");
@@ -243,7 +247,86 @@ try {
     );
     await page.locator("[data-mcp-db-revoke]").click();
     assert.equal((await revoke).status(), 200);
+    if (damengPreviewEnabled()) {
+      const fixture = (name) =>
+        readFile(new URL("./fixtures/" + name, import.meta.url), "utf8");
+      const [ca, clientCert, clientKey] = await Promise.all([
+        fixture("localhost.crt"),
+        fixture("dameng-loopback.crt"),
+        fixture("localhost.key"),
+      ]);
+      secrets.push(clientKey.trim());
+      const input = {
+        host: "localhost",
+        user: "reader",
+        password: secret,
+        relations: "WORKBENCH.READ_FIXTURE",
+        ca,
+        clientCert,
+        clientKey,
+      };
+      await field("type").selectOption("dameng");
+      await field("name").fill("DM8 Agent");
+      for (const [key, value] of Object.entries(input))
+        await field(key).fill(value);
+      await field("confirm").check();
+      const agentPost = page.waitForResponse(
+        (r) =>
+          r.request().method() === "POST" &&
+          r.url().endsWith("/mcp-database-connections"),
+      );
+      await page.locator('#mcp-db-form button[type="submit"]').click();
+      const agentGrant = await agentPost;
+      assert.equal(agentGrant.status(), 200);
+      assert.deepEqual((await agentGrant.json()).relations, [
+        "WORKBENCH.READ_FIXTURE",
+      ]);
+      assert.doesNotMatch(await agentGrant.text(), /PRIVATE KEY/);
+      await page.waitForFunction(
+        () =>
+          document.querySelector('#mcp-db-form [name="clientKey"]').value ===
+          "",
+      );
+      const revoked = page.waitForResponse(
+        (r) =>
+          r.request().method() === "DELETE" &&
+          r.url().endsWith("/mcp-database-connections"),
+      );
+      await page.locator("[data-mcp-db-revoke]").click();
+      assert.equal((await revoked).status(), 200);
+      await open();
+      await page.selectOption("#db-type", "dameng");
+      for (const [key, value] of Object.entries(input))
+        await page.fill(
+          "#db-" +
+            ({ clientCert: "client-cert", clientKey: "client-key" }[key] ??
+              key),
+          value,
+        );
+      await page.click("#db-register");
+      await page.fill("#db-connection-name", "DM8 manual");
+      assert.equal(await page.inputValue("#db-client-key"), "");
+      const ownerPost = page.waitForResponse(
+        (r) =>
+          r.request().method() === "POST" &&
+          r.url().endsWith("/database-connections"),
+      );
+      await page.getByRole("button", { name: "确认授权", exact: true }).click();
+      const ownerGrant = await ownerPost;
+      assert.equal(ownerGrant.status(), 200);
+      assert.doesNotMatch(await ownerGrant.text(), /PRIVATE KEY/);
+      await page.locator("#dialog").waitFor({ state: "hidden" });
+      assert.doesNotMatch(
+        await page.evaluate(() =>
+          JSON.stringify([{ ...localStorage }, { ...sessionStorage }]),
+        ),
+        /PRIVATE KEY/,
+      );
+      console.log("DM8_OWNER_MCP_GUI_PASS temporary mutual TLS credentials");
+    }
   } finally {
+    if (damengGate === undefined) delete process.env.LOCALAPI_DAMENG_PREVIEW;
+    else process.env.LOCALAPI_DAMENG_PREVIEW = damengGate;
     if (oracleGate === undefined) delete process.env.LOCALAPI_ORACLE_PREVIEW;
     else process.env.LOCALAPI_ORACLE_PREVIEW = oracleGate;
   }
@@ -252,7 +335,11 @@ try {
     for (const e of await readdir(dir, { withFileTypes: true })) {
       const f = path.join(dir, e.name);
       if (e.isDirectory()) await scan(f);
-      else assert.ok(!(await readFile(f)).includes(Buffer.from(secret)), f);
+      else {
+        const bytes = await readFile(f);
+        for (const value of secrets)
+          assert.ok(!bytes.includes(Buffer.from(value)), f);
+      }
     }
   }
   await scan(root);

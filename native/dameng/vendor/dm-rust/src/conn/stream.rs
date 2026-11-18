@@ -56,7 +56,7 @@ impl AsyncWrite for Stream {
 pub(crate) mod tls {
     use crate::conn::error::{Error, Result};
     use std::sync::Arc;
-    pub fn connector(pem: &[u8]) -> Result<tokio_rustls::TlsConnector> {
+    pub fn connector(pem: &[u8], cert: &[u8], key: &[u8]) -> Result<tokio_rustls::TlsConnector> {
         let mut roots = rustls::RootCertStore::empty();
         for cert in rustls_pemfile::certs(&mut &pem[..]) {
             roots.add(cert.map_err(|e| Error::Tls(e.to_string()))?)
@@ -64,9 +64,18 @@ pub(crate) mod tls {
         }
         if roots.is_empty() { return Err(Error::Tls("an explicit CA is required".into())); }
         let provider = Arc::new(rustls::crypto::ring::default_provider());
-        let config = rustls::ClientConfig::builder_with_provider(provider)
+        let builder = rustls::ClientConfig::builder_with_provider(provider)
             .with_safe_default_protocol_versions().map_err(|e| Error::Tls(e.to_string()))?
-            .with_root_certificates(roots).with_no_client_auth();
+            .with_root_certificates(roots);
+        let config = if cert.is_empty() && key.is_empty() {
+            builder.with_no_client_auth()
+        } else {
+            let chain = rustls_pemfile::certs(&mut &cert[..]).collect::<std::io::Result<Vec<_>>>()?;
+            let private = rustls_pemfile::private_key(&mut &key[..])?
+                .ok_or_else(|| Error::Tls("missing client key".into()))?;
+            builder.with_client_auth_cert(chain, private)
+                .map_err(|_| Error::Tls("invalid client identity".into()))?
+        };
         Ok(tokio_rustls::TlsConnector::from(Arc::new(config)))
     }
 }

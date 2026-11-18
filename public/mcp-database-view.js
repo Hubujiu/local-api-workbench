@@ -21,7 +21,7 @@ export function mcpDatabaseAllowed(config, projectId) {
 }
 export function mcpDatabasePanel(project) {
   const bindings = project.settings?.apipostDatabases || [];
-  return `<section id="mcp-database-panel" class="mcp-access-card"><h3>MCP 数据库临时授权 · ${esc(project.name || project.id)}</h3><p class="notice">默认拒绝。仅授权当前项目的 MCP 只读查询，不共享手动调试连接。查询结果可以被 Agent 读取，进入变量、HTTP 请求和历史；只读 SQL 中的自定义函数仍可能有副作用。凭据仅保存在应用进程内存，重启、关闭 MCP 或更改服务授权后失效，不随“保留授权”保存。</p><p id="mcp-db-policy" role="status"></p><button type="button" id="mcp-db-refresh">刷新授权列表</button><div id="mcp-db-list"></div><form id="mcp-db-form" autocomplete="off"><fieldset id="mcp-db-fields" disabled><legend>新增独立连接授权</legend><label>名称<input name="name" required maxlength="100"></label><label>数据库类型<select name="type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option><option value="redis">Redis</option><option value="mongodb">MongoDB</option><option value="clickhouse">ClickHouse</option></select></label><label>原生导入连接绑定<select name="bindingId"><option value="">不绑定，使用新连接 ID</option>${bindings.map((b) => `<option value="${esc(b.id)}">${esc(b.name || b.id)} (${esc(b.type)})</option>`).join("")}</select></label><div id="mcp-db-local"><label>SQLite 文件路径<input name="filename" autocomplete="off"></label></div><div id="mcp-db-remote" hidden><label>主机<input name="host" autocomplete="off"></label><label>端口（空白使用默认）<input name="port" type="number" min="1" max="65535"></label><label>数据库<input name="database"></label><label>用户名<input name="user" autocomplete="off"></label><label>密码<input name="password" type="password" autocomplete="new-password"></label><label>MongoDB 认证数据库<input name="authSource"></label><label><input name="ssl" type="checkbox">验证 TLS</label><label>自定义 CA（可选）<textarea name="ca"></textarea></label><label id="mcp-db-server-dn" hidden>Oracle 服务端证书 DN<input name="serverDN"></label><label id="mcp-db-relations" hidden>授权表（每行一个 SCHEMA.TABLE，有效期 15 分钟）<textarea name="relations"></textarea></label><details><summary>SSH（仅 PostgreSQL / MySQL / Redis）</summary><p>字段：host、port、username、password 或 privateKey（二选一）、可选 passphrase、hostKeySHA256。需要 SSH 的导入绑定必须提供；主机密钥指纹必须独立核对。不会自动信任首次连接。</p><label>SSH 配置 JSON（可选，含凭据）<input name="ssh" type="password" autocomplete="new-password"></label></details></div><label><input name="confirm" type="checkbox" required>我确认向此项目的 MCP 客户端提供上述数据库的临时只读访问及查询结果</label><button type="submit">确认临时授权</button><button type="reset">清空输入</button></fieldset></form><p id="mcp-db-message" role="status" aria-live="polite"></p></section>`;
+  return `<section id="mcp-database-panel" class="mcp-access-card"><h3>MCP 数据库临时授权 · ${esc(project.name || project.id)}</h3><p class="notice">默认拒绝。仅授权当前项目的 MCP 只读查询，不共享手动调试连接。查询结果可以被 Agent 读取，进入变量、HTTP 请求和历史；只读 SQL 中的自定义函数仍可能有副作用。凭据仅保存在应用进程内存，重启、关闭 MCP 或更改服务授权后失效，不随“保留授权”保存。</p><p id="mcp-db-policy" role="status"></p><button type="button" id="mcp-db-refresh">刷新授权列表</button><div id="mcp-db-list"></div><form id="mcp-db-form" autocomplete="off"><fieldset id="mcp-db-fields" disabled><legend>新增独立连接授权</legend><label>名称<input name="name" required maxlength="100"></label><label>数据库类型<select name="type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option><option value="redis">Redis</option><option value="mongodb">MongoDB</option><option value="clickhouse">ClickHouse</option></select></label><label>原生导入连接绑定<select name="bindingId"><option value="">不绑定，使用新连接 ID</option>${bindings.map((b) => `<option value="${esc(b.id)}">${esc(b.name || b.id)} (${esc(b.type)})</option>`).join("")}</select></label><div id="mcp-db-local"><label>SQLite 文件路径<input name="filename" autocomplete="off"></label></div><div id="mcp-db-remote" hidden><label>主机<input name="host" autocomplete="off"></label><label>端口（空白使用默认）<input name="port" type="number" min="1" max="65535"></label><label>数据库<input name="database"></label><label>用户名<input name="user" autocomplete="off"></label><label>密码<input name="password" type="password" autocomplete="new-password"></label><label>MongoDB 认证数据库<input name="authSource"></label><label><input name="ssl" type="checkbox">验证 TLS</label><label>自定义 CA（可选）<textarea name="ca"></textarea></label><label id="mcp-db-client-cert" hidden>达梦客户端证书链（PEM，双向 TLS）<textarea name="clientCert" spellcheck="false" autocomplete="off"></textarea></label><label id="mcp-db-client-key" hidden>达梦客户端私钥（PEM，双向 TLS）<textarea name="clientKey" spellcheck="false" autocomplete="off"></textarea></label><label id="mcp-db-server-dn" hidden>Oracle 服务端证书 DN<input name="serverDN"></label><label id="mcp-db-relations" hidden>授权表（每行一个 SCHEMA.TABLE，有效期 15 分钟）<textarea name="relations"></textarea></label><details><summary>SSH（仅 PostgreSQL / MySQL / Redis）</summary><p>字段：host、port、username、password 或 privateKey（二选一）、可选 passphrase、hostKeySHA256。需要 SSH 的导入绑定必须提供；主机密钥指纹必须独立核对。不会自动信任首次连接。</p><label>SSH 配置 JSON（可选，含凭据）<input name="ssh" type="password" autocomplete="new-password"></label></details></div><label><input name="confirm" type="checkbox" required>我确认向此项目的 MCP 客户端提供上述数据库的临时只读访问及查询结果</label><button type="submit">确认临时授权</button><button type="reset">清空输入</button></fieldset></form><p id="mcp-db-message" role="status" aria-live="polite"></p></section>`;
 }
 export function readMCPDatabaseInput(form) {
   const value = (key) => form.elements.namedItem(key).value;
@@ -40,6 +40,8 @@ export function readMCPDatabaseInput(form) {
       "#db-user": "user",
       "#db-password": "password",
       "#db-server-dn": "serverDN",
+      "#db-client-cert": "clientCert",
+      "#db-client-key": "clientKey",
       "#db-relations": "relations",
     };
     return {
@@ -114,6 +116,8 @@ export function bindMCPDatabase(
     if (tls.disabled) tls.checked = true;
     find("#mcp-db-relations").hidden = !["oracle", "dameng"].includes(type);
     find("#mcp-db-server-dn").hidden = type !== "oracle";
+    find("#mcp-db-client-cert").hidden = type !== "dameng";
+    find("#mcp-db-client-key").hidden = type !== "dameng";
     for (const [name, visible] of [
       ["authSource", type === "mongodb"],
       ["database", type !== "dameng"],
@@ -128,7 +132,7 @@ export function bindMCPDatabase(
     find("#mcp-db-remote").hidden = local;
   };
   form.elements.namedItem("type").onchange = () => {
-    for (const key of ["password", "ssh", "ca"])
+    for (const key of ["password", "ssh", "ca", "clientCert", "clientKey"])
       form.elements.namedItem(key).value = "";
     form.elements.namedItem("confirm").checked = false;
     toggle();

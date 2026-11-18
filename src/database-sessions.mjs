@@ -113,7 +113,12 @@ export class DatabaseSessions {
       if (Object.hasOwn(input, "sql") || Object.hasOwn(input, "parameters"))
         throw Error("连接授权不接受查询");
       config.relations = enterpriseConnection(input).relations;
-    } else if (input.relations !== undefined || input.serverDN !== undefined)
+    } else if (
+      input.relations !== undefined ||
+      input.serverDN !== undefined ||
+      input.clientKey !== undefined ||
+      input.clientCert !== undefined
+    )
       throw Error("数据库连接字段无效");
     for (const key of [
       "filename",
@@ -124,6 +129,8 @@ export class DatabaseSessions {
       "ca",
       "authSource",
       "serverDN",
+      "clientCert",
+      "clientKey",
     ])
       if (input[key] !== undefined) {
         if (typeof input[key] !== "string" || input[key].length > 65536)

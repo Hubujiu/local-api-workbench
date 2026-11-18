@@ -54,10 +54,20 @@ function boundedResult(value, columns) {
 export function superviseDamengProcess(entry, input, { signal } = {}) {
   if (signal?.aborted) return Promise.reject(Error(cancelled));
   const plan = compileDamengRead(input);
-  const { host, port, user, password, serverName, ca } = plan.config;
+  const { host, port, user, password, serverName, ca, clientCert, clientKey } =
+    plan.config;
   // Strip getters, accidental secrets and any possible module/path overrides.
   const request = {
-    connection: { host, port, user, password, serverName, ca, ssl: true },
+    connection: {
+      host,
+      port,
+      user,
+      password,
+      serverName,
+      ca,
+      ...(clientCert && { clientCert, clientKey }),
+      ssl: true,
+    },
     sql: plan.inputSql,
     parameters: Object.values(plan.binds),
   };
@@ -155,7 +165,7 @@ export function runDamengProcess(input, { signal } = {}) {
   const plan = compileDamengRead(input);
   if (signal?.aborted) return Promise.reject(Error(cancelled));
   if (!damengPreviewEnabled()) return Promise.reject(Error(unavailable));
-  const { host, port, user, password, ca } = plan.config;
+  const { host, port, user, password, ca, clientCert, clientKey } = plan.config;
   const parameters = [];
   // Only the compiler's quoted identifiers and generated parameter slots reach this step.
   const sql = plan.sql.replace(/:p(\d+)/g, (_, index) => {
@@ -168,6 +178,8 @@ export function runDamengProcess(input, { signal } = {}) {
     user,
     password,
     ca,
+    clientCert,
+    clientKey,
     sql,
     columns: plan.columns,
     parameters,

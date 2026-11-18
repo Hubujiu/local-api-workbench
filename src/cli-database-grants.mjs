@@ -25,6 +25,8 @@ const fields = new Set([
   "authSource",
   "relations",
   "serverDN",
+  "clientCert",
+  "clientKey",
   "ssl",
   "ssh",
 ]);

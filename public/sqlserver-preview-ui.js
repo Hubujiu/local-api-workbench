@@ -54,6 +54,10 @@ export function readDatabasePreviewConnection(
   if (!read("#db-tls").checked) throw Error("只读预览必须启用并验证TLS");
   const port = sqlServerPortInput(read("#db-port").value);
   const ca = read("#db-ca").value;
+  const clientCert = type === "dameng" && read("#db-client-cert").value;
+  const clientKey = type === "dameng" && read("#db-client-key").value;
+  if (Boolean(clientCert) !== Boolean(clientKey))
+    throw Error("双向 TLS 需要同时提供客户端证书和私钥");
   return {
     type,
     host: read("#db-host").value,
@@ -63,6 +67,7 @@ export function readDatabasePreviewConnection(
     ssl: true,
     ...(port === undefined ? {} : { port }),
     ...(ca !== "" && { ca }),
+    ...(clientCert && { clientCert, clientKey }),
     ...(type === "oracle" && { serverDN: read("#db-server-dn").value }),
     ...(type !== "sqlserver" && {
       relations: read("#db-relations")

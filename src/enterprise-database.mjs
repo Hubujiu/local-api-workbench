@@ -56,7 +56,7 @@ export function enterpriseConnection(input) {
     "password",
     "ssl",
     "ca",
-    ...(oracle ? ["database", "serverDN"] : []),
+    ...(oracle ? ["database", "serverDN"] : ["clientCert", "clientKey"]),
   ];
   const accepted = new Set([
     ...fields,

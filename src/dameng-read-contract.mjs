@@ -1,4 +1,6 @@
 import { types } from "node:util";
+import { createPrivateKey, X509Certificate } from "node:crypto";
+import { databaseCertificates } from "./database-ca.mjs";
 const fail = () => {
   throw Error("DAMENG_READ_INPUT_INVALID");
 };
@@ -42,6 +44,8 @@ export function compileDamengRead(input) {
     "ssl",
     "serverName",
     "ca",
+    "clientCert",
+    "clientKey",
   ]);
   if (
     !/^[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}$/.test(text(c.host, 253)) ||
@@ -50,6 +54,28 @@ export function compileDamengRead(input) {
     fail();
   if (text(c.serverName, 253) !== c.host) fail();
   if (!text(c.user).trim() || !text(c.ca).trim()) fail();
+  let identity = {};
+  if (c.clientCert !== undefined || c.clientKey !== undefined) {
+    const certs = databaseCertificates(
+      text(c.clientCert),
+      "DAMENG_READ_INPUT_INVALID",
+    );
+    const key = text(c.clientKey);
+    if (
+      !certs.length ||
+      !/^-----BEGIN (PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY)-----[A-Za-z0-9+/=\r\n]+-----END \1-----\s*$/.test(
+        key,
+      )
+    )
+      fail();
+    try {
+      if (!new X509Certificate(certs[0]).checkPrivateKey(createPrivateKey(key)))
+        fail();
+    } catch {
+      fail();
+    }
+    identity = { clientCert: c.clientCert, clientKey: key };
+  }
   text(c.password);
   const port = c.port === undefined ? 5236 : c.port;
   if (!Number.isInteger(port) || port < 1 || port > 65535) fail();
@@ -131,6 +157,7 @@ export function compileDamengRead(input) {
       password: c.password,
       ca: c.ca,
       serverName: c.serverName,
+      ...identity,
       ssl: true,
     },
     inputSql: sql,

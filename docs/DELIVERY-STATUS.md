@@ -7,7 +7,7 @@
 | 范围 | 已实现与实测 | 尚需的证据 |
 | --- | --- | --- |
 | 协议恢复 | TCP、WebSocket、gRPC 流和 Socket.IO 的创建、发送或确认可以根据各自的回执重查。Socket.IO 的真实网络用例覆盖创建和发送响应丢失、重复提交拒绝。 | 当前集成提交的三平台界面与桌面运行 |
-| MCP 数据库 | 设置页支持按项目授予、列出和撤销临时权限。SQL Server 2022 CU22 的 TLS、精确 DECIMAL、时区偏移和只读限制，以及 Oracle 26ai Free 23.26.4 的 TCPS、精确 NUMBER、撤权和证书拒绝，已在同一提交通过[实库检查](https://github.com/Hubujiu/local-api-workbench/actions/runs/44255289510)。DM8 已接入并通过本机 TLS 协议测试。 | DM8 厂商服务的 TLS、类型与实际返回值；最新提交的实库结果见整合 PR。 |
+| MCP 数据库 | 设置页支持按项目授予、列出和撤销临时权限。SQL Server 2022 CU22 的 TLS、精确 DECIMAL、时区偏移和只读限制，以及 Oracle 26ai Free 23.26.4 的 TCPS、精确 NUMBER、撤权和证书拒绝，已在同一提交通过[实库检查](https://github.com/Hubujiu/local-api-workbench/actions/runs/44260395802/job/134652032306)。DM8 开发版已在本机隔离环境通过双向 TLS、精确 DECIMAL、二进制、绑定顺序、撤权及错误 CA 实测。 | 各提交对应的平台、版本和运行记录见整合 PR；复现步骤见[企业数据库接入](ENTERPRISE-DATABASE-PREVIEW.md)。 |
 | Windows | 已开发每用户 MSI 的安装、升级、失败回滚、卸载、重装、正式产品系列及开始菜单入口。0.1.0 → 0.1.1 的完整候选操作已在托管 Windows 成功。[原始运行](https://github.com/Hubujiu/local-api-workbench/actions/runs/44234347878/job/134573838947) | 当前候选的普通用户运行、最终签名介质及正式环境实测 |
 | 原生往返 | 冻结继承认证、仅 schema 响应定义、冻结数据库任务来源和顺序、Redis GET/HGET/EXISTS、MongoDB findone 已实现。两种导出格式均有跨两代重导入的回归测试。 | 原厂同版本运行证据及非空原生自动化图的设置、引用与调度语义 |
 

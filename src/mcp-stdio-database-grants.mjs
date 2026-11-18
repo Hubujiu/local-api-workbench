@@ -22,6 +22,8 @@ const MAX_BYTES = 1024 * 1024,
     "authSource",
     "relations",
     "serverDN",
+    "clientCert",
+    "clientKey",
     "ssl",
     "ssh",
   ]),
@@ -200,6 +202,8 @@ function prepareConfig(input) {
     "password",
     "database",
     "ca",
+    "clientCert",
+    "clientKey",
     "authSource",
   ])
     if (Object.hasOwn(config, key))

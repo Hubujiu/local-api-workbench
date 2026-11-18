@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { DatabaseSessions } from "../src/database-sessions.mjs";
+import { MCPDatabaseGrants } from "../src/mcp-database-grants.mjs";
 
 test("DM8 real verified TLS, exact decimal, bind order and binary read", async (t) => {
   if (
@@ -14,6 +15,12 @@ test("DM8 real verified TLS, exact decimal, bind order and binary read", async (
     await readFile(process.env.LOCALAPI_DAMENG_REAL_CONFIG, "utf8"),
   );
   const sessions = new DatabaseSessions();
+  const mcp = new MCPDatabaseGrants(() => ({
+    enabled: true,
+    write: true,
+    execute: true,
+    projects: ["real-fixture"],
+  }));
   let stage = "register";
   try {
     const grant = {
@@ -23,12 +30,12 @@ test("DM8 real verified TLS, exact decimal, bind order and binary read", async (
       relations: ["WORKBENCH.READ_FIXTURE"],
     };
     const { id } = sessions.register("real-fixture", grant);
-    const select = (connectionId) =>
-      sessions.query("real-fixture", {
-        connectionId,
-        sql: "SELECT id, amount, payload FROM WORKBENCH.READ_FIXTURE WHERE id>=:p1 AND id<=:p0 ORDER BY id",
-        parameters: [1, 0],
-      });
+    const operation = (connectionId) => ({
+      connectionId,
+      sql: "SELECT id, amount, payload FROM WORKBENCH.READ_FIXTURE WHERE id>=:p1 AND id<=:p0 ORDER BY id",
+      parameters: [1, 0],
+    });
+    const select = (id) => sessions.query("real-fixture", operation(id));
     stage = "verified-read";
     const result = await select(id);
     stage = "exact-row";
@@ -42,6 +49,21 @@ test("DM8 real verified TLS, exact decimal, bind order and binary read", async (
     stage = "revocation";
     sessions.revoke("real-fixture", id);
     await assert.rejects(select(id));
+    stage = "mcp-scoped-read";
+    const agent = mcp.register({ id: "real-fixture" }, grant);
+    const agentRead = () =>
+      mcp.query(mcp.capture(), "real-fixture", operation(agent.id));
+    await assert.rejects(select(agent.id));
+    assert.deepEqual((await agentRead()).rows, result.rows);
+    mcp.revoke("real-fixture", agent.id);
+    await assert.rejects(agentRead());
+    if (process.env.LOCALAPI_DAMENG_REQUIRE_CLIENT_CERT === "1") {
+      stage = "client-authentication";
+      const { clientCert, clientKey, ...passwordOnly } = grant;
+      assert.ok(clientCert && clientKey);
+      const missing = sessions.register("real-fixture", passwordOnly);
+      await assert.rejects(select(missing.id));
+    }
     stage = "wrong-ca";
     const bad = sessions.register("real-fixture", {
       ...grant,
@@ -52,11 +74,12 @@ test("DM8 real verified TLS, exact decimal, bind order and binary read", async (
     });
     await assert.rejects(select(bad.id));
     console.log(
-      "DAMENG_REAL_READ_GATE_PASS verified-TLS/bind-order/exact-DECIMAL/binary/revocation/wrong-CA",
+      "DAMENG_REAL_READ_GATE_PASS verified-TLS/bind-order/exact-DECIMAL/binary/owner-and-MCP-revocation/wrong-CA",
     );
   } catch {
     assert.fail("DM8_REAL_GATE_FAILED:" + stage);
   } finally {
+    mcp.invalidate();
     sessions.close();
   }
 });

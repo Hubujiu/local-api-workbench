@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { generateKeyPairSync } from "node:crypto";
 import { compileDamengRead } from "../src/dameng-read-contract.mjs";
 import {
   runDamengRead,
@@ -90,6 +91,36 @@ test("bounded DM dialect is regenerated, parameters never interpolated", () => {
     "SELECT id FROM fixture.items WHERE id=1",
   ])
     assert.throws(() => compileDamengRead({ ...a, sql }));
+});
+test("DM8 mutual TLS accepts a matching certificate and key only as a pair", async () => {
+  const load = (name) =>
+    readFile(new URL("./fixtures/" + name, import.meta.url), "utf8");
+  const [clientCert, clientKey] = await Promise.all([
+    load("dameng-loopback.crt"),
+    load("localhost.key"),
+  ]);
+  const unrelatedKey = generateKeyPairSync("ec", {
+    namedCurve: "P-256",
+  }).privateKey.export({ format: "pem", type: "pkcs8" });
+  const base = input();
+  const compile = (identity) =>
+    compileDamengRead({
+      ...base,
+      connection: { ...base.connection, ...identity },
+    });
+  assert.equal(
+    compile({ clientCert, clientKey }).config.clientCert,
+    clientCert,
+  );
+  for (const identity of [
+    { clientCert },
+    { clientKey },
+    { clientCert, clientKey: unrelatedKey },
+    { clientCert, clientKey: "invalid" },
+  ])
+    assert.throws(() => compile(identity), {
+      message: "DAMENG_READ_INPUT_INVALID",
+    });
 });
 test("no implicit package, external module or request-provided factory can enable transport", async () => {
   assert.equal(DAMENG_READ_DRIVER_STATUS.available, false);
