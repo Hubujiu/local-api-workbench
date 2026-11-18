@@ -159,7 +159,7 @@ test("pre-abort touches no input; abort during compilation discards candidate wi
   });
   assert.ok((await prepare(input())).plan);
 });
-test("public dispatch, session, MCP and CLI grants still reject SQL Server; UI remains closed", async () => {
+test("default-disabled dispatch, session, MCP and CLI grants reject SQL Server; UI remains closed", async () => {
   await assert.rejects(queryRemoteDatabase(input()), /数据库类型无效/);
   const sessions = new DatabaseSessions();
   assert.throws(
@@ -214,7 +214,7 @@ test("public dispatch, session, MCP and CLI grants still reject SQL Server; UI r
   );
 });
 
-test("owner HTTP read/write/register and MCP stdio reject without enabling provider", async (t) => {
+test("default-disabled owner HTTP read/write/register and MCP stdio reject", async (t) => {
   const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");

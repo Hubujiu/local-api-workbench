@@ -37,7 +37,7 @@ certificate, using that same already-public fixture key, has only
 `wrong-sqlserver.invalid` in its SAN. It is a negative identity fixture, not a new
 production credential or trust-store change. Tests never disable certificate
 verification or use trustServerCertificate=true. No EULA, account, real SQL Server
-binary or external service is used. Public provider registration remains absent.
+binary or external service is used. The public [preview provider](sqlserver-preview-provider.md) remains off by default.
 
 Remaining gaps: SQL Server authentication, actual target database/instance
 selection, server READ_ONLY enforcement and object side effects, real query/result

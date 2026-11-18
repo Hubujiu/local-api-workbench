@@ -1,5 +1,5 @@
-// Internal WIP transport only. Not registered with HTTP/MCP/CLI or a default
-// runSQLServerReadPreparation factory. Importing/constructing does not open a socket.
+// Internal transport only; public preview goes through the owned supervisor.
+// No default read-preparation factory. Importing/constructing opens no socket.
 import { Socket } from "node:net";
 import { isDeepStrictEqual, types } from "node:util";
 import { Connection, Request, TYPES } from "tedious";

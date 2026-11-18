@@ -1,3 +1,4 @@
+import { querySQLServerPreview } from "./sqlserver-provider.mjs";
 import { validateMySQLConnectionText } from "./mysql-connection-text.mjs";
 import { Socket } from "node:net";
 import {
@@ -31,6 +32,8 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
   if (input.type === "clickhouse") return queryClickHouse(input, { signal });
   if (input.type === "redis") return queryRedis(input, { signal });
   if (input.type === "mongodb") return queryMongo(input, { signal });
+  if (input.type === "sqlserver")
+    return querySQLServerPreview(input, { signal });
   const { type, sql } = input;
   const parameters = databaseParameters(
     input.parameters === undefined ? [] : input.parameters,

@@ -1,4 +1,5 @@
-// Internal and unregistered. Each invocation owns one child and never replays.
+// Internal supervisor; host-gated preview is the only public provider wrapper.
+// Each invocation owns one child and never replays.
 import { fork } from "node:child_process";
 import { performance } from "node:perf_hooks";
 import { compileSQLServerRead } from "./sqlserver-read-contract.mjs";

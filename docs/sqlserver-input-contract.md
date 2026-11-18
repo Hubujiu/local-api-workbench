@@ -1,18 +1,19 @@
 # Experimental SQL Server input adapter (not a provider)
 
-`prepareSQLServerReadInput` is an internal, inert compilation contract. It opens
-no database transport, grants no authority and is not imported by any public
-entrypoint. SQL Server remains unavailable in owner HTTP, sessions, MCP, CLI and
-UI. No real SQL Server, TLS/TDS exchange, license acceptance or server-side
-read-only enforcement is claimed by these tests.
+`prepareSQLServerReadInput` remains an inert compilation contract. The shared
+strict snapshot also feeds the separately [gated owned provider](sqlserver-preview-provider.md).
+SQL Server is disabled by default; an explicit host preview opt-in permits owner
+HTTP, temporary sessions and owner-issued MCP grants. CLI/stdio files and GUI
+selection remain closed. No successful real SQL Server/TLS/TDS or Windows
+acceptance is claimed.
 
 The flat input requires `type: "sqlserver"` and accepts only host, port, user,
 password, database, ca, ssl, sql and parameters. Only connection fields are
 projected into the existing connection contract. Unknown fields, symbols,
 accessors, Proxies and exotic objects reject without executing their code.
 Session metadata (name/bindingId), writes, SSH, URLs, factories and timeouts are
-not silently discarded or treated as authority. A future authorized session layer
-must perform its own validation and supply this narrow shape deliberately.
+not silently discarded or treated as authority. The authorized session layer
+performs its own validation and supplies this narrow shape deliberately.
 
 Port defaults to 1433 only when absent/undefined. Zero, null and numeric strings
 reject. No UI coercion or old session-zero behavior is adopted implicitly.
@@ -30,7 +31,10 @@ Pre-aborted calls do not inspect inputs; cancellation during compilation discard
 the result after bounded compiler completion, not immediate worker termination.
 There is no execution token, transport or grant to revoke here.
 
-## Staged closure
+## General-release prerequisites
+
+The later host-gated preview performs the integration in step 2 while keeping
+default activation closed. It does not discharge the real-service/platform gates.
 
 1. This inert adapter and negative public-entrypoint tests. No provider opening.
 2. Independently review authorized integration: project/grant identity, epoch,
@@ -42,7 +46,7 @@ There is no execution token, transport or grant to revoke here.
    A controlled read-only database, least-privilege account and reviewed local
    objects are prerequisites: SELECT/READ_ONLY cannot rule out login triggers,
    views, computed expressions, external functions or remote effects.
-4. Only after those prerequisites, consider explicitly authorized provider/UI
+4. Only after those prerequisites, consider general provider/UI
    activation with restricted query examples, strict raw port parsing, mandatory
    TLS and no write controls. Label experimental scope and unsupported types
    honestly; do not call an unverified service production-ready.

@@ -1,6 +1,6 @@
 # SQL Server exact decimal / temporal output preparation
 
-Internal, opt-in, **not a public provider or real-service acceptance**. Builds on the
+Internal exact-output engine, also used by the [host-gated preview provider](sqlserver-preview-provider.md). **Not real-service acceptance or general provider enablement**. Builds on the
 existing decimal input binder. No new dependencies, server provisioning, credentials,
 or legal acceptance.
 
@@ -53,7 +53,7 @@ Local tests use inert synthetic catalog/result exchanges. They prove dispatch,
 projection construction, validation and closure ordering, **not SQL Server's actual
 formatting, TDS or TLS**. The opt-in real-service test now expects decimal(38,18),
 datetime2(7), datetimeoffset(7) with +05:30, time(7), year-0001 date and SQL NULLs from
-the explicit disposable fixture. This gate was not run here. No public enablement
+the explicit disposable fixture. This gate was not run here. No general/default enablement
 until it passes on supported SQL Server and packaged Windows targets.
 
 Unsupported output types still fail closed: money/smallmoney, float/real,
