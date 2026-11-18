@@ -43,6 +43,19 @@ class WindowsStageCIContractTests(unittest.TestCase):
             self.assertFalse((root / 'wrong-version').exists())
             self.assertEqual(snapshot(source), before)
 
+    def test_updated_version_is_staged_without_relabeling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            source, target = root / 'download', root / 'launch'
+            make_directory(source / 'LocalAPI', package(version='0.1.1'))
+            command = [sys.executable, str(ROOT / 'scripts/stage_windows_payload.py'),
+                       str(source), str(target), '--head', HEAD,
+                       '--expected-version', '0.1.1', '--arch', 'x64']
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)['version'], '0.1.1')
+            self.assertEqual(snapshot(target), snapshot(source / 'LocalAPI'))
+
     def test_workflow_preserves_one_destination_and_platform_gates(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         lane = workflow.split('  downloaded-portable:', 1)[1]
@@ -54,10 +67,12 @@ class WindowsStageCIContractTests(unittest.TestCase):
         self.assertIn("if: runner.os == 'Windows'", stage)
         self.assertIn('shell: pwsh', stage)
         self.assertIn('EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}', stage)
-        self.assertIn('--head "$env:EXPECTED_HEAD" --expected-version 0.1.0 --arch x64', stage)
+        self.assertIn("Get-Content -LiteralPath 'package.json' -Raw", stage)
+        self.assertIn('--head "$env:EXPECTED_HEAD" --expected-version "$expectedVersion" --arch x64', stage)
+        self.assertIn('$stage.version -cne $expectedVersion', stage)
         self.assertIn('"${{ runner.temp }}/localapi-launch-package"', stage)
         self.assertEqual(lane.count('python scripts/stage_windows_payload.py'), 1)
-        self.assertLess(stage.index('$LASTEXITCODE'), stage.index('ConvertFrom-Json'))
+        self.assertLess(stage.index('$LASTEXITCODE'), stage.index('$stage = $output | ConvertFrom-Json'))
         self.assertLess(stage.index('Windows staging evidence mismatch'), stage.index('Write-Output'))
         for field in ['kind', 'head', 'platform', 'arch', 'version', 'applicationName', 'entrypoint', 'installationPerformed', 'signatureVerified']:
             self.assertIn('$stage.' + field, stage)

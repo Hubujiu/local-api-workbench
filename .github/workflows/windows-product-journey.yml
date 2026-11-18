@@ -1,0 +1,160 @@
+name: Opt-in disposable Windows product journey
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - ".github/workflows/windows-product-journey.yml"
+      - "packaging/windows-msi/**"
+      - "scripts/**"
+      - "tests/**"
+      - "src/**"
+      - "desktop/**"
+      - "public/**"
+      - "package*.json"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-product:
+    if: github.repository == 'Hubujiu/local-api-workbench' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'run-windows-product-journey')))
+    runs-on: windows-latest
+    timeout-minutes: 25
+    outputs:
+      head: ${{ steps.identity.outputs.head }}
+      manifest_sha: ${{ steps.manifest.outputs.sha }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.22.3"
+      - name: Require committed test-only source version and bind exact head
+        id: identity
+        shell: pwsh
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $head -cne $env:EXPECTED_HEAD) { throw 'Source head mismatch' }
+          node --input-type=module -e "import {desktopSourceVersion} from './scripts/desktop-package-version.mjs'; if (await desktopSourceVersion() !== '0.1.1') throw Error('Committed test-only 0.1.1 required');"
+          if ($LASTEXITCODE -ne 0) { throw 'Version-bound build prerequisite missing' }
+          "head=$head" >> $env:GITHUB_OUTPUT
+      - run: npm ci --ignore-scripts --no-audit
+      - run: npm ci --prefix desktop --no-audit
+      - run: npx --no install-electron
+        working-directory: desktop
+      - name: Locked production dependencies
+        run: |
+          node -e "const fs=require('fs');fs.mkdirSync('production');for(const f of ['package.json','package-lock.json'])fs.copyFileSync(f,'production/'+f)"
+          npm ci --omit=dev --ignore-scripts --prefix production --no-audit
+      - run: node scripts/build-desktop.mjs
+      - run: node scripts/build-manifest.mjs
+        env:
+          BUILD_HEAD: ${{ steps.identity.outputs.head }}
+      - run: node scripts/verify-portable.mjs
+      - name: Independent manifest pin
+        id: manifest
+        shell: pwsh
+        run: |
+          $sha = (Get-FileHash -LiteralPath 'dist/LocalAPI/build-manifest.json' -Algorithm SHA256).Hash.ToLowerInvariant()
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-journey-new-portable
+          path: dist/LocalAPI
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+  author-pair:
+    needs: build-product
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      plan_sha: ${{ steps.bundle.outputs.plan_sha }}
+    steps:
+      - run: apt-get update && apt-get install -y --no-install-recommends python3 ca-certificates git libglib2.0-0t64 libxml2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ needs.build-product.outputs.head }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: product-journey-new-portable
+          path: ${{ runner.temp }}/new-portable
+      - name: Fetch independently pinned baseline only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/download_pinned_windows_baseline.py --lock packaging/windows-msi/windows-baseline-lock.json --output "$RUNNER_TEMP/baseline"
+      - name: Materialize pinned authoring tools
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, urllib.request
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'msitools'
+          root.mkdir()
+          for item in json.loads(pathlib.Path('packaging/windows-msi/debian-toolchain-lock.json').read_text()):
+              path = root / pathlib.Path(item['Filename']).name
+              urllib.request.urlretrieve('https://deb.debian.org/debian/' + item['Filename'], path)
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == item['SHA256']
+              subprocess.run(['dpkg-deb', '-x', str(path), str(root / 'root')], check=True)
+          PY
+      - name: Compile same-family pair and independently pin transferred plan
+        id: bundle
+        shell: bash
+        env:
+          NEW_HEAD: ${{ needs.build-product.outputs.head }}
+          NEW_MANIFEST_SHA: ${{ needs.build-product.outputs.manifest_sha }}
+        run: |
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/msitools/root/usr/lib/x86_64-linux-gnu"
+          export PYTHONPATH=scripts
+          python3 scripts/compile_hosted_product_pair.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: verified-product-msi-pair
+          path: ${{ steps.bundle.outputs.bundle_path }}
+          if-no-files-found: error
+          retention-days: 3
+  native-product:
+    needs: [build-product, author-pair]
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ needs.build-product.outputs.head }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.22.3"
+      - run: npm ci --ignore-scripts --no-audit --prefix packaging/windows-msi/journey-tools
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: verified-product-msi-pair
+          path: ${{ runner.temp }}/product-bundle
+      - name: Native installed product journey on disposable hosted runner
+        shell: pwsh
+        env:
+          PLAN_SHA: ${{ needs.author-pair.outputs.plan_sha }}
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: |
+          $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+          @{ runner='GitHub-hosted windows-latest'; isAdministrator=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); standardUserAcceptance=$false; imageVersion=$env:ImageVersion } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'product-runner-context.json')
+          $plan = Join-Path $env:RUNNER_TEMP 'product-bundle/product-plan.json'
+          node tests/desktop-installed-product-journey.mjs --plan $plan --expected-plan-sha256 $env:PLAN_SHA --execute-in-disposable-windows
+          if ($LASTEXITCODE -ne 0) { throw 'Native installed product journey failed; inspect retained evidence' }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: native-installed-product-evidence
+          path: |
+            ${{ runner.temp }}/installed-product-journey-*/evidence/
+            ${{ runner.temp }}/product-runner-context.json
+          if-no-files-found: warn
+          retention-days: 3

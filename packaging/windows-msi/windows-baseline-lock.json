@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "repository": "Hubujiu/local-api-workbench",
+  "runId": 44130790449,
+  "head": "f59b11ac3dc96c567db155dd871ef08ba445937c",
+  "manifestSha256": "2cff9e380a9719e4f8b0d9262ec62eba4a54702180a1e307297f444b2ef6f469",
+  "portable": {
+    "id": 14350955078,
+    "name": "LocalAPI-Windows-portable",
+    "sha256": "380da9823403679ff7ead1a24a62f38f4526bc0046e4b0bc73c3326ca829b1bb"
+  },
+  "metadata": {
+    "id": 14349438597,
+    "name": "desktop-build-metadata-Windows",
+    "sha256": "0bdbf767e38228759b7019f2a83259fc2b913c9c923be7480bf1175b5eb0400f"
+  }
+}
