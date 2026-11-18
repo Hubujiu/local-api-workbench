@@ -1,4 +1,4 @@
-// Internal and unregistered. Each invocation owns one child and never replays.
+// One-shot transport for authorised Oracle reads. Each invocation owns one child and never replays.
 import { fork } from "node:child_process";
 import { performance } from "node:perf_hooks";
 import { compileOracleRead } from "./oracle-read-contract.mjs";

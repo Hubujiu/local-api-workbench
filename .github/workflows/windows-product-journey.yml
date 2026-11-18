@@ -191,6 +191,7 @@ jobs:
           name: standard-user-installed-product-evidence
           path: |
             ${{ runner.temp }}/standard-user-evidence/standard-context.json
+            ${{ runner.temp }}/standard-user-evidence/child-*.log
             ${{ runner.temp }}/standard-user-evidence/installed-product-journey-*/evidence/
           if-no-files-found: warn
           retention-days: 7

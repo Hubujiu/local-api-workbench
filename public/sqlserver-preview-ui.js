@@ -8,7 +8,7 @@ const providers = new Map([
 export const isPreviewDatabase = (type) => providers.has(type);
 const enabled = new WeakMap();
 const requests = new WeakMap();
-export async function loadSQLServerPreviewCapability(selector, api) {
+export async function loadDatabasePreviewCapabilities(selector, api) {
   if (!selector) return;
   enabled.delete(selector);
   for (const type of providers.keys())
@@ -40,11 +40,11 @@ export function sqlServerPortInput(raw) {
     Number(raw) > 65535
   )
     throw Error(
-      "SQL Server端口须留空或为1至65535的十进制整数，不接受空格、零或科学计数法",
+      "数据库端口须留空或为1至65535的十进制整数，不接受空格、零或科学计数法",
     );
   return Number(raw);
 }
-export function readSQLServerPreviewConnection(
+export function readDatabasePreviewConnection(
   selector,
   read,
   type = "sqlserver",
@@ -72,3 +72,8 @@ export function readSQLServerPreviewConnection(
     }),
   };
 }
+
+export {
+  loadDatabasePreviewCapabilities as loadSQLServerPreviewCapability,
+  readDatabasePreviewConnection as readSQLServerPreviewConnection,
+};

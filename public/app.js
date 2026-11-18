@@ -1,8 +1,8 @@
 import { bindMCPDatabase } from "./mcp-database-view.js";
 import {
-  loadSQLServerPreviewCapability,
+  loadDatabasePreviewCapabilities,
   isPreviewDatabase,
-  readSQLServerPreviewConnection,
+  readDatabasePreviewConnection,
 } from "./sqlserver-preview-ui.js";
 import {
   capturePlanHistoryFocus,
@@ -2032,7 +2032,7 @@ function bind() {
     const updateDatabase = bindMCPDatabase(mcpPanel, {
       projectId: project.id,
       config: mcpState,
-      loadCapabilities: loadSQLServerPreviewCapability,
+      loadCapabilities: loadDatabasePreviewCapabilities,
       request: api,
     });
     updateMCPPanel = (config) => {
@@ -3599,7 +3599,7 @@ function bind() {
     const projectId = project.id;
     const type = $("#db-type").value;
     const connection = isPreviewDatabase(type)
-      ? readSQLServerPreviewConnection($("#db-type"), $, type)
+      ? readDatabasePreviewConnection($("#db-type"), $, type)
       : {
           type,
           filename: $("#db-path").value,
@@ -3835,7 +3835,7 @@ function bind() {
       : "执行只读查询";
   });
   updateDatabaseFields();
-  void loadSQLServerPreviewCapability($("#db-type"), api);
+  void loadDatabasePreviewCapabilities($("#db-type"), api);
   on("#db-query", "click", async () => {
     const target = $("#db-result"),
       button = $("#db-query"),
@@ -3844,7 +3844,7 @@ function bind() {
     const connectionControls = [$("#db-type"), $("#db-tls")];
     const input = isPreviewDatabase(type)
       ? {
-          ...readSQLServerPreviewConnection($("#db-type"), $, type),
+          ...readDatabasePreviewConnection($("#db-type"), $, type),
           sql: $("#db-sql").value,
           parameters: parseDatabaseParameterJSON($("#db-params").value),
         }

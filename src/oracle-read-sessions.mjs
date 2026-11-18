@@ -33,7 +33,7 @@ const plain = (value, keys) => {
   return out;
 };
 
-// Host opt-in only. Never registered in public HTTP, CLI, MCP or GUI.
+// Standalone owner/project registry for embedded callers and the real-service gate.
 export class OracleReadSessions {
   #enabled;
   #query;

@@ -102,6 +102,7 @@ jobs:
           node -e "const fs=require('fs');fs.mkdirSync('production',{recursive:true});for(const f of ['package.json','package-lock.json'])fs.copyFileSync(f,'production/'+f)"
           npm ci --omit=dev --ignore-scripts --prefix production --no-audit
       - run: npm run build:dameng
+      - run: node --test tests/dameng-native-protocol.test.mjs tests/enterprise-database.test.mjs
       - run: node scripts/build-desktop.mjs
       - run: node tests/mcp-production-smoke.mjs
       - run: node scripts/build-manifest.mjs

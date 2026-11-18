@@ -199,6 +199,50 @@ try {
       () => !document.querySelector("#db-query").disabled,
     );
     assert.match(await page.textContent("#db-result"), /授权范围/);
+    await page.locator('.rail [data-page="settings"]').click();
+    await page.locator('[data-settings-anchor="settings-mcp"]').click();
+    const projectId = await page.locator("#project-select").inputValue();
+    await page.locator("#mcp-config").click();
+    for (const name of ["enabled", "write", "execute"])
+      await page.locator("#mcp-" + name).check();
+    await page.locator(`[data-mcp-project="${projectId}"]`).check();
+    await page.locator("#dialog-save").click();
+    await page
+      .locator("#dialog-title")
+      .getByText("MCP 连接配置", { exact: true })
+      .waitFor();
+    await page.getByRole("button", { name: "关闭", exact: true }).click();
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    const field = (name) => page.locator(`#mcp-db-form [name="${name}"]`);
+    await field("type").selectOption("oracle");
+    for (const [key, value] of Object.entries({
+      name: "Agent Oracle read",
+      host: "db.invalid",
+      database: "fixture",
+      user: "reader",
+      password: secret,
+      serverDN: "CN=db.invalid",
+      relations: "APP.USERS",
+    }))
+      await field(key).fill(value);
+    await field("confirm").check();
+    const authorized = page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        r.url().endsWith("/mcp-database-connections"),
+    );
+    await page.locator('#mcp-db-form button[type="submit"]').click();
+    const grant = await authorized;
+    assert.equal(grant.status(), 200);
+    assert.deepEqual((await grant.json()).relations, ["APP.USERS"]);
+    assert.equal(await field("password").inputValue(), "");
+    const revoke = page.waitForResponse(
+      (r) =>
+        r.request().method() === "DELETE" &&
+        r.url().endsWith("/mcp-database-connections"),
+    );
+    await page.locator("[data-mcp-db-revoke]").click();
+    assert.equal((await revoke).status(), 200);
   } finally {
     if (oracleGate === undefined) delete process.env.LOCALAPI_ORACLE_PREVIEW;
     else process.env.LOCALAPI_ORACLE_PREVIEW = oracleGate;

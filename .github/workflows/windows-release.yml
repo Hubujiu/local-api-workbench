@@ -205,7 +205,7 @@ jobs:
             dist/desktop-restart-evidence/
           if-no-files-found: error
   draft:
-    needs: [source, sign-media, acceptance]
+    needs: [source, sign-payload, sign-media, acceptance]
     environment: windows-release
     runs-on: ubuntu-latest
     permissions:
@@ -215,16 +215,41 @@ jobs:
         with:
           name: signed-product-msi
           path: media
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: signed-release-acceptance
+          path: acceptance
       - env:
           GH_TOKEN: ${{ github.token }}
           DIGEST: ${{ needs.sign-media.outputs.digest }}
           VERSION: ${{ needs.source.outputs.version }}
+          CI_RUN: ${{ needs.source.outputs.ci }}
+          JOURNEY_RUN: ${{ inputs.journey_run }}
+          MANIFEST: ${{ needs.sign-payload.outputs.manifest }}
         run: |
           set -euo pipefail
           test "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)" = "$GITHUB_SHA"
+          mapfile -t receipts < <(find acceptance -type f -name release-acceptance.json)
+          test "${#receipts[@]}" -eq 1
+          jq -e --arg head "$GITHUB_SHA" --arg sha "$DIGEST" --arg manifest "$MANIFEST" '.head==$head and .standardUser==true and (.sha256|ascii_downcase)==$sha and (.manifestSha256|ascii_downcase)==$manifest' "${receipts[0]}"
+          jq --arg ci "$CI_RUN" --arg journey "$JOURNEY_RUN" --arg run "$GITHUB_RUN_ID" --arg version "$VERSION" +            '{head,sha256,manifestSha256,standardUser,os,publisher,previousReleaseUpgraded} + {version:$version,ciRun:$ci,journeyRun:$journey,releaseRun:$run}' "${receipts[0]}" > media/verification.json
           cd media
           file="LocalAPI-$VERSION-windows-x64.msi"
           printf '%s  %s\n' "$DIGEST" "$file" > SHA256SUMS
+          sha256sum verification.json >> SHA256SUMS
           sha256sum --check SHA256SUMS
+          refs=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v$VERSION")
+          jq -e --arg tag "refs/tags/v$VERSION" 'all(.[]; .ref!=$tag)' <<< "$refs"
+          drafts=$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100")
+          existing=$(jq -c --arg tag "v$VERSION" '[.[][] | select(.tag_name==$tag)]' <<< "$drafts")
+          if [[ "$existing" != '[]' ]]; then
+            jq -e --arg head "$GITHUB_SHA" --arg file "$file" --arg sha "sha256:$DIGEST" +              'length==1 and .[0].draft and .[0].target_commitish==$head and any(.[0].assets[]; .name==$file and .digest==$sha)' <<< "$existing"
+            test "$(jq '.[0].assets | length' <<< "$existing")" -eq 3
+            for receipt in verification.json SHA256SUMS; do
+              expected="sha256:$(sha256sum "$receipt" | cut -d" " -f1)"
+              jq -e --arg name "$receipt" --arg sha "$expected" 'any(.[0].assets[]; .name==$name and .digest==$sha)' <<< "$existing"
+            done
+            exit 0
+          fi
           printf 'Windows x64 · %s\n\nSource commit %s. Signed installer and standard-user acceptance evidence are recorded in [run %s](https://github.com/%s/actions/runs/%s).\n' "$VERSION" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > "$RUNNER_TEMP/release-notes.md"
-          gh release create "v$VERSION" "$file" SHA256SUMS --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" --title "Local API Workbench $VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
+          gh release create "v$VERSION" "$file" SHA256SUMS verification.json --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" --title "Local API Workbench $VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"

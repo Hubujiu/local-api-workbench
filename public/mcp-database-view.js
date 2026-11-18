@@ -1,6 +1,6 @@
 import {
   isPreviewDatabase,
-  readSQLServerPreviewConnection,
+  readDatabasePreviewConnection,
 } from "./sqlserver-preview-ui.js";
 const esc = (value) =>
   String(value ?? "").replace(
@@ -44,7 +44,7 @@ export function readMCPDatabaseInput(form) {
     };
     return {
       ...input,
-      ...readSQLServerPreviewConnection(
+      ...readDatabasePreviewConnection(
         form.elements.namedItem("type"),
         (id) => form.elements.namedItem(fields[id]),
         input.type,
