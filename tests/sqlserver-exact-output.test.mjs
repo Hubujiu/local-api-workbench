@@ -222,3 +222,68 @@ test("null exact values and aliases retain names without implicit date/number co
     p.columns,
   );
 });
+
+test("offset SQL retains each catalog scale, null branch and bounded original offset without style127", async () => {
+  const plan = await compileSQLServerRead("SELECT stamp FROM dbo.items");
+  for (let scale = 0; scale <= 7; scale++) {
+    const projected = exactProjectionPlan(plan, {
+      columns,
+      rows: [meta("stamp", "datetimeoffset", 34, scale)],
+    });
+    assert.match(
+      projected.sql,
+      /CONVERT\(varchar\(34\), CASE WHEN \[stamp\] IS NULL THEN NULL ELSE/,
+    );
+    assert.ok(
+      projected.sql.includes(
+        `CONVERT(varchar(27), CONVERT(datetime2(${scale}), [stamp]), 126)`,
+      ),
+    );
+    assert.match(
+      projected.sql,
+      /CASE WHEN DATEPART\(TZOFFSET, \[stamp\]\) = 0 THEN 'Z' ELSE DATENAME\(TZOFFSET, \[stamp\]\) END/,
+    );
+    assert.doesNotMatch(projected.sql, /, 127\)|SWITCHOFFSET|AT TIME ZONE/);
+    const validate = (value) =>
+      validateExactResult(
+        {
+          columns: ["stamp"],
+          rows: [{ stamp: value }],
+        },
+        projected.columns,
+      );
+    const fraction = scale ? "." + "1234567".slice(0, scale) : "";
+    for (const offset of [
+      "+05:30",
+      "-07:30",
+      "-00:30",
+      "+14:00",
+      "-14:00",
+      "Z",
+    ]) {
+      validate("2024-02-29T23:59:58" + fraction + offset);
+      // Existing style126 contract permits omission of an all-zero fraction.
+      validate("2024-02-29T00:00:00" + offset);
+      if (scale) validate("2024-02-29T00:00:00." + "0".repeat(scale) + offset);
+    }
+    if (scale === 7) validate("2024-02-29T23:59:59.0000001-00:30");
+    validate(null);
+    assert.throws(() => validate("2024-02-29T23:59:58.12345678+05:30"));
+    assert.throws(() => validate("2024-02-29T23:59:58" + fraction + "Z+05:30"));
+  }
+});
+test("maximum offset projection uses bounded expressions and raw function SQL stays closed", async () => {
+  const names = Array.from({ length: 128 }, (_, i) => "offset_" + i);
+  const plan = await compileSQLServerRead(
+    "SELECT " + names.join(",") + " FROM dbo.items",
+  );
+  const projected = exactProjectionPlan(plan, {
+    columns,
+    rows: names.map((name) => meta(name, "datetimeoffset", 34, 7)),
+  });
+  assert.equal(projected.columns.length, 128);
+  assert.ok(Buffer.byteLength(projected.sql) <= 65536);
+  await assert.rejects(
+    compileSQLServerRead("SELECT DATENAME(TZOFFSET,stamp) FROM dbo.items"),
+  );
+});
