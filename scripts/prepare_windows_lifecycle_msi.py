@@ -48,7 +48,8 @@ def prepare(payload, output, head, version, manifest_sha256, fixture_family=None
     evidence = inv.verify(head, 'win32'); identity(payload, version, 'x64'); windows_names(payload, inventory=inv)
     require(not inv.links(), 'MSI links forbidden')
     require(all('|' not in name for name in inv.entries), 'MSI filename separator forbidden')
-    directory = ('LocalAPI-Workbench' if release else APP_DIR) if fixture_family is None else APP_DIR + '-Fixture-' + fixture_family
+    # Leave room for the longest file in the full package under a standard user's profile.
+    directory = ('LocalAPI-Workbench' if release else APP_DIR) if fixture_family is None else 'LocalAPI-Q-' + fixture_family
     product_code = guid(family + ':product:' + version)
     upgrade_code = guid(family + ':upgrade')
     root = ET.Element('{' + NS + '}Wix')

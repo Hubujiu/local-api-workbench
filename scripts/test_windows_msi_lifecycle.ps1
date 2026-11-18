@@ -13,7 +13,7 @@ $fixture = (Resolve-Path -LiteralPath $FixtureDirectory).Path
 $plan = Get-Content -LiteralPath (Join-Path $fixture 'native-plan.json') -Raw | ConvertFrom-Json
 if ($plan.kind -ne 'localapi-inert-msi-lifecycle-v1' -or $plan.packages.Count -ne 2) { throw 'Not the generated inert fixture plan' }
 $family = [guid]::Parse($plan.family).ToString()
-if ($family -ne $plan.family -or $plan.directory -ne "LocalAPI-Lifecycle-Candidate-Fixture-$family") { throw 'Invalid fixture namespace' }
+if ($family -ne $plan.family -or $plan.directory -notin @("LocalAPI-Q-$family", "LocalAPI-Lifecycle-Candidate-Fixture-$family")) { throw 'Invalid fixture namespace' }
 $target = Join-Path $env:LOCALAPPDATA $plan.directory
 $evidence = [IO.Path]::GetFullPath($EvidenceDirectory)
 function Assert-NoReparse([string]$Path) {

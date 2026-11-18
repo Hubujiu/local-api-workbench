@@ -5,7 +5,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=Workbench-Test-CA \
   -keyout "$fixture/ca.key" -out "$fixture/ca.crt" 2>/dev/null
 openssl req -new -newkey rsa:2048 -nodes -subj /CN=localhost \
   -keyout "$fixture/server.key" -out "$fixture/server.csr" 2>/dev/null
-printf '%s\n' 'subjectAltName=DNS:localhost,IP:127.0.0.1' 'extendedKeyUsage=serverAuth' > "$fixture/extensions"
+printf '%s\n' 'subjectAltName=DNS:localhost,DNS:sql.workbench.test,IP:127.0.0.1' 'extendedKeyUsage=serverAuth' > "$fixture/extensions"
 openssl x509 -req -in "$fixture/server.csr" -CA "$fixture/ca.crt" -CAkey "$fixture/ca.key" \
   -CAcreateserial -days 2 -extfile "$fixture/extensions" -out "$fixture/server.crt"
 cat > "$fixture/mssql.conf" <<'CONFIG'
@@ -19,6 +19,9 @@ chmod 644 "$fixture/mssql.conf" "$fixture/server.crt" "$fixture/ca.crt"
 sudo chown 10001:0 "$fixture/server.key"
 sudo chmod 400 "$fixture/server.key"
 export MSSQL_SA_PASSWORD="$admin" SQLCMDPASSWORD="$admin"
+# Workbench intentionally makes a single address attempt. Publish one IPv4 DNS identity
+# for the IPv4-only container instead of relying on the host's localhost address order.
+echo '127.0.0.1 sql.workbench.test' | sudo tee -a /etc/hosts >/dev/null
 container=$(docker run -d --platform linux/amd64 -p 127.0.0.1:1433:1433 \
   -e ACCEPT_EULA=Y -e MSSQL_PID=Developer -e MSSQL_SA_PASSWORD \
   -v "$fixture/mssql.conf:/var/opt/mssql/mssql.conf:ro" \
@@ -33,7 +36,7 @@ for _ in {1..80}; do
   if sql -Q 'SELECT 1' >/dev/null 2>&1; then break; fi
   sleep 3
 done
-sql -Q "SET NOCOUNT ON; SELECT SERVERPROPERTY('ProductVersion'), SERVERPROPERTY('Edition')"
+sql -h -1 -W -Q "SET NOCOUNT ON; SELECT CONVERT(varchar(30),SERVERPROPERTY('ProductVersion')), CONVERT(varchar(80),SERVERPROPERTY('Edition'))"
 sql -Q 'CREATE DATABASE localapi_gate_ro'
 sql -Q 'CREATE DATABASE localapi_gate_rw'
 sql -Q "CREATE LOGIN workbench_reader WITH PASSWORD='$reader'"
@@ -44,7 +47,10 @@ done
 sql -Q 'ALTER DATABASE localapi_gate_ro SET READ_ONLY WITH ROLLBACK IMMEDIATE'
 export LOCALAPI_SQLSERVER_REAL=1 LOCALAPI_SQLSERVER_REAL_CONFIG="$fixture/read.json"
 jq -n --rawfile ca "$fixture/ca.crt" '
-  {host:"localhost",port:1433,user:"workbench_reader",password:env.reader,ssl:true,ca:$ca} as $c |
+  {host:"sql.workbench.test",port:1433,user:"workbench_reader",password:env.reader,ssl:true,ca:$ca} as $c |
   {disposable:true,readOnly:($c+{database:"localapi_gate_ro"}),readWrite:($c+{database:"localapi_gate_rw"})}
 ' > "$LOCALAPI_SQLSERVER_REAL_CONFIG"
-node --test tests/sqlserver-real-service.test.mjs
+sql_status=0
+node tests/enterprise-services/sqlserver-connection.mjs || sql_status=1
+node --test tests/sqlserver-real-service.test.mjs || sql_status=1
+return "$sql_status"

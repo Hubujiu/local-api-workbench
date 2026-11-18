@@ -65,9 +65,11 @@ export function validateProductPlan(plan) {
     plan.family,
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
   );
-  assert.equal(
-    plan.directory,
-    "LocalAPI-Lifecycle-Candidate-Fixture-" + plan.family,
+  assert.ok(
+    ["LocalAPI-Q-", "LocalAPI-Lifecycle-Candidate-Fixture-"].some(
+      (prefix) => plan.directory === prefix + plan.family,
+    ),
+    "Wrong isolated installation directory",
   );
   assert.ok(Array.isArray(plan.packages));
   assert.equal(plan.packages.length, 2);

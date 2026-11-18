@@ -20,14 +20,16 @@ import {
 const requireGate = (condition) => {
   if (!condition) throw Error("SQLSERVER_REAL_GATE_ASSERTION_FAILED");
 };
-async function permissions(connection) {
+async function permissions(connection, progress) {
   const port = createTediousSQLServerPort(
     sqlServerConnectionContract(connection),
   );
   let columns,
     rows = [];
   try {
+    progress("connect");
     await port.connect();
+    progress("submitted");
     await port.query(
       { sql: GATE_PERMISSIONS, parameters: [] },
       {
@@ -41,6 +43,7 @@ async function permissions(connection) {
         },
       },
     );
+    progress("returned");
     requireGate(rows.length === 1);
     requireRestrictedPermissions(rows[0]);
   } finally {
@@ -121,9 +124,13 @@ test("opt-in real SQL Server READ_ONLY prepared read and READ_WRITE dispatch rej
       ),
     );
     stage = "permissions-read-only";
-    await permissions(config.readOnly);
+    await permissions(config.readOnly, (step) => {
+      stage = "permissions-read-only-" + step;
+    });
     stage = "permissions-read-write";
-    await permissions(config.readWrite);
+    await permissions(config.readWrite, (step) => {
+      stage = "permissions-read-write-" + step;
+    });
     stage = "read-only-direct";
     const positive = await dispatch(config.readOnly);
     requireGate(!positive.rejected && positive.connections === 1);

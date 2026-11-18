@@ -85,7 +85,7 @@ def checked_build(build, digest, receipt_digest):
     validate(receipt, evidence['tables'])
     family = receipt['fixtureFamily']
     require(isinstance(family, str) and str(uuid.UUID(family)) == family and uuid.UUID(family).version == 4, 'Disposable UUIDv4 namespace required; production candidate forbidden')
-    require(receipt['directory'] == APP_DIR + '-Fixture-' + family, 'Wrong isolated installation directory')
+    require(receipt['directory'] in {'LocalAPI-Q-' + family, APP_DIR + '-Fixture-' + family}, 'Wrong isolated installation directory')
     require(receipt['upgradeCode'] == guid('fixture:' + family + ':upgrade') and receipt['productCode'] == guid('fixture:' + family + ':product:' + receipt['version']), 'Wrong package family identity')
     extracted = no_alias(build / 'extracted' / receipt['directory'])
     inventory = inventory_directory(extracted, fail_on_walk_error=True)
