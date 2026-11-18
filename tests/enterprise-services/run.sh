@@ -17,6 +17,7 @@ echo "::add-mask::$reader"
 case "$ENGINE" in
   sqlserver) source tests/enterprise-services/sqlserver.sh ;;
   oracle) source tests/enterprise-services/oracle.sh ;;
+  dameng) source tests/enterprise-services/dameng.sh ;;
   *) exit 2 ;;
 esac
 echo "REAL_DATABASE_ACCEPTANCE_PASS $ENGINE $EXPECTED_HEAD $image"

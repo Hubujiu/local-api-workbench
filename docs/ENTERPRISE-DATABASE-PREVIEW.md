@@ -10,6 +10,6 @@
 
 Oracle 和达梦每个会话授权 1 至 16 个 `SCHEMA.TABLE`，15 分钟后自动撤销。只读 SELECT 需列出字段和限定表名。两者都支持显式比较、AND 及 ORDER BY。达梦支持字符、整数、精确十进制、二进制与 NULL，超出 1,000 行或 1 MiB 时整次读取失败。CLI 的标准输入授权及 MCP stdio 的授权文件使用相同连接字段。Oracle 使用 `serverDN`，达梦使用 `ca`，两者都使用 `relations` 字符串数组。
 
-仓库提供[一次性实库验收工作流](../.github/workflows/enterprise-database-acceptance.yml)。维护者明确接受开发测试条款后，可手动触发，或为本仓库 PR 加上 `run-enterprise-database-acceptance` 标签。SQL Server Developer 和 Oracle Database Free 使用固定摘要的官方镜像、仅绑定回环地址、每次生成的凭据和测试表。两个任务分别记录服务器版本和提交。
+仓库提供[一次性实库验收工作流](../.github/workflows/enterprise-database-acceptance.yml)。维护者接受相应的开发测试条款后可手动运行，或在本仓库 PR 加上对应标签。SQL Server Developer 与 Oracle Database Free 使用 `run-enterprise-database-acceptance`，达梦开发版使用 `run-dameng-database-acceptance`。每种服务都按摘要校验厂商镜像、仅发布到回环地址，使用本次生成的凭据和测试表。结果按服务器版本和源码提交记录。
 
 独立实库验收分别运行 `tests/sqlserver-real-service.test.mjs`、`tests/oracle-real-service.test.mjs` 和 `tests/dameng-real-service.test.mjs`。达梦验收使用 `LOCALAPI_DAMENG_REAL=1`、指向本机临时连接配置文件的 `LOCALAPI_DAMENG_REAL_CONFIG` 及上述读取开关。临时库中预置 `WORKBENCH.READ_FIXTURE` 的一条记录，ID 为 1、AMOUNT 为 DECIMAL(30,3) 值 12345678901234567890.125、PAYLOAD 为二进制 00 01 FF。账号仅需读取该表。当前本机已验证驱动构建、项目授权和查询限界。DM8 真实 TLS 套接字的协议夹具还验证了按出现顺序绑定、读回精确 BIGINT、回滚、错误 CA 和拒绝明文登录。三款真实服务的结果需按实际运行记录。

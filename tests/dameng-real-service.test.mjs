@@ -14,18 +14,24 @@ test("DM8 real verified TLS, exact decimal, bind order and binary read", async (
     await readFile(process.env.LOCALAPI_DAMENG_REAL_CONFIG, "utf8"),
   );
   const sessions = new DatabaseSessions();
+  let stage = "register";
   try {
-    const { id } = sessions.register("real-fixture", {
+    const grant = {
       ...config,
       type: "dameng",
       name: "DM8 read fixture",
       relations: ["WORKBENCH.READ_FIXTURE"],
-    });
-    const result = await sessions.query("real-fixture", {
-      connectionId: id,
-      sql: "SELECT id, amount, payload FROM WORKBENCH.READ_FIXTURE WHERE id>=:p1 AND id<=:p0 ORDER BY id",
-      parameters: [1, 1],
-    });
+    };
+    const { id } = sessions.register("real-fixture", grant);
+    const select = (connectionId) =>
+      sessions.query("real-fixture", {
+        connectionId,
+        sql: "SELECT id, amount, payload FROM WORKBENCH.READ_FIXTURE WHERE id>=:p1 AND id<=:p0 ORDER BY id",
+        parameters: [1, 0],
+      });
+    stage = "verified-read";
+    const result = await select(id);
+    stage = "exact-row";
     assert.deepEqual(result.rows, [
       {
         ID: "1",
@@ -33,8 +39,23 @@ test("DM8 real verified TLS, exact decimal, bind order and binary read", async (
         PAYLOAD: { type: "blob", base64: "AAH/" },
       },
     ]);
+    stage = "revocation";
+    sessions.revoke("real-fixture", id);
+    await assert.rejects(select(id));
+    stage = "wrong-ca";
+    const bad = sessions.register("real-fixture", {
+      ...grant,
+      ca: await readFile(
+        new URL("./fixtures/sqlserver-wrong-host.crt", import.meta.url),
+        "utf8",
+      ),
+    });
+    await assert.rejects(select(bad.id));
+    console.log(
+      "DAMENG_REAL_READ_GATE_PASS verified-TLS/bind-order/exact-DECIMAL/binary/revocation/wrong-CA",
+    );
   } catch {
-    assert.fail("DM8 real-service read or exact-value comparison failed");
+    assert.fail("DM8_REAL_GATE_FAILED:" + stage);
   } finally {
     sessions.close();
   }

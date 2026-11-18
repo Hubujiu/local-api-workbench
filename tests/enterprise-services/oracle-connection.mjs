@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { setDefaultCACertificates } from "node:tls";
+import { setTimeout as delay } from "node:timers/promises";
 import driver from "oracledb";
 import { compileOracleRead } from "../../src/oracle-read-contract.mjs";
 import { executeOracleRead } from "../../src/oracle-read.mjs";
@@ -28,6 +29,26 @@ try {
     "SELECT SYS_CONTEXT('USERENV','NETWORK_PROTOCOL') FROM dual",
   );
   assert.equal(transport.rows[0][0].toLowerCase(), "tcps");
+  // A newly created Oracle table can predate the read-only snapshot's first
+  // visible DDL boundary. Wait only for this disposable fixture to be ready.
+  stage = "fixture-read-only-snapshot";
+  await client.rollback();
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    try {
+      await client.execute("SET TRANSACTION READ ONLY");
+      const ready = await client.execute(
+        "SELECT COUNT(*) FROM WORKBENCH_GATE.WORKBENCH_ORACLE_GATE",
+      );
+      assert.equal(ready.rows[0][0], 1);
+      break;
+    } catch (error) {
+      if (error.code !== "ORA-01466" || Date.now() >= deadline) throw error;
+    } finally {
+      await client.rollback();
+    }
+    await delay(500);
+  }
   stage = "prepared-select";
   const result = await client.execute(plan.sql, plan.binds, {
     fetchTypeHandler(meta) {

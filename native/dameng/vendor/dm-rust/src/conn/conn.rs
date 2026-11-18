@@ -157,7 +157,7 @@ impl Connection {
         // 2. TLS
         match sr.ssl_encrypt {
             0 => return Err(Error::Tls("server did not negotiate full-session TLS".into())),
-            1 | 4 => self.upgrade_tls().await?,
+            1 | 4 | 5 => self.upgrade_tls().await?,
             n => return Err(Error::Other(format!("unsupported ssl mode {n} (auth-only TLS needs client certificates)"))),
         }
         // 3. 加密

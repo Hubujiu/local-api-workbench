@@ -138,7 +138,7 @@ for (const trusted of [true, false])
           prefix.writeInt32LE(version.length);
           socket.write(
             frame(200, 0, Buffer.concat([prefix, version]), (h) => {
-              h.writeInt32LE(1, 20);
+              h.writeInt32LE(5, 20);
               h.writeInt32LE(1, 28);
               h.writeUInt16LE(6, 48);
             }),
