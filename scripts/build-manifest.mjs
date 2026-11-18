@@ -2,7 +2,15 @@ import { desktopLayout } from "../desktop/build-layout.mjs";
 import { writeFile } from "node:fs/promises";
 import { portableChecksums } from "./portable-integrity.mjs";
 import path from "node:path";
+import {
+  desktopSourceVersion,
+  packagedDesktopVersion,
+} from "./desktop-package-version.mjs";
 const layout = desktopLayout();
+const version = await packagedDesktopVersion(
+  layout.app,
+  await desktopSourceVersion(),
+);
 const root = layout.root;
 const checksums = await portableChecksums(root);
 await writeFile(
@@ -10,7 +18,7 @@ await writeFile(
   JSON.stringify(
     {
       product: "Local API Workbench",
-      version: "0.1.0",
+      version,
       platform: process.platform,
       arch: process.arch,
       head: process.env.BUILD_HEAD || process.env.GITHUB_SHA || "local",
