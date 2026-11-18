@@ -1,3 +1,4 @@
+import { GrpcOwnerOperations } from "./grpc-owner-operations.mjs";
 import { GrpcCreationIntents } from "./grpc-creation-intents.mjs";
 import { ProtocolSessionIntents } from "./protocol-session-intents.mjs";
 import { beginLoadReport, finishLoadReport } from "./load-report-evidence.mjs";
@@ -177,6 +178,7 @@ export async function createApp({
 
   const grpcSlots = new GrpcSlots();
   const grpcSessions = new GrpcSessions({ store, slots: grpcSlots });
+  const grpcOwnerOperations = new GrpcOwnerOperations(grpcSessions);
   const grpcCreationIntents = new GrpcCreationIntents(grpcSessions);
   const socketioSessions = new SocketIOSessions();
   const oauth = new OAuthManager();
@@ -1844,7 +1846,11 @@ export async function createApp({
               operation = parts[5];
             if (parts.length > 6) throw Error("gRPC会话路径无效");
             if (sessionId && req.method === "GET" && !operation)
-              return json(res, 200, grpcSessions.snapshot(p.id, sessionId));
+              return json(
+                res,
+                200,
+                grpcOwnerOperations.snapshot(p.id, sessionId),
+              );
             if (req.method !== "POST") throw Error("gRPC会话操作无效");
             const input = await body(req);
             if (!input || typeof input !== "object" || Array.isArray(input))
@@ -1889,16 +1895,42 @@ export async function createApp({
             grpcSessions.get(p.id, sessionId);
             if (operation === "send") {
               if (
-                Object.keys(input).some((key) => key !== "message") ||
+                Object.keys(input).some(
+                  (key) => !["message", "ownerOperation"].includes(key),
+                ) ||
                 !Object.hasOwn(input, "message")
               )
                 throw Error("gRPC会话send须且仅须message");
               return json(
                 res,
                 200,
-                grpcSessions.send(p.id, sessionId, input.message),
+                input.ownerOperation
+                  ? grpcOwnerOperations.execute(
+                      p.id,
+                      sessionId,
+                      "send",
+                      input.message,
+                      input.ownerOperation,
+                    )
+                  : grpcSessions.send(p.id, sessionId, input.message),
               );
             }
+            if (
+              operation === "half-close" &&
+              input.ownerOperation &&
+              Object.keys(input).length === 1
+            )
+              return json(
+                res,
+                200,
+                grpcOwnerOperations.execute(
+                  p.id,
+                  sessionId,
+                  "half-close",
+                  undefined,
+                  input.ownerOperation,
+                ),
+              );
             if (Object.keys(input).length)
               throw Error("gRPC会话终止操作不接受额外字段");
             if (operation === "half-close")

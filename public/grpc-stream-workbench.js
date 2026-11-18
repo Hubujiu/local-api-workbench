@@ -23,6 +23,7 @@ export function createGrpcStreamState() {
     startRecoveryId: "",
     creationIntentId: "",
     creationInstanceId: "",
+    pendingOwnerOperation: null,
     uncertainSessions: [],
     persistenceProblems: [],
     notice: "",
@@ -108,6 +109,34 @@ export function createGrpcStreamController(options) {
       else add(state.persistenceProblems, result.id);
     }
     return result;
+  }
+  function recoverOwnerOperation(value) {
+    const pending = state.pendingOwnerOperation;
+    if (!pending || pending.sessionId !== value.id) return false;
+    const ledger = value.ownerOperations;
+    if (!ledger || ledger.instanceId !== pending.instanceId) return false;
+    const receipt = ledger.receipts?.find(
+      (r) => r.operationId === pending.operationId && r.kind === pending.kind,
+    );
+    if (
+      !receipt ||
+      ![
+        pending.kind === "send" ? "locally-written" : "half-closed",
+        "failed-before-submit",
+      ].includes(receipt.state)
+    )
+      return false;
+    // Never erase independent transport failures exposed by this same snapshot.
+    if (
+      value.requestMessages.some((m) =>
+        ["unknown", "failed"].includes(m.sendState),
+      )
+    )
+      return false;
+    state.uncertainSessions = state.uncertainSessions.filter(
+      (id) => id !== value.id,
+    );
+    return true;
   }
   function edit(k, value) {
     check();
@@ -336,6 +365,7 @@ export function createGrpcStreamController(options) {
         const value = await get("grpc-sessions/" + encodeURIComponent(id));
         current();
         apply(value, id);
+        const recoveredOperation = recoverOwnerOperation(value);
         const recoveredStart =
           state.uncertainStart && state.startRecoveryId === id;
         if (recoveredStart) state.uncertainStart = false;
@@ -343,13 +373,17 @@ export function createGrpcStreamController(options) {
           persist();
         } catch (error) {
           if (recoveredStart) state.uncertainStart = true;
+          if (recoveredOperation) add(state.uncertainSessions, id);
           throw error;
         }
         state.notice =
           (recoveredStart
             ? "已按原创建回执ID只读恢复本地会话；未重新创建流。"
             : "只读刷新；") +
-          "未知发送标记保持，不代表远端业务成功。终态记录状态与网络结果分别显示。";
+          (recoveredOperation
+            ? "已核对原操作的本机回执，未重发；远端业务结果仍未知。"
+            : "未知发送标记保持，不代表远端业务成功。") +
+          "终态记录状态与网络结果分别显示。";
       },
       id,
     );
@@ -371,10 +405,33 @@ export function createGrpcStreamController(options) {
     if (s.requestMessages.some((m) => m.sendState === "pending"))
       throw Error("本地发送仍在等待回调/drain，请刷新");
     const body = kind === "send" ? { message: JSON.parse(state.message) } : {};
+    let pendingOwnerOperation = null;
+    if (options.ownerOperationReceipts) {
+      const ledger = s.ownerOperations;
+      if (
+        !ledger ||
+        !Number.isSafeInteger(ledger.sequence) ||
+        ledger.sequence < 0 ||
+        ledger.sequence >= Number.MAX_SAFE_INTEGER ||
+        typeof ledger.instanceId !== "string"
+      )
+        throw Error("请先只读刷新，取得本机操作序列，不能猜测或重发");
+      pendingOwnerOperation = {
+        sessionId: s.id,
+        instanceId: ledger.instanceId,
+        operationId: String(ledger.sequence + 1) + ":" + crypto.randomUUID(),
+        kind,
+      };
+      body.ownerOperation = {
+        instanceId: pendingOwnerOperation.instanceId,
+        operationId: pendingOwnerOperation.operationId,
+      };
+    }
     return operation(
       kind,
       async (current) => {
         add(state.uncertainSessions, s.id);
+        state.pendingOwnerOperation = pendingOwnerOperation;
         persist();
         const value = await post(
           "grpc-sessions/" + encodeURIComponent(s.id) + "/" + kind,
@@ -403,7 +460,8 @@ export function createGrpcStreamController(options) {
           ) ||
           (kind === "half-close" &&
             !["halfClosed", "halfClosing"].includes(value.requestState));
-        if (!unknown)
+        if (pendingOwnerOperation) recoverOwnerOperation(value);
+        if (!pendingOwnerOperation && !unknown)
           state.uncertainSessions = state.uncertainSessions.filter(
             (x) => x !== s.id,
           );

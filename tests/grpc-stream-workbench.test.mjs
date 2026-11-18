@@ -542,3 +542,63 @@ test("new start clears an older correlation before uncertain dispatch", async ()
   await x.c.poll();
   assert.equal(x.state.uncertainStart, true);
 });
+test("owner operation read requires exact instance/id/kind and conclusive local receipt", async () => {
+  const pending = {
+    sessionId: "s1",
+    instanceId: "instance",
+    operationId: "1:nonce",
+    kind: "send",
+  };
+  for (const [change, cleared] of [
+    [{}, true],
+    [{ state: "pending" }, false],
+    [{ state: "unknown" }, false],
+    [{ operationId: "1:other" }, false],
+    [{ kind: "half-close" }, false],
+    [{ state: "failed-before-submit" }, true],
+  ]) {
+    const { state, c: controller } = setup({
+      get: async () =>
+        view({
+          ownerOperations: {
+            instanceId: "instance",
+            sequence: 1,
+            receipts: [{ ...pending, state: "locally-written", ...change }],
+          },
+        }),
+    });
+    state.sessionId = "s1";
+    state.pendingOwnerOperation = { ...pending };
+    state.uncertainSessions = ["s1"];
+    await controller.poll();
+    assert.equal(state.uncertainSessions.length, cleared ? 0 : 1);
+  }
+});
+test("owner receipt recovery preserves unknown on restart, independent failures and persistence loss", async () => {
+  const pending = {
+    sessionId: "s1",
+    instanceId: "instance",
+    operationId: "1:nonce",
+    kind: "half-close",
+  };
+  for (const mode of ["restart", "transport-failed", "persistence-failed"]) {
+    const { state, c: controller } = setup({
+      persistEvidence: () => mode !== "persistence-failed",
+      get: async () =>
+        view({
+          requestMessages:
+            mode === "transport-failed" ? [{ sendState: "unknown" }] : [],
+          ownerOperations: {
+            instanceId: mode === "restart" ? "other" : "instance",
+            sequence: 1,
+            receipts: [{ ...pending, state: "half-closed" }],
+          },
+        }),
+    });
+    state.sessionId = "s1";
+    state.pendingOwnerOperation = { ...pending };
+    state.uncertainSessions = ["s1"];
+    await controller.poll();
+    assert.deepEqual(state.uncertainSessions, ["s1"]);
+  }
+});

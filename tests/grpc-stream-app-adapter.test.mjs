@@ -25,6 +25,11 @@ const snap = (extra = {}) => ({
   requestMessages: [],
   recordSaved: false,
   receiptState: null,
+  ownerOperations: {
+    instanceId: "33333333-3333-4333-8333-333333333333",
+    sequence: 0,
+    receipts: [],
+  },
   ...extra,
 });
 const schema = {
@@ -334,4 +339,24 @@ test("actual adapter restores entirely lost creation response by intent-only GET
   assert.equal(r.state.sessionId, "session");
   assert.equal(calls.length, 4);
   assert.doesNotMatch([...storage.values()].join(), /PROTO_SOURCE|metadata/);
+});
+test("actual adapter persists only correlated operation identifiers before lost send", async () => {
+  const { r, calls, storage } = harness();
+  r.state.session = snap();
+  r.state.sessionId = "session";
+  r.state.message = '{"text":"MESSAGE_SECRET"}';
+  const send = r.controller.send();
+  const restored = r.restore();
+  assert.equal(restored.pendingOwnerOperation.kind, "send");
+  assert.deepEqual(calls[0].body.ownerOperation, {
+    instanceId: restored.pendingOwnerOperation.instanceId,
+    operationId: restored.pendingOwnerOperation.operationId,
+  });
+  assert.doesNotMatch(
+    [...storage.values()].join(),
+    /MESSAGE_SECRET|ownerOperations|receipts/,
+  );
+  calls[0].reject(Error("lost"));
+  await send;
+  assert.deepEqual(r.state.uncertainSessions, ["session"]);
 });

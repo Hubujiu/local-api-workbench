@@ -602,6 +602,7 @@ function persistGrpcStreamEvidence(id, state) {
       startRecoveryId: state.startRecoveryId || "",
       creationIntentId: state.creationIntentId || "",
       creationInstanceId: state.creationInstanceId || "",
+      pendingOwnerOperation: state.pendingOwnerOperation || null,
       uncertainSessions: state.uncertainSessions,
       persistenceProblems: state.persistenceProblems,
     }),
@@ -624,6 +625,16 @@ function restoreGrpcStreamEvidence(id, state) {
       [value.creationIntentId, value.creationInstanceId].some(
         (x) => x !== undefined && !validId(x),
       ) ||
+      (value.pendingOwnerOperation != null &&
+        (!validId(value.pendingOwnerOperation.sessionId) ||
+          !validId(value.pendingOwnerOperation.instanceId) ||
+          typeof value.pendingOwnerOperation.operationId !== "string" ||
+          !/^[1-9][0-9]{0,15}:[a-f0-9-]{36}$/.test(
+            value.pendingOwnerOperation.operationId,
+          ) ||
+          !["send", "half-close"].includes(
+            value.pendingOwnerOperation.kind,
+          ))) ||
       typeof value.sessionIdKnown !== "boolean" ||
       typeof value.uncertainStart !== "boolean" ||
       [value.uncertainSessions, value.persistenceProblems].some(
@@ -646,6 +657,7 @@ function restoreGrpcStreamEvidence(id, state) {
     state.startRecoveryId = value.startRecoveryId || "";
     state.creationIntentId = value.creationIntentId || "";
     state.creationInstanceId = value.creationInstanceId || "";
+    state.pendingOwnerOperation = value.pendingOwnerOperation || null;
     state.notice = "已恢复操作标记；请显式读取会话核对，不会自动连接或重发。";
   } catch {
     state.uncertainStart = true;
@@ -689,6 +701,7 @@ function bindGrpcStreamWorkbench() {
   };
   bindGrpcStream(root, {
     creationIntents: true,
+    ownerOperationReceipts: true,
     state,
     definitions: owner.settings?.grpcDefinitions || [],
     assertCurrent: current,
