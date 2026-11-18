@@ -64,6 +64,7 @@ pub struct ConnectOptions {
     pub tls_ca_pem: Vec<u8>,
     pub tls_client_cert: Vec<u8>,
     pub tls_client_key: Vec<u8>,
+    pub tls_client_root: Vec<u8>,
     pub tls_ca_file: Option<std::path::PathBuf>,
     /// 校验用的服务器名（DNS 名或 IP）；默认用 `host`。URL：`ssl_server_name=db.example.com`。
     pub tls_server_name: Option<String>,
@@ -92,6 +93,7 @@ impl ConnectOptions {
             tls_ca_pem: Vec::new(),
             tls_client_cert: Vec::new(),
             tls_client_key: Vec::new(),
+            tls_client_root: Vec::new(),
             tls_ca_file: None,
             tls_server_name: None,
         }

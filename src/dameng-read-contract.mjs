@@ -71,10 +71,15 @@ export function compileDamengRead(input) {
     try {
       if (!new X509Certificate(certs[0]).checkPrivateKey(createPrivateKey(key)))
         fail();
+      identity = { clientCert: c.clientCert, clientKey: key };
+      if (certs.length > 1) {
+        const last = new X509Certificate(certs.at(-1));
+        if (last.ca && last.checkIssued(last) && last.verify(last.publicKey))
+          identity.clientRoot = certs.at(-1);
+      }
     } catch {
       fail();
     }
-    identity = { clientCert: c.clientCert, clientKey: key };
   }
   text(c.password);
   const port = c.port === undefined ? 5236 : c.port;

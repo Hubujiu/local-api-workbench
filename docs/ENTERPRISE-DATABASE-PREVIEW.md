@@ -12,7 +12,7 @@ Oracle 和达梦每个会话授权 1 至 16 个 `SCHEMA.TABLE`，15 分钟后自
 
 仓库提供[一次性实库验收工作流](../.github/workflows/enterprise-database-acceptance.yml)。维护者接受相应的开发测试条款后可手动运行，或在本仓库 PR 加上对应标签。SQL Server Developer 与 Oracle Database Free 使用 `run-enterprise-database-acceptance`，达梦开发版使用 `run-dameng-database-acceptance`。每种服务都按摘要校验厂商镜像、仅发布到回环地址，使用本次生成的凭据和测试表。结果按服务器版本和源码提交记录。
 
-在 DM8 的双向 TLS 配置中，手动连接和 MCP 授权分别接收 `clientCert` 与 `clientKey`。证书链第一张证书须匹配未加密的 PEM 私钥。工作台校验匹配关系，通过当前原生进程的标准输入传递身份。授权列表只显示名称、连接 ID、授权表和有效期。
+在 DM8 的双向 TLS 配置中，手动连接和 MCP 授权分别接收 `clientCert` 与 `clientKey`。按叶证书、中间证书顺序填写客户端证书链，第一张须匹配未加密的 PEM 私钥。默认使用连接的 CA 校验客户端链。客户端使用独立签发机构时，在该链末尾附上其自签根证书，服务端仍使用原来的 CA 验证。原生助手校验证书有效期、用途和签发链，确认 TLS 握手实际选择了客户端身份后才发送数据库登录。授权列表仅返回连接元数据。[达梦通信加密说明](https://eco.dameng.com/document/dm/zh-cn/pm/communication-encryption.html)
 
 本机隔离环境使用厂商 2025-02-06 的 x86_64 开发镜像与独立 Docker 守护进程，DM 服务报告版本 `03134284336-20250117-257733-20132`、协议版本 32。服务启用 `ENABLE_ENCRYPT=1`，最低 TLS 为 1.2。厂商 DISQL 与工作台的只读账号都读到同一条数据，含十进制 `12345678901234567890.125` 和二进制 `00 01 FF`。归档 SHA-256 为 `d11acaca7097631675f63875d3438c7c7c28647c64329998c80eaabbd0952b37`。[达梦官方下载](https://eco.dameng.com/download/)
 

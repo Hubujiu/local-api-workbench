@@ -252,7 +252,7 @@ try {
         readFile(new URL("./fixtures/" + name, import.meta.url), "utf8");
       const [ca, clientCert, clientKey] = await Promise.all([
         fixture("localhost.crt"),
-        fixture("dameng-loopback.crt"),
+        fixture("dameng-client.crt"),
         fixture("localhost.key"),
       ]);
       secrets.push(clientKey.trim());

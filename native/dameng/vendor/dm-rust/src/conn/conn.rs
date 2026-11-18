@@ -231,7 +231,7 @@ impl Connection {
             Err(_) if !self.opts.tls_verify => ServerName::try_from("dameng").unwrap(),
             Err(e) => return Err(Error::Tls(format!("invalid TLS server name {host:?}: {e}"))),
         };
-        let t = crate::conn::stream::tls::connect(tcp, name, &self.opts.tls_ca_pem, &self.opts.tls_client_cert, &self.opts.tls_client_key).await?;
+        let t = crate::conn::stream::tls::connect(tcp, name, &self.opts.tls_ca_pem, &self.opts.tls_client_cert, &self.opts.tls_client_key, &self.opts.tls_client_root).await?;
         self.stream = Stream::Tls(Box::new(t));
         Ok(())
     }

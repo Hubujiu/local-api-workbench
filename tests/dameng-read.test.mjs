@@ -96,7 +96,7 @@ test("DM8 mutual TLS accepts a matching certificate and key only as a pair", asy
   const load = (name) =>
     readFile(new URL("./fixtures/" + name, import.meta.url), "utf8");
   const [clientCert, clientKey] = await Promise.all([
-    load("dameng-loopback.crt"),
+    load("dameng-client.crt"),
     load("localhost.key"),
   ]);
   const unrelatedKey = generateKeyPairSync("ec", {
@@ -112,6 +112,13 @@ test("DM8 mutual TLS accepts a matching certificate and key only as a pair", asy
     compile({ clientCert, clientKey }).config.clientCert,
     clientCert,
   );
+  const clientRoot = await load("localhost.crt");
+  const separateChain = compile({
+    clientCert: clientCert + "\n" + clientRoot,
+    clientKey,
+  }).config;
+  assert.equal(separateChain.clientRoot, clientRoot.trim());
+  assert.equal(separateChain.ca, base.connection.ca);
   for (const identity of [
     { clientCert },
     { clientKey },

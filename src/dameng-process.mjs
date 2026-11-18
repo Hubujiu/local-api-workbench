@@ -165,7 +165,8 @@ export function runDamengProcess(input, { signal } = {}) {
   const plan = compileDamengRead(input);
   if (signal?.aborted) return Promise.reject(Error(cancelled));
   if (!damengPreviewEnabled()) return Promise.reject(Error(unavailable));
-  const { host, port, user, password, ca, clientCert, clientKey } = plan.config;
+  const { host, port, user, password, ca, clientCert, clientKey, clientRoot } =
+    plan.config;
   const parameters = [];
   // Only the compiler's quoted identifiers and generated parameter slots reach this step.
   const sql = plan.sql.replace(/:p(\d+)/g, (_, index) => {
@@ -180,6 +181,7 @@ export function runDamengProcess(input, { signal } = {}) {
     ca,
     clientCert,
     clientKey,
+    clientRoot,
     sql,
     columns: plan.columns,
     parameters,

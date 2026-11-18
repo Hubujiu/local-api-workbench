@@ -54,6 +54,8 @@ struct Request {
     client_cert: String,
     #[serde(default, rename = "clientKey")]
     client_key: String,
+    #[serde(default, rename = "clientRoot")]
+    client_root: String,
     sql: String,
     columns: Vec<String>,
     parameters: Vec<Json>,
@@ -115,6 +117,7 @@ async fn run(request: Request) -> Result<Vec<u8>> {
     opts.tls_ca_pem = request.ca.into_bytes();
     opts.tls_client_cert = request.client_cert.into_bytes();
     opts.tls_client_key = request.client_key.into_bytes();
+    opts.tls_client_root = request.client_root.into_bytes();
     opts.login_encrypt = false; // The driver requires verified full-session TLS before LOGIN.
     opts.app_name = "Local API Workbench".into();
     opts.connect_timeout = Duration::from_secs(2);
