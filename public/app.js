@@ -1,3 +1,4 @@
+import { bindMCPDatabase } from "./mcp-database-view.js";
 import {
   capturePlanHistoryFocus,
   restorePlanHistoryFocus,
@@ -1945,6 +1946,18 @@ function bind() {
         copy: (text) => navigator.clipboard.writeText(text),
       })
     : null;
+  if (mcpPanel) {
+    const updateService = updateMCPPanel;
+    const updateDatabase = bindMCPDatabase(mcpPanel, {
+      projectId: project.id,
+      config: mcpState,
+      request: api,
+    });
+    updateMCPPanel = (config) => {
+      updateService(config);
+      updateDatabase(config);
+    };
+  }
   const visualizationFrame = $("#response-visualization");
   if (visualizationFrame) {
     try {

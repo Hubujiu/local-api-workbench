@@ -1,3 +1,4 @@
+import { exerciseMCPDatabaseUI } from "./helpers/mcp-database-ui.mjs";
 import { exercisePlanHistoryRefreshUI } from "./helpers/plan-history-refresh-ui.mjs";
 import { exerciseAgentRegisterLoginUI } from "./helpers/agent-register-login-ui.mjs";
 import { exerciseGrpcStreamUI } from "./helpers/grpc-stream-ui.mjs";
@@ -1412,6 +1413,7 @@ try {
   assert(await page.locator("#mcp-copy-config").isDisabled());
   await page.locator("#toast").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-mcp-access-panel.png" });
+  await exerciseMCPDatabaseUI(page, root);
   await page.locator("#mcp-config").click();
   await page.locator("#mcp-enabled").uncheck();
   await page.getByRole("button", { name: "关闭", exact: true }).click();
