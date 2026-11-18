@@ -233,6 +233,7 @@ function persistSocketIOEvidence(id, state) {
     socketioEvidenceKey(id),
     JSON.stringify({
       version: 1,
+      pendingAckRecovery: state.pendingAckRecovery || null,
       uncertainStart: !!state.uncertainStart,
       uncertainSessions: state.uncertainSessions,
       stopProblems: state.stopProblems,
@@ -250,6 +251,14 @@ function restoreSocketIOEvidence(id, state) {
     const value = JSON.parse(raw);
     if (
       value.version !== 1 ||
+      (value.pendingAckRecovery != null &&
+        (typeof value.pendingAckRecovery !== "object" ||
+          [
+            value.pendingAckRecovery.sessionId,
+            value.pendingAckRecovery.ackId,
+          ].some(
+            (x) => typeof x !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(x),
+          ))) ||
       typeof value.uncertainStart !== "boolean" ||
       !Array.isArray(value.uncertainSessions) ||
       value.uncertainSessions.some(
@@ -266,6 +275,12 @@ function restoreSocketIOEvidence(id, state) {
           !/^[A-Za-z0-9_-]{1,200}$/.test(value.sessionId)))
     )
       throw Error("无效恢复记录");
+    state.pendingAckRecovery = value.pendingAckRecovery
+      ? {
+          sessionId: value.pendingAckRecovery.sessionId,
+          ackId: value.pendingAckRecovery.ackId,
+        }
+      : null;
     state.uncertainStart = value.uncertainStart;
     state.uncertainSessions = value.uncertainSessions;
     state.stopProblems = value.stopProblems;

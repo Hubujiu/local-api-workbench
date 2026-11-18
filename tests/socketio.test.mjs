@@ -469,3 +469,35 @@ test("Socket.IO cumulative budget closes the transport and preserves explicit bo
   assert(Buffer.byteLength(JSON.stringify(result.events)) <= 2 * 1024 * 1024);
   assert.equal(sessions.get("a", s.id).socket, null);
 });
+test("throwing incoming ack callback records unknown and consumes ID without replay", async (t) => {
+  const f = await fixture(t),
+    sessions = new SocketIOSessions();
+  t.after(() => sessions.close());
+  const started = sessions.start("a", {
+    ...f.definition,
+    auth: { token: "fixture-token" },
+  });
+  await wait(() => sessions.snapshot("a", started.id).state === "open");
+  let calls = 0;
+  const internal = sessions.get("a", started.id);
+  internal.pending.set("fixture-ack", {
+    deadline: Infinity,
+    callback: () => {
+      calls++;
+      throw Error("fixture callback failure");
+    },
+  });
+  assert.throws(() =>
+    sessions.acknowledge("a", started.id, { ackId: "fixture-ack", args: [] }),
+  );
+  assert.equal(
+    sessions
+      .snapshot("a", started.id)
+      .events.find((e) => e.ackId === "fixture-ack").localSubmission,
+    "unknown",
+  );
+  assert.throws(() =>
+    sessions.acknowledge("a", started.id, { ackId: "fixture-ack", args: [] }),
+  );
+  assert.equal(calls, 1);
+});

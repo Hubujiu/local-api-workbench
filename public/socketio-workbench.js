@@ -59,6 +59,7 @@ export function createSocketIOState() {
     incomingAckId: "",
     incomingAckArgs: "[]",
     incomingAckReceipts: [],
+    pendingAckRecovery: null,
     expectAck: true,
     ackTimeoutMs: 5000,
     sessions: [],
@@ -97,6 +98,7 @@ export function selectSocketIO(state, definition) {
     stopProblems: state.stopProblems,
     stopReceipts: state.stopReceipts,
     incomingAckReceipts: state.incomingAckReceipts,
+    pendingAckRecovery: state.pendingAckRecovery,
   };
   Object.assign(state, createSocketIOState(), keep);
   if (definition) {
@@ -354,7 +356,42 @@ export function createSocketIOController(options) {
         const value = await get("socketio-sessions/" + encodeURIComponent(id));
         current();
         state.session = snapshot(value, id);
-        state.notice = "已只读刷新；不会清除未知发送标记，或补存执行记录。";
+        const pending = state.pendingAckRecovery;
+        const confirmed =
+          pending?.sessionId === id &&
+          !state.uncertainStart &&
+          !state.stopProblems.includes(id) &&
+          state.session.events.some(
+            (e) =>
+              e.direction === "ack-sent" &&
+              e.ackId === pending.ackId &&
+              e.localSubmission === "submitted",
+          );
+        if (confirmed) {
+          if (
+            !state.incomingAckReceipts.some(
+              (e) => e.sessionId === id && e.ackId === pending.ackId,
+            )
+          ) {
+            if (state.incomingAckReceipts.length >= 1000)
+              throw Error("确认回执达到上限，保留未知标记");
+            state.incomingAckReceipts.push({ ...pending });
+          }
+          state.uncertainSessions = state.uncertainSessions.filter(
+            (x) => x !== id,
+          );
+          state.pendingAckRecovery = null;
+          try {
+            persist();
+          } catch (error) {
+            uncertain("ack", id);
+            state.pendingAckRecovery = pending;
+            throw error;
+          }
+        }
+        state.notice = confirmed
+          ? "已只读核对原入站确认的本机提交回执，未重发；不代表远端收到或业务成功。"
+          : "已只读刷新；未知发送标记保持，不会补存执行记录。";
       },
       id,
     );
@@ -383,6 +420,8 @@ export function createSocketIOController(options) {
     return operation(
       "send",
       async (current) => {
+        state.pendingAckRecovery = null;
+        persist();
         const result = await post(
           "socketio-sessions/" + encodeURIComponent(s.id) + "/send",
           body,
@@ -463,6 +502,8 @@ export function createSocketIOController(options) {
     return operation(
       "ack",
       async (current) => {
+        state.pendingAckRecovery = { sessionId: s.id, ackId };
+        persist();
         const result = await post(
           "socketio-sessions/" + encodeURIComponent(s.id) + "/ack",
           { ackId, args },
@@ -477,6 +518,7 @@ export function createSocketIOController(options) {
           throw Error("确认回执无效");
         // Suppress this consumed ID even before the next read. This is local receipt, not delivery proof.
         state.incomingAckReceipts.push({ sessionId: s.id, ackId });
+        state.pendingAckRecovery = null;
         state.result = {
           ackId,
           locallySubmitted: true,
@@ -490,6 +532,7 @@ export function createSocketIOController(options) {
           persist();
         } catch (e) {
           uncertain("ack", s.id);
+          state.pendingAckRecovery = { sessionId: s.id, ackId };
           throw e;
         }
         state.notice =
@@ -512,6 +555,7 @@ export function createSocketIOController(options) {
     let storageFailed = false;
     if (!parallel) setBusy(true, "stop");
     state.stopPending = { token, id };
+    state.pendingAckRecovery = null;
     uncertain("send", id);
     if (!state.stopProblems.includes(id)) state.stopProblems.push(id);
     try {
