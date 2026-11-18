@@ -47,9 +47,11 @@ try {
   & icacls $childEvidence /grant ("*" + $account.SID.Value + ':(OI)(CI)M') | Out-Null
   if ($LASTEXITCODE) { throw 'Cannot grant evidence write access' }
   $credential = [PSCredential]::new(("$env:COMPUTERNAME\" + $name),$password)
+  $nodePath = (& node -p 'process.execPath').Trim()
+  if ($LASTEXITCODE -ne 0 -or -not [IO.File]::Exists($nodePath)) { throw 'Cannot locate the selected Node runtime' }
   $arguments = @('-NoProfile','-NonInteractive','-File',('"' + $PSCommandPath + '"'),'-Child',
     '-Plan',('"' + $Plan + '"'),'-PlanSha',$PlanSha,'-Evidence',('"' + $childEvidence + '"'),
-    '-Node',('"' + (Get-Command node -CommandType Application).Source + '"'))
+    '-Node',('"' + $nodePath + '"'))
   if ($Rollback) { $arguments += '-Rollback' }
   $process = Start-Process -FilePath (Get-Command pwsh).Source -ArgumentList $arguments -Credential $credential -LoadUserProfile -Wait -PassThru -WindowStyle Hidden -WorkingDirectory $PWD.Path -RedirectStandardOutput (Join-Path $childEvidence 'child-stdout.log') -RedirectStandardError (Join-Path $childEvidence 'child-stderr.log')
   if ($process.ExitCode -ne 0) { throw "Standard-user installed journey failed ($($process.ExitCode))" }

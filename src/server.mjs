@@ -1,3 +1,4 @@
+import { listenForWorkbench } from "./workbench-listener.mjs";
 import { GrpcOwnerOperations } from "./grpc-owner-operations.mjs";
 import { SessionCreationIntents } from "./grpc-creation-intents.mjs";
 import { sqlServerPreviewEnabled } from "./sqlserver-provider.mjs";
@@ -2962,6 +2963,31 @@ export async function createApp({
       grpcSessions,
     })))
   );
+  try {
+    await listenForWorkbench(server, port);
+  } catch (error) {
+    if (
+      error.code !== "EADDRINUSE" ||
+      requestedPort !== 0 ||
+      !persistedMCP?.remember
+    )
+      throw error;
+    await mcpPublication.run(async () => {
+      mcp.enabled = false;
+      mcpToken = "";
+      mcpWarning =
+        "保存的本地端口被占用，已改用新端口并关闭MCP。请重新授权并复制连接配置。";
+      await listenForWorkbench(server, 0);
+      await saveMCPConfig(path.resolve(root), {
+        ...mcp,
+        token: "",
+        port: server.address().port,
+      });
+    });
+  }
+
+  // Only the final listener owns application shutdown. Rebinding an OS-assigned
+  // port above must not tear down protocol sessions or agent permissions.
   server.on("close", () => {
     closeManualImports();
     void autoImports.close();
@@ -2989,37 +3015,6 @@ export async function createApp({
       Promise.resolve(protocolShutdown).then(() => callback?.(error));
     });
   };
-  const listen = (listenPort) =>
-    new Promise((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(listenPort, "127.0.0.1", () => {
-        server.off("error", reject);
-        resolve();
-      });
-    });
-  try {
-    await listen(port);
-  } catch (error) {
-    if (
-      error.code !== "EADDRINUSE" ||
-      requestedPort !== 0 ||
-      !persistedMCP?.remember
-    )
-      throw error;
-    await mcpPublication.run(async () => {
-      mcp.enabled = false;
-      mcpToken = "";
-      mcpWarning =
-        "保存的本地端口被占用，已改用新端口并关闭MCP。请重新授权并复制连接配置。";
-      await listen(0);
-      await saveMCPConfig(path.resolve(root), {
-        ...mcp,
-        token: "",
-        port: server.address().port,
-      });
-    });
-  }
-
   let appClose;
   const close = () =>
     (appClose ??= new Promise((resolve, reject) => {
