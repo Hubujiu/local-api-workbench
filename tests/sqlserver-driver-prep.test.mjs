@@ -449,3 +449,54 @@ test("exact decimal reaches Tedious as NVarChar, never Decimal Number", async ()
   assert.deepEqual(f.requests[1].parameters, [["p0", TYPES.NVarChar, value]]);
   assert.equal(f.connections.length, 1);
 });
+
+test("exact output reaches Tedious boundary only as generated VarChar projections", async () => {
+  const value = "9007199254740993.123456789012345678";
+  const stamp = "2026-11-18T02:03:04.1234567+05:30";
+  const f = fixture({
+    query(r) {
+      if (r.sql.includes("FROM sys.columns")) {
+        result(
+          r,
+          [
+            col("name", "NVarChar", 256),
+            col("type", "NVarChar", 256),
+            ...["precision", "scale", "computed", "encrypted"].map((n) =>
+              col(n, "IntN", 4),
+            ),
+          ],
+          [
+            ["amount", "decimal", 38, 18, 0, 0],
+            ["stamp", "datetimeoffset", 34, 7, 0, 0],
+          ],
+        );
+      } else {
+        assert.match(r.sql, /CONVERT\(varchar\(41\), \[amount\]\)/);
+        assert.match(r.sql, /CONVERT\(varchar\(34\), \[stamp\], 127\)/);
+        result(
+          r,
+          [col("amount", "VarChar", 41), col("stamp", "VarChar", 34)].map(
+            (c) => ({ ...c, collation: { codepage: "CP1252" } }),
+          ),
+          [[value, stamp]],
+        );
+      }
+    },
+  });
+  const output = await runSQLServerReadPreparation(
+    {
+      ...input,
+      sql: "SELECT amount, stamp FROM dbo.items",
+      parameters: [],
+    },
+    { factory: f.factory, exactOutput: true },
+  );
+  assert.deepEqual(Object.values(output.rows[0]), [value, stamp]);
+  assert.deepEqual(f.requests[1].parameters, [
+    ["p0", TYPES.NVarChar, "dbo"],
+    ["p1", TYPES.NVarChar, "items"],
+    ["p2", TYPES.NVarChar, "amount"],
+    ["p3", TYPES.NVarChar, "stamp"],
+  ]);
+  assert.equal(f.connections.length, 1);
+});

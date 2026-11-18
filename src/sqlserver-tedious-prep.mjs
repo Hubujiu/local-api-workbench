@@ -269,7 +269,8 @@ export function createTediousSQLServerPort(
       });
     },
     query(plan, sink) {
-      if (!connected || stopped || active || queryCount >= 2)
+      // READ_ONLY probe, optional bounded catalog, one data SELECT. No retries.
+      if (!connected || stopped || active || queryCount >= 3)
         return Promise.reject(failure());
       queryCount++;
       return new Promise((resolve, reject) => {

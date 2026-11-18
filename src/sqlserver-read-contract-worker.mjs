@@ -114,6 +114,7 @@ function compileSQLServerRead(sql, parameters) {
     ast.columns.length > 128
   )
     fail("explicit bounded columns required");
+  const projection = [];
   const names = [],
     columns = ast.columns.map((c) => {
       object(c, ["expr", "as"]);
@@ -121,6 +122,7 @@ function compileSQLServerRead(sql, parameters) {
       const name = c.as ?? c.expr.column;
       id(name);
       names.push(name.toLowerCase());
+      projection.push({ column: c.expr.column, name });
       return expression + (c.as == null ? "" : ` AS ${id(c.as)}`);
     });
   if (new Set(names).size !== names.length) fail("duplicate output names");
@@ -174,6 +176,8 @@ function compileSQLServerRead(sql, parameters) {
     sql: `SELECT TOP (1001) ${columns.join(", ")} FROM ${from}${predicate}${order}`,
     parameters: parameters.map(({ decimal, ...binding }) => binding),
     requiredDatabaseUpdateability: "READ_ONLY",
+    projection,
+    tail: ` FROM ${from}${predicate}${order.replace(/\[([A-Za-z_][A-Za-z_0-9]*)\]/g, (_, name) => id(table.table) + "." + id(name))}`,
     schema: table.db,
     table: table.table,
     limit: 1000,

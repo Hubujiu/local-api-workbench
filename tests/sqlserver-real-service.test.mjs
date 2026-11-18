@@ -144,6 +144,32 @@ test("opt-in real SQL Server READ_ONLY prepared read and READ_WRITE dispatch rej
       if (match) exactResult(result);
       else requireGate(result.rows.length === 0 && result.truncated === false);
     }
+    stage = "exact-decimal-temporal-output-process";
+    for (const id of [1, 2]) {
+      const output = await runSQLServerPreparationProcess(
+        {
+          connection: config.readOnly,
+          sql: "SELECT exact_amount, exact_stamp, exact_offset, exact_clock, exact_day FROM dbo.workbench_sqlserver_gate WHERE id=@p0",
+          parameters: [id],
+        },
+        { exactOutput: true },
+      );
+      requireGate(output.rows.length === 1 && output.truncated === false);
+      requireGate(
+        JSON.stringify(Object.values(output.rows[0])) ===
+          JSON.stringify(
+            id === 1
+              ? [
+                  "9007199254740993.123456789012345678",
+                  "2026-11-18T02:03:04.1234567",
+                  "2026-11-18T02:03:04.1234567+05:30",
+                  "02:03:04.1234567",
+                  "0001-01-01",
+                ]
+              : [null, null, null, null, null],
+          ),
+      );
+    }
     stage = "read-write";
     const negative = await dispatch(config.readWrite);
     requireGate(
