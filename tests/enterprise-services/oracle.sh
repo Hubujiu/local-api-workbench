@@ -63,4 +63,7 @@ jq -n --rawfile ca "$fixture/ca.crt" '
   {disposable:true,connection:{host:"localhost",port:2484,database:"FREEPDB1",user:"WORKBENCH_READER",
   password:env.reader,ssl:true,serverDN:"CN=localhost",ca:$ca}}
 ' > "$LOCALAPI_ORACLE_REAL_CONFIG"
-node --test tests/oracle-real-service.test.mjs
+oracle_status=0
+node tests/enterprise-services/oracle-connection.mjs || oracle_status=1
+node --test tests/oracle-real-service.test.mjs || oracle_status=1
+return "$oracle_status"

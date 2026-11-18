@@ -62,8 +62,11 @@ test("opt-in actual Oracle Thin TCPS read-only exact NUMBER gate", async (t) => 
       "SELECT id, exact_amount FROM workbench_gate.workbench_oracle_gate WHERE id=:p0",
       [1],
     );
+    stage = "fixture-row-count";
     assert.equal(result.rows.length, 1);
+    stage = "fixture-id";
     assert.equal(result.rows[0].ID, "1");
+    stage = "fixture-decimal";
     assert.equal(
       result.rows[0].EXACT_AMOUNT,
       "9007199254740993.123456789012345678",

@@ -1,5 +1,6 @@
 # Sourced by run.sh on a fresh, explicitly opted-in hosted VM.
-image=mcr.microsoft.com/mssql/server@sha256:e10cd49443c94dbdcb7a050987db22ff4d8c87052ac53768abe1ed848d3fcef6
+# SQL Server 2022 CU22 on Ubuntu 22.04 (verified by manifest digest).
+image=mcr.microsoft.com/mssql/server@sha256:db9a8fe3098b7e8bbde41106bdc7caee942e97124e5fdb71b872ca208de3092d
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=Workbench-Test-CA \
   -keyout "$fixture/ca.key" -out "$fixture/ca.crt" 2>/dev/null
 openssl req -new -newkey rsa:2048 -nodes -subj /CN=localhost \
