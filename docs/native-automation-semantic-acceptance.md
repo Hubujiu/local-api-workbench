@@ -48,3 +48,10 @@ node --test tests/native-automation-boundaries.test.mjs tests/native-automation-
 本轮没有更改泛化错误合同。给公开预览增加“可迁移项/数量”会涉及 owner/MCP 结构与敏感内容展示合同，
 不能绕过当前整块拒绝，或让用户误以为已经支持自动化。
 测试通过仅证明上述失败关闭边界，不代表原生执行/往返兼容已通过。
+
+## 来源保管增量（不改变上述执行门禁）
+
+新增[惰性来源档案工具](NATIVE-AUTOMATION-SOURCE-ARCHIVE.md)：可为完整非空现代 JSON
+生成经过完整性校验的不可执行档案、打印不含原值的静态引用/顺序问题清单，并逐字节恢复原文件。
+这是真实的来源保存与检查能力，不是 `automated_testings` 的执行或语义迁移实现。
+默认导入、手动预览和原版同版本验收缺口仍保持上述边界。

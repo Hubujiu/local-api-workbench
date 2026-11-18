@@ -1,3 +1,4 @@
+import { nativeAutomationArchiveFormat } from "./native-automation-source-archive.mjs";
 import { isPostmanEnvironmentDocument } from "./postman-environment-import.mjs";
 import { isDeepStrictEqual, types } from "node:util";
 import { manualImportDigest, manualImportID } from "./manual-import-token.mjs";
@@ -1007,6 +1008,8 @@ export async function prepareManualImportSource(
     document = ordinaryCopy(parseImportDocumentText(document));
   }
   if (!object(document)) fail("文档须为JSON/YAML对象");
+  if (document.format === nativeAutomationArchiveFormat)
+    fail("原生自动化来源档案不可导入或执行");
   const postmanEnvironment = isPostmanEnvironmentDocument(document);
   const directory = document.format === "apipost-offline-directory-v1";
   const openapi = Boolean(document.openapi || document.swagger);

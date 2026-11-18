@@ -184,3 +184,16 @@
 `tests/native-automation-rejection.test.mjs` 先将 automated_testings 清空，确认同一项目外壳可导入七个 API；再覆盖非空项目的直接转换、owner 整体导入/手动预览、官方 SDK MCP stdio 整体导入/预览。每次拒绝后检查两项目对象、完整持久化文件字节及本地 HTTP 计数不变，并重新打开 Store 核对。失败预览响应明确不含 token（包括 MCP 文本中的 JSON）；另用该外壳的受支持空 automation 来源取得有效预览，再替换为非空来源申请 apply，验证 owner/MCP 不能挪用原 token 写入变更后的来源；拒绝可能发生在来源转换器之前。历史、来源档案和授权相关持久化状态不应被这类拒绝改变。
 
 这批验收不启用原生 automation，也不把同样的字段值视为已证运行映射。后续实现仍须先补齐具体语义，而不是索取笼统的运行许可或再次重复“没有非空样本”。
+
+## 2026-11-18 官方 runtime8 包的只读复核
+
+核对官方 npm [apipost-runtime8](https://www.npmjs.com/package/apipost-runtime8) `3.1.9` 的 registry 元数据与 tarball；SHA-512 integrity 完全匹配，SHA-1 为 `4dca7d8012bbcf062ef70511a5316d4b84d29bc9`。仅解读 README、类型声明、许可证和发布 JavaScript，没有安装、执行或复制其实现进入 Workbench。
+
+- `dist/index.js` SHA256 `eeb8ba558f72965ba0edd544052c0cb1b16b7ad328c30099acb46248f8967f55`。
+- `types/types.d.ts` SHA256 `6e7692e23f701e329b5ca024c2a41af8b7c0eac5464b9fe3035bfcbfec9d4c08`。
+- README / 类型声明消费 `test_events` 和已嵌套的 `children`；发布 JS 约 2457 行依 auto_sync 或单 HTTP 场景取 collection，否则走 apiData，仍可带原父层依赖。约 3013 行递归处理已有子树，不是已证的保存扁平图装配器；约 4356 行消费 iterationCount/sleep/iterationData 运行选项。
+- 该发布 JS 没有 `automated_testings`、`event_list`、`parent_event_id`、`execute_count` 字面量。此有界静态观察不能排除动态属性或其它模块，不能推导保存设置的转换。
+- registry/package 许可证字段标记 ISC，随包 LICENSE 文本却标记 MIT；若未来拟复用，必须先解决许可证范围。此次未复用。
+
+[官方 CLI 仓库入口](https://github.com/Apipost-Team/apipost-cli-pro)在本次读取中未提供公开可读 HEAD（网页404、git请求身份）；没有尝试登录、使用示例凭据或调用产品服务。
+官方[单机执行计划](https://offline.apipost.net/help/executions/)与[在线版8.2.7更新日志](https://wiki.apipost.cn/docs/changelog/)可用于区分产品线能力，但均不代替序列化与 saved→runner 的具体证据。新增惰性来源档案和静态清单见 [来源保管合同](NATIVE-AUTOMATION-SOURCE-ARCHIVE.md)，不改变非空自动化执行失败关闭边界。

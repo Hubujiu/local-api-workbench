@@ -1,3 +1,4 @@
+import { nativeAutomationArchiveFormat } from "./native-automation-source-archive.mjs";
 import { validateLoadRuns } from "./load-report-evidence.mjs";
 import {
   isPostmanEnvironmentDocument,
@@ -3174,6 +3175,8 @@ export function importIntoProject(
       original = parseImportDocumentText(original);
     }
   }
+  if (original?.format === nativeAutomationArchiveFormat)
+    throw Error("原生自动化来源档案不可导入或执行；请使用来源恢复命令");
   if (isPostmanEnvironmentDocument(original)) {
     if (
       sync ||

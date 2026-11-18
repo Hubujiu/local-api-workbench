@@ -39,6 +39,8 @@ Git 共享的是定义，不是完整备份。提交前检查 URL、环境、认
 
 当前集成候选已接入 SQL Server、Oracle 和达梦的只读查询，并提供按项目的 GUI 和 MCP 授权。各数据库的支持版本、传输和实测范围见[企业数据库说明](docs/ENTERPRISE-DATABASE-PREVIEW.md)。非空 `automated_testings` 的装配、部分原生交换语义以及同版本原厂运行对照仍有缺口，详见[交付矩阵](docs/DELIVERY-STATUS.md)。
 
+非空原生自动化现可使用[惰性来源档案工具](docs/NATIVE-AUTOMATION-SOURCE-ARCHIVE.md)做完整性检查、静态引用清单和逐字节恢复；这不启用导入或执行，也不代表同版本原厂兼容。
+
 ## 已实现的核心
 
 - 多级目录树与整棵子树原子改名/移除；可明确开启祖先参数/认证/脚本继承，默认保持精确目录，旧快照不变。
