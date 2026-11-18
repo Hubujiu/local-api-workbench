@@ -1633,7 +1633,14 @@ export async function createApp({
             // A typo or unsupported scope must never silently become a full backup.
             // Keep diagnostics fixed: query names/values may themselves be secrets.
             for (const key of u.searchParams.keys()) {
-              if (!["format", "modelNameMode", "databaseMode"].includes(key))
+              if (
+                ![
+                  "format",
+                  "modelNameMode",
+                  "databaseMode",
+                  "automationMode",
+                ].includes(key)
+              )
                 throw Error("项目导出不接受此查询参数");
               if (u.searchParams.getAll(key).length !== 1)
                 throw Error("项目导出查询参数不得重复");
@@ -1656,6 +1663,10 @@ export async function createApp({
               u.searchParams.get("modelNameMode") ?? undefined;
             const databaseMode =
               u.searchParams.get("databaseMode") ?? undefined;
+            const automationMode =
+              u.searchParams.get("automationMode") ?? undefined;
+            if (automationMode !== undefined && format !== "apipost")
+              throw Error("原厂自动化回放选项仅支持 Apipost JSON");
             if (
               !apipostFormat &&
               (modelNameMode !== undefined || databaseMode !== undefined)
@@ -1676,6 +1687,7 @@ export async function createApp({
                   ? exportApipost(p, {
                       modelNameMode,
                       databaseMode,
+                      automationMode,
                     })
                   : format === "openapi"
                     ? exportOpenAPI(p)

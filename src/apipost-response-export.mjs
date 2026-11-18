@@ -31,7 +31,10 @@ function schema(value, depth = 0, rewriteSchema) {
   visit(value, depth);
   return structuredClone(value);
 }
-export function exportApipostResponses(request, { rewriteSchema } = {}) {
+export function exportApipostResponses(
+  request,
+  { rewriteSchema, cloudAutomation } = {},
+) {
   const examples = request.examples || [],
     responses = request.responses || [];
   if (
@@ -113,12 +116,16 @@ export function exportApipostResponses(request, { rewriteSchema } = {}) {
           .slice(0, 24),
       raw_parameter: [],
       raw: example.body,
-      headers: Object.entries(headers).map(([key, value], i) => ({
-        param_id: `response_${index}_${i}`,
-        key,
-        value,
-        is_checked: 1,
-      })),
+      // The native importer reconstructs this header from expect.content_type.
+      // A second synthetic header row is rejected by the 8.2.7 cloud importer.
+      headers: Object.entries(headers)
+        .filter(([key]) => !cloudAutomation || key !== "content-type")
+        .map(([key, value], i) => ({
+          param_id: `response_${index}_${i}`,
+          key,
+          value,
+          is_checked: 1,
+        })),
       expect: {
         is_default: -1,
         verify_type: "schema",

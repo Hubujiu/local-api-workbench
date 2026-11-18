@@ -4,6 +4,10 @@
 
 运行 `node scripts/delivery-index.mjs` 获取此刻 main 的提交、源码树，以及同一次成功构建的三平台下载地址、外层 ZIP 摘要和到期时间。按索引返回的提交核对包内清单。[下载与校验](PORTABLE-QUICKSTART.md) · [main 构建记录](https://github.com/Hubujiu/local-api-workbench/actions/workflows/ci.yml?query=branch%3Amain)
 
+## 本地迁移候选
+
+Apipost 8.2.7 联网版手动 HTTP 用例已通过同版本原厂桌面与 Workbench 回环执行对照。整项目出口支持保留来源引用，或将副本与轮次转换为原厂可重放的独立 HTTP 步骤和固定次数循环。支持范围、复现方式与原厂重导差异见[迁移验收记录](native-automation-semantic-acceptance.md)。
+
 ## 0.1.1 功能与验收
 
 以下记录对应整合 PR 的最终源码树 `47fdb8329893d3cace23af374f116462030cd319`，合入 main 的提交为 `f3254e6aa61d399acc8b4d1485d787a537a75251`。[整合 PR #280](https://github.com/Hubujiu/local-api-workbench/pull/280)
@@ -13,7 +17,7 @@
 | 协议恢复 | TCP、WebSocket、gRPC 流和 Socket.IO 的创建、发送或确认可按项目重查回执。Socket.IO 的真实网络测试覆盖创建和发送响应丢失、重复提交拒绝。[最终候选三平台 CI](https://github.com/Hubujiu/local-api-workbench/actions/runs/44268568032) | 各平台的浏览器与便携包重启记录可在对应构建查看。 |
 | MCP 数据库 | 设置页支持按项目授予、列出和撤销临时权限。SQL Server 2022 CU22 验证了 TLS、精确 DECIMAL、时区偏移与只读限制，Oracle 26ai Free 23.26.4 验证了 TCPS、精确 NUMBER、撤权和证书拒绝。DM8 开发版在本机隔离环境通过双向 TLS、精确 DECIMAL、二进制、绑定顺序、撤权和错误 CA 实测。[SQL Server 与 Oracle 主线实库](https://github.com/Hubujiu/local-api-workbench/actions/runs/44273438063) | 平台、版本、达梦实测记录和复现命令见[整合 PR](https://github.com/Hubujiu/local-api-workbench/pull/280)及[企业数据库接入](ENTERPRISE-DATABASE-PREVIEW.md)。 |
 | Windows | 每用户 MSI 已在 Windows Server x64 和 Windows 11 ARM 普通账号（运行 x64 包）完成 0.1.0 首装、升级失败恢复、升级到 0.1.1、卸载和重装，保留原项目。[最终候选的安装记录](https://github.com/Hubujiu/local-api-workbench/actions/runs/44268567980) | 最终发布者签名介质和独立普通用户 x64 机器的正式发行验收。 |
-| 原生往返 | 冻结继承认证、仅 schema 响应定义、冻结数据库任务来源和顺序、Redis GET/HGET/EXISTS、MongoDB findone 已实现。两种导出格式均有跨两代重导入的回归测试。 | 原厂同版本运行证据及非空原生自动化图的设置、引用与调度语义 |
+| 原生往返 | 冻结继承认证、仅 schema 响应定义、冻结数据库任务来源和顺序、Redis GET/HGET/EXISTS、MongoDB findone 已实现。两种导出格式均有跨两代重导入的回归测试。 | 本地后续候选已验证 8.2.7 手动 HTTP 图；活动定时任务、数据集和分支见上方迁移记录 |
 
 数据库字段与实库复现步骤见[企业数据库接入](ENTERPRISE-DATABASE-PREVIEW.md)。签名和草稿入口见 [Windows 正式发行](WINDOWS-RELEASE.md)。
 
@@ -65,7 +69,7 @@
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | Apipost 单机版基础对照                 | [官方单机帮助](https://offline.apipost.net/help/)列出常用 API 工作流，区分其未保留的测试角色自动化/在线协作，并明确新增 MCP。不能因此推断没有 CLI/MCP | 按用户已约定基础功能逐项对照，网页描述不是本产品验收证据                                        |
 | Workbench 原生 Agent 执行计划          | 用户明确要求，现行[单机 AI 执行计划](https://offline.apipost.net/help/executions/)也列入对照，独立验收正式 MCP、可视化计划、执行证据和人可读界面      | 不因单机对照产品的范围而取消；现有局部旅程仍须精确整体验收                                      |
-| 联网版非空 automated_testings 格式迁移 | [联网版定价页](https://www.apipost.cn/pricing/)把自动化列在个人版能力中；该页面不能用于推导单机版合同或免费格式兼容许可                               | 当前额外格式迁移仍不支持；已有结构样本但未闭合执行/往返语义，继续按明确用户范围推进而非冒称兼容 |
+| 联网版非空 automated_testings 格式迁移 | [联网版定价页](https://www.apipost.cn/pricing/)把自动化列在个人版能力中；该页面不能用于推导单机版合同或免费格式兼容许可                               | 该历史阶段仅有结构样本；8.2.7 的可执行子集见上方本地迁移候选 |
 
 总览和联网定价页面于 2026-11-15 只读核对；2026-11-17 再核实单机 MCP 2.0 与 AI 执行计划官方专页。单机产品定位、联网服务定价、Workbench 用户需求是三个不同来源，不互相覆盖。
 
@@ -86,7 +90,7 @@
 | 项目                        | 当前分类                       | 下一步与完成门槛                                                                                                                                                       |
 | --------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 最终集成验收                | 待验证                         | 冻结一个最终组合 head/tree；对项目创建、导入、编辑、保存冲突/恢复、计划执行、协议、历史、导出、重启和错误状态建立逐场景索引。不能以单支或部分成功代替完整产品          |
-| 原生非空 automated_testings | 当前非空入口不支持，且语义缺证 | 已有公开非空结构样本，但缺同版本图装配/设置/引用与往返执行证据；见[语义验收边界](native-automation-semantic-acceptance.md)，未闭合前保持原子拒绝                       |
+| 原生非空 automated_testings | 该历史候选按整块拒绝处理 | 后续同版本 HTTP 用例及保留拒绝的范围见[迁移验收记录](native-automation-semantic-acceptance.md)                       |
 | SQL Server provider（历史） | 当时尚未注册       | `src/sqlserver-read-prep.mjs` 明确为 unregistered WIP；先明确合法运行条件，再完成注册/界面合同、边界测试和真实只读服务验收                                             |
 | Oracle / 达梦（历史）      | 当时尚未接入项目             | 确认合法驱动/运行条件，逐项实现并验证；SQLite 等额外能力不抵消这些缺口                                                                                                 |
 | 安装器、签名与公证          | 未实现安装发行闭环/未验        | 便携包不等于安装器；按[清洁机器安装发行协议](INSTALLER-RELEASE-ACCEPTANCE.md)分别核最终介质签名、首次安装、升级、卸载保留数据与重装。账号/证书/条款单独授权，无 bypass |

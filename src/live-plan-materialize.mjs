@@ -1,6 +1,7 @@
 import { snapshotPlan } from "./core.mjs";
 import { freezeServiceBinding } from "./environments.mjs";
 import { liveRequestId } from "./live-plan-reference.mjs";
+import { readAutomationMetadata } from "./apipost-automation.mjs";
 import { mapPlanLeaves, planLeaves } from "./plan-repeat.mjs";
 import { validatePostmanCollections } from "./postman-collection-scopes.mjs";
 import { isApipostFunctionSource } from "../public/apipost-function-template.js";
@@ -73,6 +74,8 @@ export function materializeLivePlan(
   // caller-supplied plans not yet saved in the project, before service resolution.
   validatePostmanCollections({ ...detached, plans: [plan] });
   const bindings = [];
+  const automation = readAutomationMetadata(plan.apipostAutomation);
+  const sourceSteps = new Map(automation?.events.map((e) => [e.stepId, e]));
   const steps = mapPlanLeaves(plan.steps, (step) => {
     const id = liveRequestId(step);
     if (id === undefined) return structuredClone(step);
@@ -84,12 +87,17 @@ export function materializeLivePlan(
     if (source.postmanCollectionId !== template.postmanCollectionId)
       throw Error("实时计划 Postman collection 身份已变化，须重新创建任务模板");
     assertSupportedLiveSource(source);
+    const nativeLive = sourceSteps.get(step.id);
+    if (automation && (!nativeLive?.live || nativeLive.requestId !== id))
+      throw Error(
+        "Apipost automated_testings 实时步骤的目标与保存的来源不一致",
+      );
     const fresh = freezeServiceBinding(detached, source, {
-      includeSharedScripts: false,
+      includeSharedScripts: Boolean(nativeLive),
     });
     assertSupportedLiveSource(fresh);
     const sourceURLMode = fresh.scriptURLMode;
-    for (const key of taskFields) {
+    for (const key of nativeLive ? [] : taskFields) {
       delete fresh[key];
       if (Object.hasOwn(template, key))
         fresh[key] = structuredClone(template[key]);

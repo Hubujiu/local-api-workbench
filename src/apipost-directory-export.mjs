@@ -125,6 +125,8 @@ export function exportApipostDirectory(project, options = {}) {
   const flowIds = new Set();
   let totalSteps = 0;
   const flows = plans.map((input) => {
+    if (Object.hasOwn(input, "apipostAutomation"))
+      throw Error("联网版自动化来源须导出为 Apipost JSON 或项目备份");
     // Historical MCP comparison data has no lossless native export mapping yet.
     // Reject by property presence before snapshotting; never silently erase it.
     if (Object.hasOwn(input, "importedNativeFlowSource"))

@@ -132,9 +132,14 @@ export function exportMCPProject(project, args, requestId) {
   validateMCPProjectArguments(args);
   format(args.format);
   resolveModelNameMode(args.modelNameMode);
+  if (args.automationMode !== undefined && args.format !== "apipost")
+    throw Error("原厂自动化回放选项仅支持 Apipost JSON");
   const document =
     args.format === "apipost"
-      ? exportApipost(project, { modelNameMode: args.modelNameMode })
+      ? exportApipost(project, {
+          modelNameMode: args.modelNameMode,
+          automationMode: args.automationMode,
+        })
       : exportApipostDirectory(project, { modelNameMode: args.modelNameMode });
   boundedDocument(document);
   boundedDirectoryDocument(document);
