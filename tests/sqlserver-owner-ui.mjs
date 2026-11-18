@@ -21,6 +21,9 @@ const app = await createApp({ root, port: 0 });
 let browser;
 const secret = "INERT_GUI_SQLSERVER_PASSWORD_9210";
 try {
+  // Exercise the real empty-project startup, not the optional sample HTTP editor.
+  const project = await app.store.create("SQL Server GUI fixture");
+  assert.equal(project.requests.length, 0);
   browser = await chromium.launch({
     executablePath: process.env.PLAYWRIGHT_BUNDLED
       ? undefined
@@ -32,8 +35,11 @@ try {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   const open = async () => {
+    // init strips #token. Reusing launchUrl directly can be only a fragment
+    // navigation, leaving the previous database page mounted without rerunning init.
+    await page.goto("about:blank");
     await page.goto(app.launchUrl);
-    await page.getByRole("button", { name: "发 送", exact: true }).waitFor();
+    await page.locator("#project-select").waitFor();
     await page.locator('.rail [data-page="settings"]').click();
     const response = page.waitForResponse((r) =>
       r.url().endsWith("/api/database-capabilities"),
