@@ -1,4 +1,8 @@
 import {
+  prepareApipostDatabaseExport,
+  readDatabaseExportMode,
+} from "./apipost-database-export.mjs";
+import {
   exportFrozenTaskSource,
   verifyFrozenTaskSource,
 } from "./apipost-flow-task-source-export.mjs";
@@ -42,6 +46,12 @@ export function exportApipostDirectory(project, options = {}) {
   const base = { ...project, plans: extended.derivedPlans };
   const document = exportApipost(base, options);
   const projectId = document.project_id;
+  const databaseExport = prepareApipostDatabaseExport(
+    project,
+    readDatabaseExportMode(options),
+    projectId,
+    apipostExportId,
+  );
   const scoped = (kind, value) =>
     apipostExportId(kind, projectId + "\0" + value);
   const timestamp =
@@ -169,7 +179,7 @@ export function exportApipostDirectory(project, options = {}) {
         request.scriptDialect !== "apipost8"
       )
         throw Error("原生目录步骤脚本须为Apipost方言");
-      const taskSource = exportFrozenTaskSource(request);
+      const taskSource = exportFrozenTaskSource(request, databaseExport);
       const source = request.importedScriptTasks;
       const snapshotRequest = { ...request, beforeScript: "", afterScript: "" };
       delete snapshotRequest.importedScriptTasks;
@@ -451,11 +461,20 @@ export function exportApipostDirectory(project, options = {}) {
   const ordinary = verifyExtendedProtocolExport(project, check);
   if (ordinary.plans.length !== plans.length)
     throw Error("原生目录计划回读不完整");
+  const connectionMap = new Map(
+    [...databaseExport.connections].map(([id, native]) => [
+      id,
+      check.settings?.apipostDatabases?.find(
+        (entry) => entry.sourceId === native.id,
+      )?.id,
+    ]),
+  );
   for (const [i, plan] of ordinary.plans.entries())
     for (const [j, step] of plan.steps.entries()) {
       verifyFrozenTaskSource(
         plans[i].steps[j].request.importedNativeTaskSource,
         step.request.importedNativeTaskSource,
+        connectionMap,
       );
       if (
         step.request.beforeScript !== flows[i].steps[j].pre_script ||

@@ -34,3 +34,7 @@ The established executions/flows semantics are documented in
 ADR-OFFLINE2-EXECUTIONS.md. This increment adds no original application capture
 and does not establish nonempty legacy automated_testings graph semantics,
 database provenance rebinding or arbitrary native-project compatibility.
+
+Follow-up: bounded PostgreSQL/MySQL source rebinding is now implemented under
+the explicit credential-free profile. See
+[the database source ADR](ADR-FROZEN-DATABASE-TASK-SOURCE-EXPORT.md).
