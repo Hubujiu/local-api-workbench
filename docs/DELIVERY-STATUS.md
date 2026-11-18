@@ -1,24 +1,29 @@
 # 交付状态与验收索引
 
-## 当前集成候选
+## 当前主线与整合证据
 
-开发与逐次验收集中在 [整合 PR #280](https://github.com/Hubujiu/local-api-workbench/pull/280)。主线的实时便携下载及 SHA-256 可由 `node scripts/delivery-index.mjs` 读取。下面的历史检查点保留各自的版本和适用范围。
+[整合 PR #280](https://github.com/Hubujiu/local-api-workbench/pull/280) 已进入 `main` 的 `f3254e6aa61d399acc8b4d1485d787a537a75251`。该合并提交的文件树与候选 `25865de` 相同，但合并前的候选验收和 [main 自身运行](https://github.com/Hubujiu/local-api-workbench/actions/runs/44273358459) 分开记账。主线实时便携下载及 SHA-256 由 `node scripts/delivery-index.mjs` 读取，只有 main 检查与产物可用时才作为当前主线下载。
 
 | 范围 | 已实现与实测 | 尚需的证据 |
 | --- | --- | --- |
 | 协议恢复 | TCP、WebSocket、gRPC 流和 Socket.IO 的创建、发送或确认可以根据各自的回执重查。Socket.IO 的真实网络用例覆盖创建和发送响应丢失、重复提交拒绝。 | 当前集成提交的三平台界面与桌面运行 |
-| MCP 数据库 | 设置页支持按项目授予、列出和撤销临时权限。SQL Server 2022 CU22 的 TLS、精确 DECIMAL、时区偏移和只读限制，以及 Oracle 26ai Free 23.26.4 的 TCPS、精确 NUMBER、撤权和证书拒绝，已在同一提交通过[实库检查](https://github.com/Hubujiu/local-api-workbench/actions/runs/44260395802/job/134652032306)。DM8 开发版已在本机隔离环境通过双向 TLS、精确 DECIMAL、二进制、绑定顺序、撤权及错误 CA 实测。 | 各提交对应的平台、版本和运行记录见整合 PR；复现步骤见[企业数据库接入](ENTERPRISE-DATABASE-PREVIEW.md)。 |
-| Windows | 已开发每用户 MSI 的安装、升级、失败回滚、卸载、重装、正式产品系列及开始菜单入口。0.1.0 → 0.1.1 的完整候选操作已在托管 Windows 成功。[原始运行](https://github.com/Hubujiu/local-api-workbench/actions/runs/44234347878/job/134573838947) | 当前候选的普通用户运行、最终签名介质及正式环境实测 |
+| MCP 数据库 | 设置页支持按项目授予、列出和撤销临时权限。SQL Server 2022 CU22 与 Oracle 26ai Free 23.26.4 在同一候选 `25865de` 通过 [SQL Server](https://github.com/Hubujiu/local-api-workbench/actions/runs/44268567987/job/134679118512) 和 [Oracle](https://github.com/Hubujiu/local-api-workbench/actions/runs/44268567987/job/134679118995) 实库测试，涵盖 TLS、精确数值及各自的只读边界。DM8 双向 TLS、精确小数、二进制、绑定顺序、撤权及错误 CA 的隔离实库记录见[企业数据库接入](ENTERPRISE-DATABASE-PREVIEW.md)。 | `25865de` 的托管工作流[跳过 DM8](https://github.com/Hubujiu/local-api-workbench/actions/runs/44268567987/job/134679121257)，不计为托管实库复验。 |
+| Windows | `25865de` 的 [Windows 11 ARM64 普通账户测试](https://github.com/Hubujiu/local-api-workbench/actions/runs/44268567980/job/134681877835)使用 x64 测试 MSI，通过首次安装、升级失败后恢复旧版、正常升级、卸载及重装；完整记录见下。 | 原生 Windows 11 x64 普通账户及最终签名介质仍需完整验收。 |
 | 原生往返 | 冻结继承认证、仅 schema 响应定义、冻结数据库任务来源和顺序、Redis GET/HGET/EXISTS、MongoDB findone 已实现。两种导出格式均有跨两代重导入的回归测试。 | 原厂同版本运行证据及非空原生自动化图的设置、引用与调度语义 |
 
 数据库字段与实库复现步骤见[企业数据库接入](ENTERPRISE-DATABASE-PREVIEW.md)。签名和草稿入口见 [Windows 正式发行](WINDOWS-RELEASE.md)。
+
+### 合并前的精确候选验收
+
+- 集成候选 `25865de0def4919b238ecc77a7cb948210d6596a`：[required 汇总](https://github.com/Hubujiu/local-api-workbench/actions/runs/44268568032/job/134686951127)及同轮 47 个任务均通过。该工作流不包含独立的 Windows 产品安装旅程或企业实库验收。
+- Windows 普通账户候选 `25865de0def4919b238ecc77a7cb948210d6596a`：下载核对过的[原始证据](https://github.com/Hubujiu/local-api-workbench/actions/runs/44268567980/artifacts/14414410105) SHA-256 为 `d8883bc7f9b4f180c8a4aa19666fb5ad2fad94b10af2b3974e26156e0cc56b71`。记录显示宿主为 ARM64，软件包为 x64，账号非管理员，且未验证签名。故障注入返回预期的 1603；安装器随后使用原始介质成功恢复 0.1.0，验证了旧版启动以及项目和历史记录保留，之后正常升级、卸载、重装并最终清理。此结果只覆盖该候选和环境，不替代原生 x64 或发行签名验收。
 
 ## 历史候选记录
 
 
 更新：2026-11-18。当前单机版基线、免费边界和待闭环验收见[单机功能对照](STANDALONE-PARITY.md)。下列各次历史 CI 仍按原日期记账。这里区分“已实现”“精确候选已验证”和“完整产品已交付”。当前仍在开发，尚未正式发行；不按 PR 数量或测试数量计算完成率。
 
-## 当前整合基线
+## #280 合并前的主线基线
 
 - `main` 精确提交 `f59b11ac3dc96c567db155dd871ef08ba445937c`，tree `4869acc4fc433b16b1d6b62750c310884c6f2f96`，由 [#264](https://github.com/Hubujiu/local-api-workbench/pull/264) 合并；[主线 CI](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449) 47/47 jobs 成功，46 个产物。不能把当前文档 PR 或后续功能 PR 视为继承这一结果。
 - [Windows 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852416)、[macOS 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852333)、[Linux 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852444)及[汇总闸门](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134215707659) 均成功。平台包、外层摘要和到期时间见[单一下载入口](PORTABLE-QUICKSTART.md)。这不是原生 Windows 生命周期、完整产品验收或正式发行。
