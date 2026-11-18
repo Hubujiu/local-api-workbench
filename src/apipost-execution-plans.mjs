@@ -1,6 +1,7 @@
 import { normalizeImportedNativeFlowSource } from "./imported-native-flow-source.mjs";
 import { normalizeImportedNativeTaskSource } from "./imported-native-task-source.mjs";
 import { createHash } from "node:crypto";
+import { importExtendedApipostAuth } from "./apipost-auth-import.mjs";
 import {
   importModernApipost,
   apipostResourceFactory,
@@ -52,13 +53,30 @@ function stepAuthentication(value) {
   ];
   fields(value, known);
   if (["noauth", "none"].includes(value.type)) return { type: "noauth" };
+  if (["kv", "oauth1", "digest"].includes(value.type)) {
+    if (value.type === "kv") {
+      fields(value.kv, ["in", "key", "value"]);
+      if (
+        ["in", "key", "value"].some((key) => typeof value.kv[key] !== "string")
+      )
+        throw Error("原版步骤私密键值对字段必须是字符串");
+    }
+    importExtendedApipostAuth(value);
+    return {
+      type: value.type,
+      [value.type]: structuredClone(value[value.type]),
+    };
+  }
   const keys =
     value.type === "basic"
       ? ["username", "password"]
       : value.type === "bearer"
         ? ["key"]
         : null;
-  if (!keys) throw Error("原版步骤认证目前仅支持显式无需认证、Basic和Bearer");
+  if (!keys)
+    throw Error(
+      "原版步骤认证仅支持无需认证、Basic、Bearer、私密键值对、OAuth1和Digest",
+    );
   const config = value[value.type];
   fields(config, keys);
   if (keys.some((key) => typeof config[key] !== "string"))
