@@ -3,8 +3,8 @@
 `prepareSQLServerReadInput` remains an inert compilation contract. The shared
 strict snapshot also feeds the separately [gated owned provider](sqlserver-preview-provider.md).
 SQL Server is disabled by default; an explicit host preview opt-in permits owner
-HTTP, temporary sessions and owner-issued MCP grants. CLI/stdio files and GUI
-selection remain closed. No successful real SQL Server/TLS/TDS or Windows
+HTTP, temporary sessions and owner-issued MCP grants. CLI/stdio files remain closed; GUI selection is exposed only after a host capability
+check. No successful real SQL Server/TLS/TDS or Windows
 acceptance is claimed.
 
 The flat input requires `type: "sqlserver"` and accepts only host, port, user,

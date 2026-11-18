@@ -1,3 +1,4 @@
+import { sqlServerPreviewEnabled } from "./sqlserver-provider.mjs";
 import { ProtocolSessionIntents } from "./protocol-session-intents.mjs";
 import { beginLoadReport, finishLoadReport } from "./load-report-evidence.mjs";
 import { requirePostmanEnvironmentText } from "./postman-environment-import.mjs";
@@ -823,6 +824,16 @@ export async function createApp({
       if (parts[0] === "api") {
         if (req.headers["x-local-token"] !== token)
           return json(res, 403, { error: "Session token required" });
+        if (parts[1] === "database-capabilities") {
+          res.setHeader("Cache-Control", "no-store");
+          if (u.pathname !== "/api/database-capabilities" || u.search)
+            return json(res, 400, { error: "能力查询路径无效" });
+          if (req.method !== "GET")
+            return json(res, 405, { error: "Method not allowed" });
+          return json(res, 200, {
+            sqlserverReadOnlyPreview: sqlServerPreviewEnabled(),
+          });
+        }
         if (parts[1] === "protocol-session-intents") {
           res.setHeader("Cache-Control", "no-store");
           try {
