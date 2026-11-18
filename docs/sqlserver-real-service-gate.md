@@ -1,6 +1,7 @@
 # SQL Server 真实服务验收入口（未执行）
 
-本入口只补内部准备路径的真实服务门禁，不注册 provider，不代表 GUI/MCP 已支持。
+本入口同时覆盖内部准备路径和显式预览 provider 的真实服务门禁，不代表已通过验收或 GUI 已支持。
+测试显式启用真实服务后临时开启进程级预览门禁，并通过公共 dispatcher / 会话路径读取同一 fixture。
 不安装/下载 SQL Server、不接受厂商条款、不创建服务/账号/数据库，不自动运行 DDL 或清理。
 没有合法的隔离服务与配置时保持未验，不能用合成 TDS peer 或跳过替代真实验收。
 
@@ -9,7 +10,7 @@
 仅在已获授权、许可条件已处理的独立可丢弃 SQL Server 实例上准备。勿指向用户现有业务数据库。
 
 1. 管理员预先创建 `localapi_gate_ro` 与 `localapi_gate_rw` 两个隔离空库。在各库执行
-   `tests/fixtures/sqlserver-real-service.sql`，建立同一合成表及一行固定数据；脚本遇已有对象会拒绝，不覆盖。
+   `tests/fixtures/sqlserver-real-service.sql`，建立同一合成表及两行固定数据（精确类型与 NULL）；脚本遇已有对象会拒绝，不覆盖。
 2. 管理员建立专用 SQL 登录和两个库中对应用户，仅授权该表 SELECT；不要使用 sa、sysadmin、
    db_owner 或业务登录。无需提供管理员凭据给测试。先配置用户权限，再把 ro 库设为 READ_ONLY，
    rw 库保持 READ_WRITE；此状态操作由有权管理员执行，测试不执行 ALTER DATABASE。
@@ -56,11 +57,13 @@ LOCALAPI_SQLSERVER_REAL=1 LOCALAPI_SQLSERVER_REAL_CONFIG=/absolute/private/gate.
 门禁先以真实连接核对 SELECT 权限及已列举的高权限/表写权限为零，再执行：
 
 - READ_ONLY：真实内部编译→Tedious→查询，匹配固定列与合成行；另验证原隔离进程准备入口返回一致结果。
+- 精确 decimal 参数：通过子进程路径匹配固定的 `decimal(38,18)` 合成值，并确认最后一位相邻值不匹配。旧 fixture 需要由操作员在已批准的隔离环境重新准备；测试不会迁移现有表。
+- 公共 preview dispatcher：精确 decimal/temporal/NULL 输出；同一 DatabaseSessions provider 正例、撤销后拒绝，以及 READ_WRITE 拒绝。
 - READ_WRITE：真实服务必须返回 READ_WRITE。包裹真实 factory 的只观察记录器确认仅调用一次导出的
   `SQLSERVER_READONLY_PROBE`，不调用提交的 SELECT，且不发布结果、无重连。
 
 负例是**真实适配器调用边界的应用派发证据，不是服务器审计/抓包证明**。权限检查也不是所有可能权限的
-全面安全审计，操作员必须实际保持最小权限。该门禁不证明服务端取消、所有类型、跨平台、授权撤销或 provider 集成。
+全面安全审计，操作员必须实际保持最小权限。该门禁即使通过，也不证明服务端取消、所有类型或跨平台实机兼容；运行中撤销仍需进一步真实服务验收。
 测试使用无 UDF/触发器的固定表，不概括为任意只读查询都没有外部副作用。
 
 当前环境没有 SQL Server 服务/配置；本新增真实服务分支未执行。只有显式运行成功的

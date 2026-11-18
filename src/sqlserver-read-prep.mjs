@@ -1,3 +1,8 @@
+import {
+  exactCatalogPlan,
+  exactProjectionPlan,
+  validateExactResult,
+} from "./sqlserver-exact-output.mjs";
 // Unregistered WIP: no default factory, no driver import, no public entrypoint.
 import {
   sqlServerConnectionContract,
@@ -106,12 +111,15 @@ function collector() {
 // closed settles only after real transport closure. Tests use a fake port only.
 export async function runSQLServerReadPreparation(
   input,
-  { factory, signal } = {},
+  { factory, signal, exactOutput = false } = {},
 ) {
   check(signal);
   input = snapshotSQLServerInput(input);
   const config = sqlServerConnectionContract(input.connection),
     plan = await compileSQLServerRead(input.sql, input.parameters);
+  if (typeof exactOutput !== "boolean")
+    throw Error("Invalid exact-output mode");
+  plan.exactOutput = exactOutput;
   check(signal);
   return runCompiledSQLServerPreparation({ config, plan }, { factory, signal });
 }
@@ -229,7 +237,13 @@ export async function runCompiledSQLServerPreparation(
     )
       throw Error("Database is not verified READ_ONLY");
     check(signal);
-    result = await query(plan.sql, plan.parameters);
+    if (plan.exactOutput) {
+      const catalog = exactCatalogPlan(plan);
+      const metadata = await query(catalog.sql, catalog.parameters);
+      const projected = exactProjectionPlan(plan, metadata);
+      result = await query(projected.sql, plan.parameters);
+      validateExactResult(result, projected.columns);
+    } else result = await query(plan.sql, plan.parameters);
     check(signal);
   } catch (e) {
     error = signal?.aborted

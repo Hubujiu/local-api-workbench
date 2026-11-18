@@ -1,3 +1,7 @@
+import {
+  requireSQLServerPreview,
+  validateSQLServerSession,
+} from "./sqlserver-provider.mjs";
 import { validateSQLiteFilename } from "./sqlite-filename.mjs";
 import { validateMySQLConnectionText } from "./mysql-connection-text.mjs";
 import { explicitPostgresOptions } from "./postgres-client.mjs";
@@ -59,8 +63,31 @@ export class DatabaseSessions {
     if (!input || typeof input !== "object" || Array.isArray(input))
       throw Error("连接配置无效");
     const type = input.type || "sqlite";
+    if (type === "sqlserver") {
+      requireSQLServerPreview();
+      if (
+        Object.keys(input).some(
+          (key) =>
+            ![
+              "type",
+              "name",
+              "bindingId",
+              "host",
+              "port",
+              "user",
+              "password",
+              "database",
+              "ca",
+              "ssl",
+            ].includes(key),
+        ) ||
+        input.port === 0
+      )
+        throw Error("SQL Server 预览仅接受显式只读连接字段");
+    }
     if (
       ![
+        "sqlserver",
         "sqlite",
         "postgres",
         "mysql",
@@ -102,6 +129,7 @@ export class DatabaseSessions {
     config.ssl = input.ssl === true;
     if (type === "postgres") explicitPostgresOptions(config);
     if (type === "mysql") validateMySQLConnectionText(config);
+    if (type === "sqlserver") validateSQLServerSession(config);
     if (input.ssh !== undefined) {
       if (!["postgres", "mysql", "redis"].includes(type))
         throw Error("SSH 通道目前仅支持 PostgreSQL/MySQL/Redis");

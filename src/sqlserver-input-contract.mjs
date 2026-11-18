@@ -1,4 +1,4 @@
-// Experimental inert adapter: no driver import, execution, grant or provider.
+// Strict input normalization; importing this module never opens a connection.
 import { types } from "node:util";
 import { sqlServerConnectionContract } from "./sqlserver-driver-contract.mjs";
 import { compileSQLServerRead } from "./sqlserver-read-contract.mjs";
@@ -21,11 +21,7 @@ const check = (signal) => {
     });
 };
 
-// Returns a compiled candidate only. It grants no authority and must not be
-// accepted as a public execution token. Default port is undefined -> 1433 only.
-export async function prepareSQLServerReadInput(input, { signal } = {}) {
-  check(signal);
-  let config, compilation;
+export function snapshotSQLServerFlatInput(input) {
   try {
     if (
       !input ||
@@ -48,9 +44,22 @@ export async function prepareSQLServerReadInput(input, { signal } = {}) {
     const connection = {};
     for (const key of connectionFields)
       if (Object.hasOwn(values, key)) connection[key] = values[key];
+    return { connection, sql: values.sql, parameters: values.parameters };
+  } catch {
+    throw invalid();
+  }
+}
+
+// Returns a compiled candidate only. It grants no authority and must not be
+// accepted as a public execution token. Default port is undefined -> 1433 only.
+export async function prepareSQLServerReadInput(input, { signal } = {}) {
+  check(signal);
+  let config, compilation;
+  try {
+    const { connection, sql, parameters } = snapshotSQLServerFlatInput(input);
     config = sqlServerConnectionContract(connection);
     // Compiler synchronously snapshots parameters before starting its worker.
-    compilation = compileSQLServerRead(values.sql, values.parameters);
+    compilation = compileSQLServerRead(sql, parameters);
     const plan = await compilation;
     check(signal);
     return { config, plan };

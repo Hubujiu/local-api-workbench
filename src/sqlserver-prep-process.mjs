@@ -1,4 +1,5 @@
-// Internal and unregistered. Each invocation owns one child and never replays.
+// Internal supervisor; host-gated preview is the only public provider wrapper.
+// Each invocation owns one child and never replays.
 import { fork } from "node:child_process";
 import { performance } from "node:perf_hooks";
 import { compileSQLServerRead } from "./sqlserver-read-contract.mjs";
@@ -16,8 +17,13 @@ const error = (code, reason = code) =>
 const check = (signal) => {
   if (signal?.aborted) throw error("SQLSERVER_PREP_CANCELLED");
 };
-export async function runSQLServerPreparationProcess(input, { signal } = {}) {
+export async function runSQLServerPreparationProcess(
+  input,
+  { signal, exactOutput = false } = {},
+) {
   check(signal);
+  if (typeof exactOutput !== "boolean")
+    throw error("SQLSERVER_PREP_INVALID_MODE");
   if (owners.size >= budget.capacity || [...owners].some((o) => o.quarantined))
     throw error("SQLSERVER_PREP_BUSY");
   const owner = { quarantined: false };
@@ -28,6 +34,7 @@ export async function runSQLServerPreparationProcess(input, { signal } = {}) {
     input = snapshotSQLServerInput(input);
     const config = sqlServerConnectionContract(input.connection);
     const plan = await compileSQLServerRead(input.sql, input.parameters);
+    plan.exactOutput = exactOutput;
     check(signal);
     const remaining = budget.total - (performance.now() - started);
     if (remaining <= 0) throw error("SQLSERVER_PREP_TIMEOUT");

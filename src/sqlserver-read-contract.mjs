@@ -53,7 +53,36 @@ function parameter(value, index) {
   )
     return { name: `p${index}`, type: "Int", value };
   if (value && typeof value === "object") {
-    value = object(value, ["type", "value"]);
+    value = object(value, ["type", "value", "precision", "scale"]);
+    if (value.type === "decimal") {
+      const { precision, scale } = value;
+      if (
+        !Number.isInteger(precision) ||
+        precision < 1 ||
+        precision > 38 ||
+        !Number.isInteger(scale) ||
+        scale < 0 ||
+        scale > precision ||
+        typeof value.value !== "string" ||
+        !/^-?(0|[1-9]\d*)(\.\d+)?$/.test(value.value) ||
+        value.value.length > 41
+      )
+        fail("invalid exact decimal");
+      const [whole, fraction = ""] = value.value.replace(/^-/, "").split(".");
+      if (
+        (whole === "0" ? 0 : whole.length) > precision - scale ||
+        fraction.length > scale
+      )
+        fail("decimal would overflow or round");
+      return {
+        name: `p${index}`,
+        type: "NVarChar",
+        value: value.value,
+        decimal: { precision, scale },
+      };
+    }
+    if (Object.hasOwn(value, "precision") || Object.hasOwn(value, "scale"))
+      fail("unexpected numeric metadata");
     if (
       value.type === "int64" &&
       typeof value.value === "string" &&
@@ -64,7 +93,7 @@ function parameter(value, index) {
         return { name: `p${index}`, type: "BigInt", value: value.value };
     }
   }
-  fail("parameter requires null/string/bool/int32 or exact int64");
+  fail("parameter requires null/string/bool/int32 or exact int64/decimal");
 }
 
 let active = 0;
