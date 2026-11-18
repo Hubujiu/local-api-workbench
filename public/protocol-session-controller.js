@@ -22,6 +22,7 @@ export function createProtocolSessionController({
   schedule = setTimeout,
   cancel = clearTimeout,
   generateId = () => crypto.randomUUID(),
+  generateOperationId = () => crypto.randomUUID(),
 }) {
   const key = "local-api-protocol-intent-v1";
   let intentId = null,
@@ -34,7 +35,9 @@ export function createProtocolSessionController({
     timer = null,
     pollingGeneration = null,
     storageBlocked = false,
-    uncertainDelivery = false;
+    uncertainDelivery = false,
+    pendingSendId = null,
+    sendSequence = 0;
   const status = () => ({
     snapshot: snapshot ? structuredClone(snapshot) : null,
     phase,
@@ -68,6 +71,8 @@ export function createProtocolSessionController({
           type,
           phase,
           uncertainDelivery,
+          pendingSendId,
+          sendSequence,
         }),
       );
       storageBlocked = false;
@@ -98,6 +103,32 @@ export function createProtocolSessionController({
       throw Error("会话回执不完整或身份不匹配");
     return value;
   }
+  function sendSequenceOf(id, owner = intentId) {
+    const parts = typeof id === "string" ? id.split(":") : [];
+    const sequence = Number(parts[1]);
+    return parts.length === 3 &&
+      parts[0] === owner &&
+      idValid(parts[2]) &&
+      Number.isSafeInteger(sequence) &&
+      sequence > 0 &&
+      parts[1] === String(sequence)
+      ? sequence
+      : 0;
+  }
+  function validSendReceipt(op) {
+    return (
+      op &&
+      sendSequenceOf(op.operationId) > 0 &&
+      [
+        "pending",
+        "locally-written",
+        "failed-before-submit",
+        "unknown",
+      ].includes(op.state) &&
+      (op.eventId === null || idValid(op.eventId)) &&
+      (op.state !== "locally-written" || idValid(op.eventId))
+    );
+  }
   function receipt(value) {
     if (
       !value ||
@@ -118,6 +149,20 @@ export function createProtocolSessionController({
       if (value.sessionId !== value.session.id) throw Error("会话身份不匹配");
     } else if (value.sessionId !== null && !idValid(value.sessionId))
       throw Error("会话身份无效");
+    if (
+      value.sendSequence !== undefined &&
+      (!Number.isSafeInteger(value.sendSequence) || value.sendSequence < 0)
+    )
+      throw Error("发送序号回执无效");
+    if (
+      value.sendReceipts !== undefined &&
+      (!Array.isArray(value.sendReceipts) ||
+        value.sendReceipts.length > 256 ||
+        value.sendReceipts.some((op) => !validSendReceipt(op)) ||
+        new Set(value.sendReceipts.map((op) => op.operationId)).size !==
+          value.sendReceipts.length)
+    )
+      throw Error("发送操作回执无效");
     return value;
   }
   const endpoint = () => "/protocol-session-intents/" + intentId;
@@ -132,6 +177,7 @@ export function createProtocolSessionController({
   };
   function accept(value, { preserveUncertainty = false } = {}) {
     const result = receipt(value);
+    sendSequence = Math.max(sendSequence, result.sendSequence ?? 0);
     if (result.session) {
       sessionId = result.sessionId;
       snapshot = structuredClone(result.session);
@@ -160,6 +206,21 @@ export function createProtocolSessionController({
     } else if (!preserveUncertainty) {
       phase = live(snapshot) ? "active" : "closed";
       warning = "";
+    }
+    const sendReceipt =
+      pendingSendId &&
+      result.sendReceipts?.find((op) => op.operationId === pendingSendId);
+    if (
+      phase === "uncertain-send" &&
+      result.phase === "started" &&
+      live(snapshot) &&
+      ["locally-written", "failed-before-submit"].includes(sendReceipt?.state)
+    ) {
+      phase = "active";
+      warning =
+        sendReceipt.state === "locally-written"
+          ? "已核对本次消息提交本地传输；不代表远端业务成功，不会重发"
+          : "已核对本次消息未提交网络；不会自动重试";
     }
     persist();
     emit();
@@ -212,6 +273,8 @@ export function createProtocolSessionController({
     sessionId = null;
     snapshot = null;
     type = definition.type;
+    pendingSendId = null;
+    sendSequence = 0;
     phase = "starting";
     warning = "";
     try {
@@ -242,6 +305,11 @@ export function createProtocolSessionController({
     clear();
     const epoch = ++generation,
       owned = sessionId;
+    if (sendSequence >= Number.MAX_SAFE_INTEGER)
+      throw Error("发送序号耗尽，请断开后建立新意图");
+    const nonce = generateOperationId();
+    if (!idValid(nonce)) throw Error("发送操作标记无效");
+    pendingSendId = intentId + ":" + ++sendSequence + ":" + nonce;
     phase = "sending";
     try {
       persist();
@@ -254,8 +322,17 @@ export function createProtocolSessionController({
     try {
       const value = await api("/protocol-sessions/" + owned + "/send", "POST", {
         message,
+        instanceId,
+        intentId,
+        operationId: pendingSendId,
       });
       if (epoch !== generation || owned !== sessionId) return;
+      if (
+        value.sendReceipt !== undefined &&
+        (!validSendReceipt(value.sendReceipt) ||
+          value.sendReceipt.operationId !== pendingSendId)
+      )
+        throw Error("发送操作回执身份不匹配");
       snapshot = structuredClone(validSnapshot(value, owned));
       phase = live(snapshot) ? "active" : "closed";
       if (
@@ -269,6 +346,13 @@ export function createProtocolSessionController({
         uncertainDelivery = true;
         warning = "发送结果未确认，不会自动重发；断开不代表撤回消息";
       } else warning = "发送已提交本地传输；不代表远端业务成功";
+      if (value.sendReceipt?.state === "failed-before-submit")
+        warning = "本次消息未提交网络；不会自动重试";
+      if (value.sendReceipt?.state === "unknown") {
+        uncertainDelivery = true;
+        if (live(snapshot)) phase = "uncertain-send";
+        warning = "本次发送结果未确认；请读取操作回执或断开，不会重发";
+      }
       persist();
       emit();
       arm();
@@ -329,6 +413,15 @@ export function createProtocolSessionController({
       )
         throw Error("恢复记录无效");
       if (
+        (record.pendingSendId !== undefined &&
+          record.pendingSendId !== null &&
+          !sendSequenceOf(record.pendingSendId, record.intentId)) ||
+        (record.sendSequence !== undefined &&
+          (!Number.isSafeInteger(record.sendSequence) ||
+            record.sendSequence < 0)) ||
+        (record.pendingSendId != null &&
+          sendSequenceOf(record.pendingSendId, record.intentId) >
+            (record.sendSequence ?? 0)) ||
         record.version !== 1 ||
         !idValid(record.instanceId) ||
         !idValid(record.intentId) ||
@@ -353,6 +446,8 @@ export function createProtocolSessionController({
       emit();
       return;
     }
+    pendingSendId = record.pendingSendId ?? null;
+    sendSequence = record.sendSequence ?? 0;
     intentId = record.intentId;
     sessionId = record.sessionId;
     type = record.type;
@@ -392,6 +487,8 @@ export function createProtocolSessionController({
         phase,
         warning: status().warning,
         uncertainDelivery,
+        pendingSendId,
+        sendSequence,
       },
     };
   }

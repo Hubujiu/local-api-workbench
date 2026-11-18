@@ -874,12 +874,31 @@ export async function createApp({
           if (req.method === "GET")
             return json(res, 200, protocolSessions.snapshot(parts[2]));
           const data = await body(req);
-          if (parts[3] === "send")
-            return json(
-              res,
-              200,
-              protocolSessions.send(parts[2], data.message),
-            );
+          if (parts[3] === "send") {
+            res.setHeader("Cache-Control", "no-store");
+            try {
+              return json(
+                res,
+                200,
+                data.operationId !== undefined ||
+                  data.intentId !== undefined ||
+                  data.instanceId !== undefined
+                  ? protocolIntents.send(
+                      data.intentId,
+                      data.instanceId,
+                      parts[2],
+                      data.operationId,
+                      data.message,
+                    )
+                  : protocolSessions.send(parts[2], data.message),
+              );
+            } catch (error) {
+              return json(res, error.intentStatus || 400, {
+                error: error.message,
+                retry_safe: false,
+              });
+            }
+          }
           if (parts[3] === "stop") {
             protocolSessions.stop(parts[2]);
             return json(res, 200, protocolSessions.snapshot(parts[2]));

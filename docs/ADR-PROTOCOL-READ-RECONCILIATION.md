@@ -16,8 +16,8 @@ An open session does not prove a lost send completed, nor that a requested stop
 succeeded. Those states remain blocked. Unknown server admission without terminal
 local evidence, mismatched identities, malformed receipts and failed reads also
 remain blocked. No retry, resend, reconnect, mutation repair or remote business
-success is inferred from polling. This change does not add per-send receipts or
-extend the owner intent contract to gRPC/Socket.IO or MCP operation ledgers.
+success is inferred from polling. This lifecycle fix is extended by [owner send receipts](ADR-PROTOCOL-OWNER-SEND-RECEIPTS.md).
+Neither change extends the owner intent contract to gRPC/Socket.IO or MCP operation ledgers.
 
 Regression coverage includes the existing real TCP/HTTP lifecycle tests, a lost
 start recovered through the actual refresh handler, terminal reconciliation for
