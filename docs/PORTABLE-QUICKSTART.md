@@ -2,6 +2,10 @@
 
 这是开发候选的操作指南，不是正式发行公告。没有安装器、自动更新或正式签名/公证保证；CI 中三平台通过不等于任意用户机器都兼容。当前完整产品缺口见 [交付矩阵](DELIVERY-STATUS.md)。
 
+## 查询当前 main
+
+运行 `node scripts/delivery-index.mjs` 可获取 GitHub 上当前 main 的精确提交、源码树、成功的 CI 运行、三个下载地址、到期时间和 SHA-256。产物过期或 main 尚在构建时，命令会报告具体原因。[Windows 正式发行入口](WINDOWS-RELEASE.md)
+
 ## 选择一个精确候选
 
 不要从不同运行混用可执行文件、manifest 或证据。通过 `main` 的原 Actions 运行下载对应平台 artifact；可能需要 GitHub 登录。过期或缺少产物就停止，不拿旧包替代这一基线。

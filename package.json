@@ -12,6 +12,7 @@
     "check": "node --check src/server.mjs && node --check src/core.mjs && node --check public/app.js",
     "format": "prettier --write \"src/**/*.mjs\" \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"public/*\" \"desktop/*.{mjs,cjs,json}\" \"*.json\" \".github/workflows/*.yml\"",
     "format:check": "prettier --check \"src/**/*.mjs\" \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"public/*\" \"desktop/*.{mjs,cjs,json}\" \"*.json\" \".github/workflows/*.yml\"",
+    "build:dameng": "node scripts/build-dameng.mjs",
     "build:markdown": "node scripts/build-markdown.mjs",
     "build:sandbox": "node scripts/build-sandbox-libraries.mjs",
     "audit:ci": "node scripts/audit-dependencies.mjs"

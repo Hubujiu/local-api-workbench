@@ -54,6 +54,7 @@ jobs:
         run: |
           node -e "const fs=require('fs');fs.mkdirSync('production');for(const f of ['package.json','package-lock.json'])fs.copyFileSync(f,'production/'+f)"
           npm ci --omit=dev --ignore-scripts --prefix production --no-audit
+      - run: npm run build:dameng
       - run: node scripts/build-desktop.mjs
       - run: node scripts/build-manifest.mjs
         env:
@@ -100,16 +101,7 @@ jobs:
       - name: Materialize pinned authoring tools
         shell: bash
         run: |
-          python3 - <<'PY'
-          import hashlib, json, os, pathlib, subprocess, urllib.request
-          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'msitools'
-          root.mkdir()
-          for item in json.loads(pathlib.Path('packaging/windows-msi/debian-toolchain-lock.json').read_text()):
-              path = root / pathlib.Path(item['Filename']).name
-              urllib.request.urlretrieve('https://deb.debian.org/debian/' + item['Filename'], path)
-              assert hashlib.sha256(path.read_bytes()).hexdigest() == item['SHA256']
-              subprocess.run(['dpkg-deb', '-x', str(path), str(root / 'root')], check=True)
-          PY
+          python3 scripts/materialize_msi_tools.py "$RUNNER_TEMP/msitools"
       - name: Compile same-family pair and independently pin transferred plan
         id: bundle
         shell: bash
@@ -169,3 +161,36 @@ jobs:
             ${{ runner.temp }}/product-runner-context.json
           if-no-files-found: warn
           retention-days: 3
+  native-standard-user:
+    needs: [build-product, author-pair]
+    runs-on: windows-latest
+    timeout-minutes: ${{ needs.author-pair.outputs.rollback_enabled == 'true' && 55 || 40 }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ needs.build-product.outputs.head }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.22.3"
+      - run: npm ci --ignore-scripts --no-audit --prefix packaging/windows-msi/journey-tools
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: verified-product-msi-pair
+          path: ${{ runner.temp }}/product-bundle
+      - name: Run installed product as a fresh local standard user
+        shell: pwsh
+        env:
+          EXPECTED_PLAN: ${{ needs.author-pair.outputs.plan_sha }}
+          ROLLBACK: ${{ needs.author-pair.outputs.rollback_enabled }}
+        run: |
+          ./scripts/run_standard_windows_journey.ps1 -Plan (Join-Path $env:RUNNER_TEMP 'product-bundle/product-plan.json') -PlanSha $env:EXPECTED_PLAN -Evidence (Join-Path $env:RUNNER_TEMP 'standard-user-evidence') -Rollback:($env:ROLLBACK -eq 'true')
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: standard-user-installed-product-evidence
+          path: |
+            ${{ runner.temp }}/standard-user-evidence/standard-context.json
+            ${{ runner.temp }}/standard-user-evidence/installed-product-journey-*/evidence/
+          if-no-files-found: warn
+          retention-days: 7

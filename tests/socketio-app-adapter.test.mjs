@@ -35,8 +35,13 @@ const snapshot = {
 };
 async function reserve(h) {
   assert.match(h.calls[0].url, /socketio-creation-intents$/);
-  h.calls[0].resolve({ instanceId: crypto.randomUUID(), intentId: crypto.randomUUID(), phase: "reserved", definitionId: definition.id });
-  await new Promise(resolve => setImmediate(resolve));
+  h.calls[0].resolve({
+    instanceId: crypto.randomUUID(),
+    intentId: crypto.randomUUID(),
+    phase: "reserved",
+    definitionId: definition.id,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
   assert.match(h.calls[1].url, /socketio-sessions$/);
 }
 function harness() {

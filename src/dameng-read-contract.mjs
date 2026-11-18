@@ -123,6 +123,7 @@ export function compileDamengRead(input) {
         .join(", ");
   }
   return {
+    relation: `${m[2].toUpperCase()}.${m[3].toUpperCase()}`,
     config: {
       host: c.host,
       port,

@@ -29,7 +29,7 @@ def element(parent, tag, **attributes):
     return ET.SubElement(parent, '{' + NS + '}' + tag, attributes)
 
 
-def prepare(payload, output, head, version, manifest_sha256, fixture_family=None):
+def prepare(payload, output, head, version, manifest_sha256, fixture_family=None, *, release=False):
     payload, output = Path(payload).resolve(), Path(output).resolve()
     require(payload != output and payload not in output.parents and output not in payload.parents, 'Disjoint output required')
     require(not output.exists(), 'Fresh output required')
@@ -38,7 +38,8 @@ def prepare(payload, output, head, version, manifest_sha256, fixture_family=None
     require(re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', version) is not None, 'Canonical numeric MSI version required')
     major, minor, build = map(int, version.split('.'))
     require(major <= 255 and minor <= 255 and build <= 65535, 'MSI version out of range')
-    family = 'candidate'
+    require(not (release and fixture_family is not None), 'Release and fixture families are exclusive')
+    family = 'release' if release else 'candidate'
     if fixture_family is not None:
         require(str(uuid.UUID(fixture_family)) == fixture_family, 'Canonical fixture family required')
         family = 'fixture:' + fixture_family
@@ -47,11 +48,11 @@ def prepare(payload, output, head, version, manifest_sha256, fixture_family=None
     evidence = inv.verify(head, 'win32'); identity(payload, version, 'x64'); windows_names(payload, inventory=inv)
     require(not inv.links(), 'MSI links forbidden')
     require(all('|' not in name for name in inv.entries), 'MSI filename separator forbidden')
-    directory = APP_DIR if fixture_family is None else APP_DIR + '-Fixture-' + fixture_family
+    directory = ('LocalAPI-Workbench' if release else APP_DIR) if fixture_family is None else APP_DIR + '-Fixture-' + fixture_family
     product_code = guid(family + ':product:' + version)
     upgrade_code = guid(family + ':upgrade')
     root = ET.Element('{' + NS + '}Wix')
-    product = element(root, 'Product', Id=product_code, Name='Local API Workbench lifecycle candidate', Language='1033',
+    product = element(root, 'Product', Id=product_code, Name='Local API Workbench' if release else 'Local API Workbench lifecycle candidate', Language='1033',
                       Version=version, Manufacturer='Local API Workbench', UpgradeCode=upgrade_code)
     element(product, 'Package', InstallerVersion='500', Compressed='yes', InstallScope='perUser')
     element(product, 'Media', Id='1', Cabinet='payload.cab', EmbedCab='yes')
@@ -70,6 +71,8 @@ def prepare(payload, output, head, version, manifest_sha256, fixture_family=None
     sequence = element(product, 'InstallExecuteSequence')
     element(sequence, 'RemoveExistingProducts', After='InstallInitialize')
     target = element(product, 'Directory', Id='TARGETDIR', Name='SourceDir')
+    if release:
+        element(target, 'Directory', Id='ProgramMenuFolder')
     local = element(target, 'Directory', Id='LocalAppDataFolder')
     app = element(local, 'Directory', Id='CandidateRoot', Name=directory)
     dirs = {'': app}
@@ -83,8 +86,11 @@ def prepare(payload, output, head, version, manifest_sha256, fixture_family=None
         cid = identifier('C', name)
         component = element(dirs[parent], 'Component', Id=cid, Guid=guid(family + ':component:' + name), Win64='yes')
         element(component, 'File', Id=identifier('F', name), Name=leaf, Source=str(payload / name))
+        if release and name == 'LocalAPI.exe':
+            element(component, 'Shortcut', Id='WorkbenchStart', Directory='ProgramMenuFolder', Target='[#' + identifier('F', name) + ']',
+                    Name='Local API Workbench', WorkingDirectory='CandidateRoot')
         element(component, 'RegistryValue', Id=identifier('R', name), Root='HKCU',
-                Key='Software\\LocalAPI\\LifecycleCandidate\\' + upgrade_code,
+                Key=registry_key(upgrade_code, release),
                 Name=cid, Type='integer', Value='1', KeyPath='yes')
         element(feature, 'ComponentRef', Id=cid)
     output.mkdir(); ET.indent(root)
@@ -94,8 +100,13 @@ def prepare(payload, output, head, version, manifest_sha256, fixture_family=None
                'fileHashes': dict(sorted(inv.hashes.items())), 'fileSizes': {n: (payload / n).stat().st_size for n in inv.hashes},
                'directories': sorted(n for n, (kind, _) in inv.entries.items() if kind == 'directory'),
                'nativeLifecycleVerified': False, 'signatureVerified': False}
+    if release: receipt['releaseFamily'] = True
     (output / 'build-input.json').write_text(json.dumps(receipt, indent=2) + '\n')
     return receipt
+
+
+def registry_key(upgrade_code, release):
+    return ('Software\\LocalAPI\\Workbench\\' if release else 'Software\\LocalAPI\\LifecycleCandidate\\') + upgrade_code
 
 
 def export_table(tool, msi, table):
@@ -124,12 +135,15 @@ def validate(receipt, tables):
         require(row[0] in file_names, 'Unknown file identity')
         name = file_names[row[0]]
         require(row[1:7] == [identifier('C', name), name.rsplit('/', 1)[-1], str(receipt['fileSizes'][name]), '', '', '512'], 'File metadata changed')
-    family = 'candidate' if receipt['fixtureFamily'] is None else 'fixture:' + receipt['fixtureFamily']
+    release = receipt.get('releaseFamily') is True
+    family = ('release' if release else 'candidate') if receipt['fixtureFamily'] is None else 'fixture:' + receipt['fixtureFamily']
+    if release:
+        require(properties['ProductName'] == 'Local API Workbench' and receipt['fixtureFamily'] is None, 'Release identity changed')
     components, registry, directories = [], [], []
     for name in receipt['fileHashes']:
         parent = name.rpartition('/')[0]; cid = identifier('C', name); rid = identifier('R', name)
         components.append([cid, '{' + guid(family + ':component:' + name) + '}', identifier('D', parent) if parent else 'CandidateRoot', '260', '', rid])
-        registry.append([rid, '1', 'Software\\LocalAPI\\LifecycleCandidate\\' + receipt['upgradeCode'], cid, '#1', cid])
+        registry.append([rid, '1', registry_key(receipt['upgradeCode'], release), cid, '#1', cid])
     require(sorted(tables['Component']) == sorted(components), 'Component identity changed')
     require(sorted(tables['Registry']) == sorted(registry), 'Registry ownership changed')
     for name in receipt['directories']:
@@ -137,6 +151,12 @@ def validate(receipt, tables):
         parent, _, leaf = name.rpartition('/')
         directories.append([identifier('D', name), identifier('D', parent) if parent else 'CandidateRoot', leaf])
     directories += [['CandidateRoot', 'LocalAppDataFolder', receipt['directory']], ['LocalAppDataFolder', 'TARGETDIR', '.'], ['TARGETDIR', '', 'SourceDir']]
+    if release:
+        directories.append(['ProgramMenuFolder', 'TARGETDIR', '.'])
+        shortcuts = tables.get('Shortcut', [])
+        require(len(shortcuts) == 1 and shortcuts[0][:5] == ['WorkbenchStart', 'ProgramMenuFolder',
+                'Local API Workbench', identifier('C', 'LocalAPI.exe'), '[#' + identifier('F', 'LocalAPI.exe') + ']'],
+                'Start menu target changed')
     require(sorted(tables['Directory']) == sorted(directories), 'Directory layout changed')
     require(tables['AppSearch'] == [['EXISTINGCANDIDATE', 'ExistingCandidate']], 'AppSearch changed')
     require(tables['DrLocator'] == [['ExistingCandidate', '', '[LocalAppDataFolder]' + receipt['directory'], '0']], 'Directory search changed')
@@ -160,7 +180,7 @@ def compile_msi(output, tools):
     output, tools = Path(output).resolve(), Path(tools).resolve()
     receipt = json.loads((output / 'build-input.json').read_text())
     msi = output / 'LocalAPI-lifecycle-UNVERIFIED.msi'
-    final = output / 'LocalAPI-lifecycle-UNSIGNED.msi'
+    final = output / ('LocalAPI-' + receipt['version'] + '-windows-x64.msi' if receipt.get('releaseFamily') else 'LocalAPI-lifecycle-UNSIGNED.msi')
     require(not msi.exists() and not final.exists(), 'No package overwrite')
     result = subprocess.run([str(tools / 'wixl'), '-a', 'x64', '-o', str(msi), str(output / 'candidate.wxs')], check=True, capture_output=True, text=True)
     require(not result.stderr.strip(), 'Compiler diagnostics require review: ' + result.stderr)
@@ -173,7 +193,7 @@ def compile_msi(output, tools):
         rows.append(['AppSearch', '', '50'])
         import_table(tools / 'msibuild', msi, output / (table + '.idt'), headers, rows)
     present = subprocess.check_output([str(tools / 'msiinfo'), 'tables', str(msi)], text=True).splitlines()
-    tables = {n: export_table(tools / 'msiinfo', msi, n)[1] for n in ['Property', 'Directory', 'File', 'Component', 'Registry', 'Upgrade', 'LaunchCondition', 'InstallExecuteSequence', 'InstallUISequence', 'CustomAction', 'RemoveFile', 'RemoveRegistry', 'AppSearch', 'DrLocator'] if n in present}
+    tables = {n: export_table(tools / 'msiinfo', msi, n)[1] for n in ['Property', 'Directory', 'File', 'Component', 'Registry', 'Upgrade', 'LaunchCondition', 'InstallExecuteSequence', 'InstallUISequence', 'CustomAction', 'RemoveFile', 'RemoveRegistry', 'Shortcut', 'AppSearch', 'DrLocator'] if n in present}
     validate(receipt, tables)
     summary = subprocess.check_output([str(tools / 'msiinfo'), 'suminfo', str(msi)], text=True)
     require('Source: 10 (a)' in summary and 'Template: x64;1033' in summary, 'Unexpected privileges or architecture')
@@ -190,9 +210,9 @@ def compile_msi(output, tools):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ['payload', 'output', 'head', 'version', 'manifest-sha256']: parser.add_argument('--' + name, required=True)
-    parser.add_argument('--tools'); parser.add_argument('--fixture-family')
+    parser.add_argument('--tools'); parser.add_argument('--fixture-family'); parser.add_argument('--release', action='store_true')
     args = parser.parse_args()
-    result = prepare(args.payload, args.output, args.head, args.version, args.manifest_sha256, args.fixture_family)
+    result = prepare(args.payload, args.output, args.head, args.version, args.manifest_sha256, args.fixture_family, release=args.release)
     if args.tools: result['msi'] = str(compile_msi(args.output, args.tools))
     print(json.dumps(result, indent=2))
 

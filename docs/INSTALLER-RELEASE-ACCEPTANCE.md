@@ -1,10 +1,6 @@
-# 安装发行的清洁机器验收协议（尚未执行）
+# 安装发行的清洁机器验收协议
 
-基线 #252 tree `06193d50bf99db21129e617a822fce2285e84c5a`。
-当前只有 CI 便携包，没有安装器、升级器或 GitHub Release 发布流程。
-`scripts/build-manifest.mjs` 记录文件摘要和构建身份，不记录可信签名或安装验收；
-macOS 构建中的 `codesign --sign -` 是 ad-hoc，不能称为 Developer ID 签名或公证。
-本协议不创建占位安装器、不签名、不上传、不接受条款、不更改安全设置。
+Windows x64 已具备每用户安装器和签名发行工作流。候选介质与最终签名介质分别记录安装及恢复结果。[Windows 正式发行](WINDOWS-RELEASE.md) · [当前交付矩阵](DELIVERY-STATUS.md)
 
 ## 先冻结真正要交付的安装介质
 

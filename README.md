@@ -8,6 +8,10 @@
 
 历史 0.1.0 候选记录见 [历史交付清单](docs/DELIVERY.md)，旧逐项清单见 [历史功能对照](docs/PARITY-CURRENT.md) 与 [历史核验摘要](docs/CURRENT-PARITY.md)。可运行、某次 CI 通过或下面的能力列表均不等于完整复刻交付。
 
+## 下载和发行
+
+运行 `node scripts/delivery-index.mjs` 可查询此刻 main 对应的三平台下载地址、SHA-256 与到期时间。Windows 正式发行通过签名、升级回滚及普通用户验收后生成 Release 草稿。候选版本与正式版各有独立入口。[便携包下载](docs/PORTABLE-QUICKSTART.md) · [Windows 正式发行](docs/WINDOWS-RELEASE.md) · [企业数据库只读预览](docs/ENTERPRISE-DATABASE-PREVIEW.md)
+
 ## 启动
 
 安装 Node.js 24 LTS，首次安装依赖需联网；安装后可离线运行：

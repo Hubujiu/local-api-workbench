@@ -1,3 +1,4 @@
+import { reviewedRelations } from "./enterprise-database.mjs";
 import { randomUUID } from "node:crypto";
 import { types } from "node:util";
 import { compileOracleRead } from "./oracle-read-contract.mjs";
@@ -72,30 +73,12 @@ export class OracleReadSessions {
     if (!Number.isInteger(ttl) || ttl < 1 || ttl > 900000)
       fail("ORACLE_SESSION_INPUT_INVALID");
     const values = input.relations;
-    if (
-      !Array.isArray(values) ||
-      types.isProxy(values) ||
-      Object.getPrototypeOf(values) !== Array.prototype ||
-      values.length < 1 ||
-      values.length > 16 ||
-      Reflect.ownKeys(values).length !== values.length + 1
-    )
+    let relations;
+    try {
+      relations = new Set(reviewedRelations(values));
+    } catch {
       fail("ORACLE_SESSION_INPUT_INVALID");
-    const relations = new Set();
-    for (let i = 0; i < values.length; i++) {
-      const d = Object.getOwnPropertyDescriptor(values, String(i));
-      if (
-        !d ||
-        !Object.hasOwn(d, "value") ||
-        typeof d.value !== "string" ||
-        !/^[A-Za-z_][A-Za-z0-9_]{0,29}\.[A-Za-z_][A-Za-z0-9_]{0,29}$/.test(
-          d.value,
-        )
-      )
-        fail("ORACLE_SESSION_INPUT_INVALID");
-      relations.add(d.value.toUpperCase());
     }
-    if (relations.size !== values.length) fail("ORACLE_SESSION_INPUT_INVALID");
     compileOracleRead({
       connection: input.connection,
       sql: `SELECT id FROM ${values[0]}`,

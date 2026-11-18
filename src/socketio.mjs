@@ -331,7 +331,7 @@ export class SocketIOSessions {
     return {
       ...this.snapshot(projectId, id),
       ownerSequence: s.ownerSequence ?? 0,
-      ownerSends: [...(s.ownerSends?.values() ?? [])].map(r => ({ ...r })),
+      ownerSends: [...(s.ownerSends?.values() ?? [])].map((r) => ({ ...r })),
     };
   }
   async sendFromOwner(projectId, id, data) {
@@ -339,12 +339,17 @@ export class SocketIOSessions {
     if (ownerOperation === undefined) return this.send(projectId, id, input);
     const session = this.get(projectId, id);
     const sequence = (session.ownerSequence ?? 0) + 1;
-    if (!Number.isSafeInteger(sequence) || ownerOperation?.sequence !== sequence ||
-        typeof ownerOperation.id !== "string" ||
-        !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(ownerOperation.id))
+    if (
+      !Number.isSafeInteger(sequence) ||
+      ownerOperation?.sequence !== sequence ||
+      typeof ownerOperation.id !== "string" ||
+      !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(
+        ownerOperation.id,
+      )
+    )
       throw socketIOError("Socket.IO 操作序列无效或已使用，请只读刷新");
     session.ownerSequence = sequence;
-    const ledger = session.ownerSends ??= new Map();
+    const ledger = (session.ownerSends ??= new Map());
     if (ledger.size >= 128) ledger.delete(ledger.keys().next().value);
     const receipt = { sequence, id: ownerOperation.id, status: "pending" };
     ledger.set(sequence, receipt);
@@ -395,7 +400,11 @@ export class SocketIOSessions {
   list(projectId, { owner = false } = {}) {
     return [...this.sessions.values()]
       .filter((s) => s.projectId === projectId)
-      .map((s) => owner ? this.ownerSnapshot(projectId, s.id) : this.snapshot(projectId, s.id));
+      .map((s) =>
+        owner
+          ? this.ownerSnapshot(projectId, s.id)
+          : this.snapshot(projectId, s.id),
+      );
   }
   fail(s, error) {
     if (["closed", "error"].includes(s.state)) return;

@@ -1,28 +1,33 @@
 // Host capability controls discoverability, not authority. Server rechecks every
 // registration/query. No localStorage, project settings, credential cache or gate setter.
-const enabled = new WeakSet();
+const providers = new Map([
+  ["sqlserver", "SQL Server"],
+  ["oracle", "Oracle"],
+  ["dameng", "达梦 DM8"],
+]);
+export const isPreviewDatabase = (type) => providers.has(type);
+const enabled = new WeakMap();
 const requests = new WeakMap();
 export async function loadSQLServerPreviewCapability(selector, api) {
   if (!selector) return;
   enabled.delete(selector);
-  selector.querySelector('option[value="sqlserver"]')?.remove();
+  for (const type of providers.keys())
+    selector.querySelector(`option[value="${type}"]`)?.remove();
   const request = {};
   requests.set(selector, request);
   try {
     const result = await api("/database-capabilities");
-    if (
-      !selector.isConnected ||
-      requests.get(selector) !== request ||
-      result?.sqlserverReadOnlyPreview !== true
-    )
-      return;
-    enabled.add(selector);
-    if (!selector.querySelector('option[value="sqlserver"]')) {
+    if (!selector.isConnected || requests.get(selector) !== request) return;
+    const available = new Set();
+    for (const [type, title] of providers) {
+      if (result?.[type + "ReadOnlyPreview"] !== true) continue;
+      available.add(type);
       const option = document.createElement("option");
-      option.value = "sqlserver";
-      option.textContent = "SQL Server（只读预览）";
+      option.value = type;
+      option.textContent = title + "（只读预览）";
       selector.append(option);
     }
+    enabled.set(selector, available);
   } catch {
     // Authentication/network/unsupported-host failure stays closed.
   }
@@ -39,20 +44,31 @@ export function sqlServerPortInput(raw) {
     );
   return Number(raw);
 }
-export function readSQLServerPreviewConnection(selector, read) {
-  if (!enabled.has(selector))
-    throw Error("服务端尚未确认 SQL Server 只读预览能力，请重新打开数据库页");
-  if (!read("#db-tls").checked) throw Error("SQL Server预览必须启用并验证TLS");
+export function readSQLServerPreviewConnection(
+  selector,
+  read,
+  type = "sqlserver",
+) {
+  if (!enabled.get(selector)?.has(type))
+    throw Error("服务端尚未确认此数据库的只读预览能力，请重新打开数据库页");
+  if (!read("#db-tls").checked) throw Error("只读预览必须启用并验证TLS");
   const port = sqlServerPortInput(read("#db-port").value);
   const ca = read("#db-ca").value;
   return {
-    type: "sqlserver",
+    type,
     host: read("#db-host").value,
     user: read("#db-user").value,
     password: read("#db-password").value,
-    database: read("#db-name").value,
+    ...(type !== "dameng" && { database: read("#db-name").value }),
     ssl: true,
     ...(port === undefined ? {} : { port }),
-    ...(ca === "" ? {} : { ca }),
+    ...(type !== "oracle" && ca !== "" && { ca }),
+    ...(type === "oracle" && { serverDN: read("#db-server-dn").value }),
+    ...(type !== "sqlserver" && {
+      relations: read("#db-relations")
+        .value.trim()
+        .split(/[\s,]+/)
+        .filter(Boolean),
+    }),
   };
 }

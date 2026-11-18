@@ -18,8 +18,7 @@ export class SessionCreationIntents {
       if (e.phase !== "reserved" || e.expiresAt <= this.now())
         this.entries.delete(id);
     }
-    if (this.entries.size >= 256)
-      fail("创建意图暂满，请等待未提交意图过期");
+    if (this.entries.size >= 256) fail("创建意图暂满，请等待未提交意图过期");
     const intentId = randomUUID();
     this.entries.set(intentId, {
       projectId,

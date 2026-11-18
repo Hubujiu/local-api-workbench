@@ -13,6 +13,8 @@ const fields = new Set([
   "database",
   "ca",
   "authSource",
+  "relations",
+  "serverDN",
   "ssl",
   "ssh",
   "bindingId",

@@ -48,6 +48,21 @@ class LifecycleMsiTests(unittest.TestCase):
         for key in ['upgradeCode', 'productCode', 'directory']:
             self.assertEqual(len(set(r[key] for r in records)), 3)
 
+    def test_release_has_stable_separate_identity_and_start_menu_entry(self):
+        first, digest = self.source()
+        test = prepare(first, self.root / 'test', HEAD, '0.1.0', digest)
+        old = prepare(first, self.root / 'release', HEAD, '0.1.0', digest, release=True)
+        next_payload, digest = self.source('0.2.0', 'next')
+        new = prepare(next_payload, self.root / 'updated', HEAD, '0.2.0', digest, release=True)
+        self.assertNotEqual(old['upgradeCode'], test['upgradeCode'])
+        self.assertEqual(old['upgradeCode'], new['upgradeCode'])
+        self.assertNotEqual(old['productCode'], new['productCode'])
+        self.assertEqual(old['directory'], 'LocalAPI-Workbench')
+        self.assertIn('Id="WorkbenchStart"', (self.root / 'updated/candidate.wxs').read_text())
+        tools = os.environ.get('LOCALAPI_MSITOOLS')
+        if tools:
+            self.assertEqual(compile_msi(self.root / 'updated', tools).name, 'LocalAPI-0.2.0-windows-x64.msi')
+
     def test_bad_version_and_identity_before_output(self):
         payload, digest = self.source()
         for version in ['1.0', '01.0.0', '256.0.0', '1.0.65536', '1.0.0-beta']:

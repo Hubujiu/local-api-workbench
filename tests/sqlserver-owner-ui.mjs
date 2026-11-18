@@ -162,6 +162,47 @@ try {
     0,
   );
   await page.unroute("**/api/database-capabilities");
+  const oracleGate = process.env.LOCALAPI_ORACLE_PREVIEW;
+  try {
+    process.env.LOCALAPI_ORACLE_PREVIEW = "read-only";
+    await open();
+    await page.selectOption("#db-type", "oracle");
+    await page.fill("#db-host", "db.invalid");
+    await page.fill("#db-name", "fixture");
+    await page.fill("#db-user", "reader");
+    await page.fill("#db-server-dn", "CN=db.invalid");
+    await page.fill("#db-relations", "APP.ITEMS\nAPP.USERS");
+    await page.fill("#db-password", secret);
+    await page.click("#db-register");
+    const registration = page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        r.url().endsWith("/database-connections"),
+    );
+    await page.getByRole("button", { name: "确认授权", exact: true }).click();
+    const receipt = await registration;
+    assert.equal(receipt.status(), 200);
+    assert.deepEqual((await receipt.json()).relations, [
+      "APP.ITEMS",
+      "APP.USERS",
+    ]);
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    assert.equal(await page.inputValue("#db-password"), "");
+    await page.fill("#db-password", secret);
+    await page.fill("#db-sql", "SELECT id FROM OTHER.ITEMS");
+    const denied = page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().endsWith("/database"),
+    );
+    await page.click("#db-query");
+    assert.equal((await denied).status(), 400);
+    await page.waitForFunction(
+      () => !document.querySelector("#db-query").disabled,
+    );
+    assert.match(await page.textContent("#db-result"), /授权范围/);
+  } finally {
+    if (oracleGate === undefined) delete process.env.LOCALAPI_ORACLE_PREVIEW;
+    else process.env.LOCALAPI_ORACLE_PREVIEW = oracleGate;
+  }
   // Scan only this test's disposable project directory, never user data.
   async function scan(dir) {
     for (const e of await readdir(dir, { withFileTypes: true })) {
@@ -172,7 +213,9 @@ try {
   }
   await scan(root);
   assert.deepEqual(errors, []);
-  await page.screenshot({ path: path.join(tmpdir(), "local-api-sqlserver-owner-ui.png") });
+  await page.screenshot({
+    path: path.join(tmpdir(), "local-api-sqlserver-owner-ui.png"),
+  });
   console.log(
     "SQLSERVER_OWNER_GUI_PASS real-browser/server; no real SQL Server acceptance",
   );

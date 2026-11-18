@@ -1,0 +1,230 @@
+name: Prepare verified Windows release
+on:
+  workflow_dispatch:
+    inputs:
+      journey_run:
+        description: "Successful Windows product journey on this main commit, with rollback and standard-user evidence"
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: windows-formal-release
+  cancel-in-progress: false
+jobs:
+  source:
+    if: github.ref == 'refs/heads/main' && github.repository == 'Hubujiu/local-api-workbench'
+    runs-on: ubuntu-latest
+    outputs:
+      ci: ${{ steps.source.outputs.ci }}
+      version: ${{ steps.source.outputs.version }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.22.3"
+      - id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOURNEY: ${{ inputs.journey_run }}
+        run: |
+          set -euo pipefail
+          [[ "$JOURNEY" =~ ^[1-9][0-9]*$ ]]
+          node scripts/delivery-index.mjs > "$RUNNER_TEMP/index.json"
+          jq -e --arg head "$GITHUB_SHA" '.head == $head' "$RUNNER_TEMP/index.json"
+          echo "ci=$(jq -r .run "$RUNNER_TEMP/index.json")" >> "$GITHUB_OUTPUT"
+          version=$(node --input-type=module -e "import {desktopSourceVersion} from './scripts/desktop-package-version.mjs'; console.log(await desktopSourceVersion())")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$JOURNEY" | jq -e --arg head "$GITHUB_SHA" '
+            .head_sha == $head and .head_branch == "main" and .event == "workflow_dispatch" and
+            .path == ".github/workflows/windows-product-journey.yml" and .conclusion == "success"'
+          gh run download "$JOURNEY" --name standard-user-installed-product-evidence --dir "$RUNNER_TEMP/proof"
+          python - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "proof"
+          def record(name):
+              matches = list(root.rglob(name))
+              if len(matches) != 1: raise ValueError("Expected exactly one " + name)
+              return json.loads(matches[0].read_text(encoding="utf-8-sig"))
+          context, result = record("standard-context.json"), record("product-lifecycle-result.json")
+          assert context["standardUserAcceptance"] is True and context["isAdministrator"] is False
+          assert result["nativeProductJourneyPassed"] is True and result["productRollbackVerified"] is True
+          assert result["sourceHeads"][-1] == os.environ["GITHUB_SHA"]
+          PY
+  sign-payload:
+    needs: source
+    runs-on: [self-hosted, Windows, X64, workbench-signing]
+    environment: windows-signing
+    outputs:
+      manifest: ${{ steps.sign.outputs.manifest }}
+    env:
+      WORKBENCH_PUBLISHER_THUMBPRINT: ${{ vars.WORKBENCH_PUBLISHER_THUMBPRINT }}
+      WORKBENCH_TIMESTAMP_URL: ${{ vars.WORKBENCH_TIMESTAMP_URL }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.22.3"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: LocalAPI-Windows-portable
+          run-id: ${{ needs.source.outputs.ci }}
+          github-token: ${{ github.token }}
+          path: dist
+      - id: sign
+        shell: pwsh
+        run: |
+          node scripts/verify-portable.mjs
+          if ($LASTEXITCODE) { throw 'Original portable failed verification' }
+          $manifest = Get-Content -Raw -LiteralPath dist/LocalAPI/build-manifest.json | ConvertFrom-Json
+          if ($manifest.head -ne $env:GITHUB_SHA -or $manifest.platform -ne 'win32' -or $manifest.arch -ne 'x64') { throw 'Wrong original payload' }
+          ./scripts/windows-release-signature.ps1 -Sign -File dist/LocalAPI/LocalAPI.exe
+          ./scripts/windows-release-signature.ps1 -Sign -File dist/LocalAPI/resources/app/src/vendor/dameng-native/workbench-dameng-read.exe
+          node scripts/build-manifest.mjs
+          if ($LASTEXITCODE) { throw 'Cannot freeze signed payload' }
+          node scripts/verify-portable.mjs
+          if ($LASTEXITCODE) { throw 'Signed portable failed verification' }
+          "manifest=$((Get-FileHash dist/LocalAPI/build-manifest.json).Hash.ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: signed-windows-payload
+          path: dist/LocalAPI
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+  msi:
+    needs: [source, sign-payload]
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - run: apt-get update && apt-get install -y --no-install-recommends python3 ca-certificates git libglib2.0-0t64 libxml2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: signed-windows-payload
+          path: ${{ runner.temp }}/payload
+      - env:
+          VERSION: ${{ needs.source.outputs.version }}
+          MANIFEST: ${{ needs.sign-payload.outputs.manifest }}
+        run: |
+          python3 scripts/materialize_msi_tools.py "$RUNNER_TEMP/msitools"
+          export LD_LIBRARY_PATH="$RUNNER_TEMP/msitools/root/usr/lib/x86_64-linux-gnu"
+          python3 scripts/prepare_windows_lifecycle_msi.py --release --payload "$RUNNER_TEMP/payload" --head "$GITHUB_SHA" --version "$VERSION" --manifest-sha256 "$MANIFEST" --tools "$RUNNER_TEMP/msitools/root/usr/bin" --output "$RUNNER_TEMP/release-media" > "$RUNNER_TEMP/build.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: authored-product-msi
+          path: ${{ runner.temp }}/release-media/*.msi
+          if-no-files-found: error
+          retention-days: 3
+  sign-media:
+    needs: [source, msi]
+    runs-on: [self-hosted, Windows, X64, workbench-signing]
+    environment: windows-signing
+    outputs:
+      digest: ${{ steps.sign.outputs.digest }}
+    env:
+      WORKBENCH_PUBLISHER_THUMBPRINT: ${{ vars.WORKBENCH_PUBLISHER_THUMBPRINT }}
+      WORKBENCH_TIMESTAMP_URL: ${{ vars.WORKBENCH_TIMESTAMP_URL }}
+      VERSION: ${{ needs.source.outputs.version }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: authored-product-msi
+          path: media
+      - id: sign
+        shell: pwsh
+        run: |
+          $file = "media/LocalAPI-$env:VERSION-windows-x64.msi"
+          ./scripts/windows-release-signature.ps1 -Sign -File $file
+          "digest=$((Get-FileHash -LiteralPath $file).Hash.ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: signed-product-msi
+          path: media/*.msi
+          if-no-files-found: error
+          retention-days: 7
+  acceptance:
+    needs: [source, sign-payload, sign-media]
+    runs-on: [self-hosted, Windows, X64, workbench-disposable-standard-user]
+    environment: windows-acceptance
+    timeout-minutes: 55
+    env:
+      WORKBENCH_PUBLISHER_THUMBPRINT: ${{ vars.WORKBENCH_PUBLISHER_THUMBPRINT }}
+      VERSION: ${{ needs.source.outputs.version }}
+      DIGEST: ${{ needs.sign-media.outputs.digest }}
+      MANIFEST: ${{ needs.sign-payload.outputs.manifest }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.22.3"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: signed-product-msi
+          path: media
+      - run: npm ci --ignore-scripts --no-audit --prefix packaging/windows-msi/journey-tools
+      - shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The restart journey imports Playwright by package name. Use its locked dependency tree.
+          New-Item -ItemType Junction -Path node_modules -Target (Resolve-Path packaging/windows-msi/journey-tools/node_modules).Path | Out-Null
+          $releases = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" | ConvertFrom-Json -NoEnumerate
+          if ($LASTEXITCODE) { throw 'Cannot determine preceding release' }
+          $previous = $releases | ForEach-Object { $_ } | Where-Object { -not $_.draft -and -not $_.prerelease -and $_.tag_name -match '^v[0-9]+\.[0-9]+\.[0-9]+$' } | Sort-Object { [version]$_.tag_name.Substring(1) } -Descending | Select-Object -First 1
+          $opts = @{}
+          if ($previous) {
+            $v = $previous.tag_name.Substring(1)
+            if ([version]$v -ge [version]$env:VERSION) { throw 'Release must increase the published version' }
+            $name = "LocalAPI-$v-windows-x64.msi"
+            $asset = @($previous.assets | Where-Object name -eq $name)
+            if ($asset.Count -ne 1 -or $asset[0].digest -notmatch '^sha256:[0-9a-f]{64}$') { throw 'Previous signed media missing' }
+            gh release download $previous.tag_name --pattern $name --dir media
+            if ($LASTEXITCODE -or (Get-FileHash "media/$name").Hash -ne $asset[0].digest.Substring(7)) { throw 'Previous release download failed integrity check' }
+            $opts.PreviousMedia = (Resolve-Path "media/$name").Path
+          }
+          ./scripts/accept_windows_release.ps1 -Media "media/LocalAPI-$env:VERSION-windows-x64.msi" -ExpectedSha $env:DIGEST -ManifestSha $env:MANIFEST @opts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: signed-release-acceptance
+          path: |
+            ${{ runner.temp }}/release-check-*/
+            dist/desktop-restart-evidence/
+          if-no-files-found: error
+  draft:
+    needs: [source, sign-media, acceptance]
+    environment: windows-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: signed-product-msi
+          path: media
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ needs.sign-media.outputs.digest }}
+          VERSION: ${{ needs.source.outputs.version }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)" = "$GITHUB_SHA"
+          cd media
+          file="LocalAPI-$VERSION-windows-x64.msi"
+          printf '%s  %s\n' "$DIGEST" "$file" > SHA256SUMS
+          sha256sum --check SHA256SUMS
+          printf 'Windows x64 · %s\n\nSource commit %s. Signed installer and standard-user acceptance evidence are recorded in [run %s](https://github.com/%s/actions/runs/%s).\n' "$VERSION" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > "$RUNNER_TEMP/release-notes.md"
+          gh release create "v$VERSION" "$file" SHA256SUMS --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" --title "Local API Workbench $VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"

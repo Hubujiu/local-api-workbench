@@ -1,12 +1,21 @@
-import { fork } from "node:child_process";
+import { fork, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { compileDamengRead } from "./dameng-read-contract.mjs";
 
 const unavailable = "DAMENG_VERIFIED_TRANSPORT_UNAVAILABLE";
 const failed = "DAMENG_READ_FAILED_NO_RESULT";
 const cancelled = "DAMENG_READ_CANCELLED";
 const timeout = "DAMENG_READ_TIMEOUT";
-const processEntry = new URL("./dameng-process-entry.mjs", import.meta.url);
+const executable = fileURLToPath(
+  new URL(
+    "./vendor/dameng-native/workbench-dameng-read" +
+      (process.platform === "win32" ? ".exe" : ""),
+    import.meta.url,
+  ),
+);
 const cap = 1024 * 1024;
+let activeNativeReads = 0;
 
 function boundedResult(value, columns) {
   if (
@@ -135,6 +144,84 @@ export function superviseDamengProcess(entry, input, { signal } = {}) {
   });
 }
 
-export function runDamengProcess(input, options) {
-  return superviseDamengProcess(processEntry, input, options);
+export function damengPreviewEnabled() {
+  return (
+    process.env.LOCALAPI_DAMENG_PREVIEW === "read-only" &&
+    existsSync(executable)
+  );
+}
+
+export function runDamengProcess(input, { signal } = {}) {
+  const plan = compileDamengRead(input);
+  if (signal?.aborted) return Promise.reject(Error(cancelled));
+  if (!damengPreviewEnabled()) return Promise.reject(Error(unavailable));
+  const { host, port, user, password, ca } = plan.config;
+  const parameters = [];
+  // Only the compiler's quoted identifiers and generated parameter slots reach this step.
+  const sql = plan.sql.replace(/:p(\d+)/g, (_, index) => {
+    parameters.push(plan.binds["p" + index]);
+    return "?";
+  });
+  const request = JSON.stringify({
+    host,
+    port,
+    user,
+    password,
+    ca,
+    sql,
+    columns: plan.columns,
+    parameters,
+  });
+  if (Buffer.byteLength(request) > 524288) return Promise.reject(Error(failed));
+  if (activeNativeReads >= 2) return Promise.reject(Error("DAMENG_READ_BUSY"));
+  activeNativeReads++;
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, [], {
+      windowsHide: true,
+      env:
+        process.platform === "win32"
+          ? { SystemRoot: process.env.SystemRoot }
+          : {},
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    let size = 0,
+      reason;
+    const chunks = [];
+    const stop = (message) => {
+      reason ??= message;
+      if (child.exitCode === null && child.signalCode === null)
+        child.kill("SIGKILL");
+    };
+    const abort = () => stop(cancelled);
+    const timer = setTimeout(() => stop(timeout), 8000);
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    child.on("error", () => stop(failed));
+    child.stdin.on("error", () => stop(failed));
+    child.stdout.on("error", () => stop(failed));
+    child.stdout.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > cap) stop(failed);
+      else chunks.push(chunk);
+    });
+    child.once("close", (code) => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      if (reason || code !== 0) return reject(Error(reason || failed));
+      try {
+        const result = JSON.parse(
+          new TextDecoder("utf-8", { fatal: true }).decode(
+            Buffer.concat(chunks),
+          ),
+        );
+        if (!boundedResult(result, plan.columns)) throw Error(failed);
+        resolve(result);
+      } catch {
+        reject(Error(failed));
+      }
+    });
+    child.stdin.end(request);
+  }).finally(() => {
+    activeNativeReads--;
+  });
 }

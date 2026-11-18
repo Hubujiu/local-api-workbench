@@ -1,6 +1,7 @@
 import { GrpcOwnerOperations } from "./grpc-owner-operations.mjs";
 import { SessionCreationIntents } from "./grpc-creation-intents.mjs";
 import { sqlServerPreviewEnabled } from "./sqlserver-provider.mjs";
+import { enterpriseCapabilities } from "./enterprise-database.mjs";
 import { ProtocolSessionIntents } from "./protocol-session-intents.mjs";
 import { beginLoadReport, finishLoadReport } from "./load-report-evidence.mjs";
 import { requirePostmanEnvironmentText } from "./postman-environment-import.mjs";
@@ -841,6 +842,7 @@ export async function createApp({
             return json(res, 405, { error: "Method not allowed" });
           return json(res, 200, {
             sqlserverReadOnlyPreview: sqlServerPreviewEnabled(),
+            ...enterpriseCapabilities(),
           });
         }
         if (parts[1] === "protocol-session-intents") {
@@ -1755,14 +1757,25 @@ export async function createApp({
           if (action === "socketio-creation-intents") {
             res.setHeader("Cache-Control", "no-store");
             if (req.method === "GET" && parts.length === 6)
-              return json(res, 200, socketioCreationIntents.read(p.id, parts[5], parts[4]));
+              return json(
+                res,
+                200,
+                socketioCreationIntents.read(p.id, parts[5], parts[4]),
+              );
             if (req.method !== "POST" || parts.length !== 4)
               throw Error("Socket.IO 创建意图路径无效");
             const data = await body(req);
-            if (Object.keys(data).length !== 1) throw Error("创建意图仅接受已保存的定义 ID");
-            const definition = p.settings.socketioDefinitions?.find(d => d.id === data.definitionId);
+            if (Object.keys(data).length !== 1)
+              throw Error("创建意图仅接受已保存的定义 ID");
+            const definition = p.settings.socketioDefinitions?.find(
+              (d) => d.id === data.definitionId,
+            );
             if (!definition) throw Error("Socket.IO 定义不存在");
-            return json(res, 200, socketioCreationIntents.acquire(p.id, definition));
+            return json(
+              res,
+              200,
+              socketioCreationIntents.acquire(p.id, definition),
+            );
           }
           if (action === "socketio-sessions") {
             const sessionId = parts[4],
@@ -1804,7 +1817,12 @@ export async function createApp({
                   200,
                   creationIntent === undefined
                     ? socketioSessions.start(p.id, { ...definition, ...input })
-                    : socketioCreationIntents.start(p.id, definition, input, creationIntent),
+                    : socketioCreationIntents.start(
+                        p.id,
+                        definition,
+                        input,
+                        creationIntent,
+                      ),
                 );
               }
               if (operation === "send")

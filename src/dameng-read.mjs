@@ -1,10 +1,12 @@
+import { damengPreviewEnabled, runDamengProcess } from "./dameng-process.mjs";
 import { compileDamengRead } from "./dameng-read-contract.mjs";
 import { databaseRows } from "./database-values.mjs";
 export const DAMENG_READ_DRIVER_STATUS = Object.freeze({
-  available: false,
-  package: "dmdb",
-  version: "1.0.52452",
-  reason: "redistribution-and-peer-authentication-unverified",
+  get available() {
+    return damengPreviewEnabled();
+  },
+  package: "dm-rust",
+  version: "0.1.1",
 });
 const fail = () => {
   throw Error("DAMENG_READ_FAILED_NO_RESULT");
@@ -15,6 +17,7 @@ const check = (signal) => {
 export async function runDamengRead(input, { factory, signal } = {}) {
   check(signal);
   const plan = compileDamengRead(input);
+  if (factory === undefined) return runDamengProcess(input, { signal });
   if (typeof factory !== "function")
     throw Error("DAMENG_VERIFIED_TRANSPORT_UNAVAILABLE");
   let port;

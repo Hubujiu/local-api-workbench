@@ -1,3 +1,4 @@
+import { queryEnterpriseDatabase } from "./enterprise-database.mjs";
 import { querySQLServerPreview } from "./sqlserver-provider.mjs";
 import { validateMySQLConnectionText } from "./mysql-connection-text.mjs";
 import { Socket } from "node:net";
@@ -34,6 +35,8 @@ export async function queryRemoteDatabase(input, dependencies = {}) {
   if (input.type === "mongodb") return queryMongo(input, { signal });
   if (input.type === "sqlserver")
     return querySQLServerPreview(input, { signal });
+  if (input.type === "oracle" || input.type === "dameng")
+    return queryEnterpriseDatabase(input, { signal });
   const { type, sql } = input;
   const parameters = databaseParameters(
     input.parameters === undefined ? [] : input.parameters,

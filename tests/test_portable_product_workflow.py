@@ -22,7 +22,8 @@ class ProductWorkflowTests(unittest.TestCase):
         self.assertTrue(actions)
         for action in actions:
             self.assertRegex(action, r'^actions/[a-z-]+@[0-9a-f]{40}$')
-        self.assertEqual(source.count('persist-credentials: false'), 3)
+        self.assertEqual(source.count('persist-credentials: false'), source.count('uses: actions/checkout@'))
+        self.assertIn('native-standard-user:', source)
         self.assertEqual(source.count('GH_TOKEN:'), 1)
         self.assertIn('standardUserAcceptance=$false', source)
         self.assertIn('Committed test-only 0.1.1 required', source)

@@ -23,6 +23,8 @@ const fields = new Set([
   "database",
   "ca",
   "authSource",
+  "relations",
+  "serverDN",
   "ssl",
   "ssh",
 ]);
@@ -51,6 +53,9 @@ export function prepareCLIDatabaseGrants(
         "mongodb",
         "sqlite",
         "clickhouse",
+        "sqlserver",
+        "oracle",
+        "dameng",
       ].includes(source.type)
     )
       throw Error("CLI 数据库来源标识或类型无效");
@@ -199,7 +204,7 @@ export function prepareCLIDatabaseGrants(
       )
         throw Error("CLI 远程数据库连接必须显式指定主机");
       if (
-        config.type !== "sqlite" &&
+        !["sqlite", "dameng"].includes(config.type) &&
         (typeof config.database !== "string" || !config.database.trim())
       )
         throw Error("CLI 远程数据库连接必须显式指定数据库");

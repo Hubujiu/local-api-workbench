@@ -7,6 +7,7 @@ import { validateMySQLConnectionText } from "./mysql-connection-text.mjs";
 import { explicitPostgresOptions } from "./postgres-client.mjs";
 import { databaseSSHConfig } from "./database-ssh.mjs";
 import { randomUUID } from "node:crypto";
+import { enterpriseConnection } from "./enterprise-database.mjs";
 import { querySQLiteBounded } from "./database.mjs";
 import { queryRemoteDatabase } from "./remote-database.mjs";
 
@@ -58,6 +59,7 @@ export class DatabaseSessions {
     assertDatabaseBindingRequirements(matches[0], item.config);
   }
   register(projectId, input) {
+    this.#expire();
     if (this.#connections.size >= 20)
       throw Error("会话数据库连接最多20个，请先撤销不用的连接");
     if (!input || typeof input !== "object" || Array.isArray(input))
@@ -88,6 +90,8 @@ export class DatabaseSessions {
     if (
       ![
         "sqlserver",
+        "oracle",
+        "dameng",
         "sqlite",
         "postgres",
         "mysql",
@@ -104,6 +108,13 @@ export class DatabaseSessions {
     )
       throw Error("连接名称须为1至100字符");
     const config = { type };
+    const enterprise = type === "oracle" || type === "dameng";
+    if (enterprise) {
+      if (Object.hasOwn(input, "sql") || Object.hasOwn(input, "parameters"))
+        throw Error("连接授权不接受查询");
+      config.relations = enterpriseConnection(input).relations;
+    } else if (input.relations !== undefined || input.serverDN !== undefined)
+      throw Error("数据库连接字段无效");
     for (const key of [
       "filename",
       "host",
@@ -112,6 +123,7 @@ export class DatabaseSessions {
       "database",
       "ca",
       "authSource",
+      "serverDN",
     ])
       if (input[key] !== undefined) {
         if (typeof input[key] !== "string" || input[key].length > 65536)
@@ -149,36 +161,59 @@ export class DatabaseSessions {
     )
       throw Error("导入数据库绑定标识无效或已授权；请先撤销旧会话");
     const id = randomUUID();
-    this.#connections.set(id, {
+    const item = {
       projectId,
       name: input.name.trim(),
       config,
       bindingId,
       generation: randomUUID(),
       controller: new AbortController(),
-    });
+    };
+    if (enterprise) {
+      item.expiresAt = Date.now() + 900000;
+      item.timer = setTimeout(() => this.#drop(id, item), 900000);
+      item.timer.unref();
+    }
+    this.#connections.set(id, item);
     return {
       id,
       name: input.name.trim(),
       type,
+      ...(item.expiresAt && {
+        expiresAt: item.expiresAt,
+        relations: [...config.relations],
+      }),
       ...(bindingId ? { bindingId } : {}),
     };
   }
   list(projectId) {
+    this.#expire();
     return [...this.#connections]
       .filter(([, item]) => item.projectId === projectId)
       .map(([id, item]) => ({
         id,
         name: item.name,
         type: item.config.type,
+        ...(item.expiresAt && {
+          expiresAt: item.expiresAt,
+          relations: [...item.config.relations],
+        }),
         ...(item.bindingId ? { bindingId: item.bindingId } : {}),
       }));
   }
   revoke(projectId, id) {
     if (this.#connections.get(id)?.projectId !== projectId)
       throw Error("数据库会话连接不存在或不属于此项目");
-    this.#connections.get(id).controller.abort();
+    this.#drop(id, this.#connections.get(id));
+  }
+  #drop(id, item) {
+    clearTimeout(item.timer);
+    item.controller.abort();
     this.#connections.delete(id);
+  }
+  #expire() {
+    for (const [id, item] of this.#connections)
+      if (item.expiresAt && Date.now() >= item.expiresAt) this.#drop(id, item);
   }
   // Host-only frozen target capture. This does not confer write authority:
   // the owner ledger still admits and consumes the exact prepared SET slot.
@@ -253,6 +288,9 @@ export class DatabaseSessions {
     });
   }
   #resolveAuthorized(projectId, connectionId) {
+    this.#expire();
+    if (typeof connectionId !== "string" || !connectionId)
+      throw Error("数据库会话连接已失效或未授权给此项目，请重新配置");
     const resolvedId = this.#connections.has(connectionId)
       ? connectionId
       : [...this.#connections].find(
@@ -325,6 +363,7 @@ export class DatabaseSessions {
       : item.controller.signal;
     await this.#checkSource(projectId, item);
     if (signal?.aborted) throw Error("数据库操作已取消");
+    this.#expire();
     if (this.#connections.get(resolvedId) !== item)
       throw Error("数据库会话连接已撤销");
     const config = structuredClone(item.config);
@@ -356,6 +395,7 @@ export class DatabaseSessions {
     }
     await this.#checkSource(projectId, item);
     if (signal?.aborted) throw Error("数据库操作已取消");
+    this.#expire();
     if (this.#connections.get(resolvedId) !== item)
       throw Error("数据库会话连接已撤销，结果未应用");
     if (Buffer.byteLength(JSON.stringify(result)) > 1024 * 1024)
@@ -363,7 +403,6 @@ export class DatabaseSessions {
     return result;
   }
   close() {
-    for (const item of this.#connections.values()) item.controller.abort();
-    this.#connections.clear();
+    for (const [id, item] of this.#connections) this.#drop(id, item);
   }
 }

@@ -1,4 +1,5 @@
 import { validateApipostDatabaseResources } from "./apipost-database-import.mjs";
+import { mongoQuery } from "./mongodb.mjs";
 import {
   nativeDataArray,
   nativeDataObject,
@@ -55,17 +56,19 @@ export function prepareApipostDatabaseExport(project, mode, projectId, id) {
   const connections = new Map();
   const records = entries.map((entry, index) => {
     if (
-      !["postgres", "mysql"].includes(entry.type) ||
+      !["postgres", "mysql", "redis", "mongodb"].includes(entry.type) ||
       entry.requiresSSH !== undefined
     )
-      throw Error("数据库重绑定出口仅支持无SSH的PostgreSQL/MySQL目录");
+      throw Error(
+        "数据库重绑定出口支持无 SSH 的 PostgreSQL、MySQL、Redis 和 MongoDB 目录",
+      );
     const dbId = id("db", entry.id);
     connections.set(entry.id, { id: dbId, type: entry.type });
     return {
       db_id: dbId,
       project_id: projectId,
       name: entry.name,
-      type: entry.type === "postgres" ? "pg" : "mysql",
+      type: entry.type === "postgres" ? "pg" : entry.type,
       sort: entry.sort ?? index,
       intro:
         "Workbench credential-free rebind profile. Connection settings omitted; explicitly configure and authorize before execution.",
@@ -73,7 +76,9 @@ export function prepareApipostDatabaseExport(project, mode, projectId, id) {
         default: {
           db_config: {
             host: "",
-            port: entry.type === "postgres" ? 5432 : 3306,
+            port: { postgres: 5432, mysql: 3306, redis: 6379, mongodb: 27017 }[
+              entry.type
+            ],
             user: "",
             password: "",
             database: "",
@@ -110,6 +115,8 @@ export function exportApipostDatabaseTask(
   if (
     (connection.type === "mysql" && shape !== "mysql-resultsets") ||
     (connection.type === "postgres" && shape !== undefined) ||
+    (connection.type === "redis" && shape !== "redis-value") ||
+    (connection.type === "mongodb" && shape !== "mongodb-document") ||
     task.data.writeIntent !== undefined
   )
     throw Error("数据库任务结果形状或写入意图不能无损转为此重绑定义");
@@ -118,11 +125,50 @@ export function exportApipostDatabaseTask(
     global: "globals",
     temporary: "variables",
   };
+  let operation = { query: task.data.query };
+  if (connection.type === "redis") {
+    const command = JSON.parse(task.data.query);
+    if (
+      !Array.isArray(command) ||
+      !["GET", "HGET", "EXISTS"].includes(command[0]) ||
+      command.length !== (command[0] === "HGET" ? 3 : 2) ||
+      command
+        .slice(1)
+        .some(
+          (v) =>
+            typeof v !== "string" ||
+            !v.isWellFormed() ||
+            Buffer.byteLength(v) > 4096,
+        )
+    )
+      throw Error("Redis 原生重绑定只支持单键 GET、HGET 和 EXISTS");
+    operation = {
+      method: command[0].toLowerCase(),
+      query: JSON.stringify({
+        key: command[1],
+        ...(command.length === 3 && { field: command[2] }),
+      }),
+    };
+  } else if (connection.type === "mongodb") {
+    const query = mongoQuery({ sql: task.data.query });
+    if (
+      query.limit !== 1 ||
+      query.skip !== 0 ||
+      Object.keys(query.sort).length ||
+      Object.keys(query.projection).length
+    )
+      throw Error("MongoDB 原生 findone 要求单条、无排序、投影或偏移的查询");
+    operation = {
+      method: "findone",
+      collectionName: query.collection,
+      query: JSON.stringify(query.filter),
+    };
+  }
   return {
     ...task,
     data: {
       connectionId: connection.id,
-      query: task.data.query,
+      ...operation,
       isConsoleOutput: task.data.isConsoleOutput,
       variables: task.data.variables.map((row, rowIndex) => ({
         name: row.name,
