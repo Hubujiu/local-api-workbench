@@ -32,7 +32,10 @@ for (const entry of ["src", "public", "scripts", "LICENSE"])
   await cp(entry, path.join(layout.app, entry), {
     recursive: true,
     verbatimSymlinks: true,
-    filter: (source) => path.resolve(source) !== nativeDirectory,
+    filter: (source) =>
+      path.resolve(source) !== nativeDirectory &&
+      path.basename(source) !== "__pycache__" &&
+      !/\.py[co]$/i.test(source),
   });
 // WSL and Windows can build different helpers in the same source checkout.
 const nativeTarget = path.join(layout.app, "src/vendor/dameng-native");
