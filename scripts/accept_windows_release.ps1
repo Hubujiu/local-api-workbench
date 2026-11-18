@@ -1,8 +1,10 @@
 param([Parameter(Mandatory)][string]$Media, [Parameter(Mandatory)][string]$ExpectedSha,
       [Parameter(Mandatory)][string]$ManifestSha, [string]$PreviousMedia, [string]$PreviousVersion)
 $ErrorActionPreference = 'Stop'
-$principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
-if ($env:LOCALAPI_DISPOSABLE_RELEASE_VM -ne '1' -or $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Fresh disposable Windows standard-user VM required' }
+Set-StrictMode -Version Latest
+if ($env:LOCALAPI_DISPOSABLE_RELEASE_VM -ne '1') { throw 'Fresh disposable Windows standard-user VM required' }
+. (Join-Path $PSScriptRoot 'windows_release_qualification.ps1')
+$qualification = New-SignedReleaseQualification (Read-WindowsStandardUserReceipt)
 $target = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'LocalAPI-Workbench'
 $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'Local API Workbench.lnk'
 $Media = (Resolve-Path -LiteralPath $Media).Path
@@ -70,7 +72,9 @@ Save-JourneyProfile 'reinstalled'
 Invoke-Msi '/x' $Media 'final-uninstall'
 Confirm-Registration $current $false
 if ((Test-Path -LiteralPath $target) -or (Test-Path -LiteralPath $shortcut)) { throw 'Final uninstall left owned files' }
-@{ head=$env:GITHUB_SHA; sha256=$ExpectedSha; manifestSha256=$ManifestSha; standardUser=$true;
-   os=[Environment]::OSVersion.VersionString; publisher=$env:WORKBENCH_PUBLISHER_THUMBPRINT; previousReleaseUpgraded=[bool]$PreviousMedia;
+# Recheck in this process only AFTER every signed lifecycle assertion completed.
+$qualification = New-SignedReleaseQualification (Read-WindowsStandardUserReceipt)
+@{ schema='localapi-signed-windows-release-acceptance-v2'; qualification=$qualification; signedLifecyclePassed=$true; head=$env:GITHUB_SHA; sha256=$ExpectedSha; manifestSha256=$ManifestSha; standardUser=$true;
+   os='Windows 11 native x64'; publisher=$env:WORKBENCH_PUBLISHER_THUMBPRINT; previousReleaseUpgraded=[bool]$PreviousMedia;
    projectFilesPreserved=$true; registrationVerified=$true } |
-  ConvertTo-Json | Set-Content -LiteralPath (Join-Path $out 'release-acceptance.json')
+  ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $out 'release-acceptance.json')

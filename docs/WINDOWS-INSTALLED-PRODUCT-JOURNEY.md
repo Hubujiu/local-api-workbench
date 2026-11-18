@@ -183,3 +183,27 @@ pass; local authoring/contract tests do not set it. This scenario tests rollback
 an installer failure after owned-file removal, **not** a failure after a new app has
 run data migrations. Real native execution of this optional full-product scenario
 is still required, as are signing, ICE, and genuine standard-user acceptance.
+
+### Signed release ordinary-account qualification
+
+`accept_windows_release.ps1` now performs a read-only, fail-closed qualification
+in its own PowerShell process before any installation and again after the final
+uninstall assertions. Runner labels and `IsInRole(Administrator)==false` do not
+qualify a machine. Native token groups (including deny-only Administrators), token
+session/type/elevation/integrity, local account and membership, Windows 11 client
+ProductType, native x64 OS architecture, UAC and read-only Installer policy must
+all be observed. Missing/denied evidence fails. An unattended service/session-zero
+runner does not qualify merely because it has the expected label; an already
+provisioned genuine interactive standard-account environment is required.
+
+The public receipt uses `localapi-signed-windows-release-acceptance-v2` and an
+exact fixed qualification schema. It includes no account name, raw SID/group
+list, host name or raw query exception. Preflight alone cannot produce signed
+lifecycle success: the receipt is written only after the complete signed product
+journey, including final uninstall, has passed. The draft job rejects old receipts,
+missing qualification, altered qualification flags, and missing lifecycle success.
+Raw MSI and existing journey evidence can contain local paths: keep those private.
+
+Hosted ARM64 fault-injection rehearsal remains separate. These portable tests do
+not establish native Windows or signed acceptance. No runner, account, signing,
+trust policy, environment approval or release privilege is changed by this gate.

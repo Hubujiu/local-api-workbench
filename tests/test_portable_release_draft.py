@@ -31,6 +31,10 @@ class ReleaseDraftTests(unittest.TestCase):
             digest = hashlib.sha256(installer.read_bytes()).hexdigest()
             receipt = dict(head=head, sha256=digest, standardUser=True, manifestSha256='b' * 64,
                            projectFilesPreserved=True, registrationVerified=True)
+            receipt.update(schema='localapi-signed-windows-release-acceptance-v2', signedLifecyclePassed=True,
+                           qualification=dict(schema='localapi-windows-standard-user-qualification-v1',
+                             preflightPassed=True,windows11Client=True,nativeX64=True,uacEnabled=True,
+                             genuineNonAdministrator=True,interactiveToken=True,installerPolicyObserved=True))
             (acceptance / 'release-acceptance.json').write_text(json.dumps(receipt))
             state = root / 'releases.json'
             state.write_text('[[]]')
@@ -78,3 +82,17 @@ class ReleaseDraftTests(unittest.TestCase):
             (acceptance / 'release-acceptance.json').write_text(json.dumps(receipt))
             self.assertNotEqual(run().returncode, 0)
             self.assertEqual(json.loads(state.read_text()), [[]])
+
+            receipt['registrationVerified'] = True
+            import copy
+            for change in [lambda r:r.pop('schema'), lambda r:r.pop('qualification'),
+                           lambda r:r.update(signedLifecyclePassed=False),
+                           lambda r:r['qualification'].update(nativeX64=False),
+                           lambda r:r['qualification'].update(windows11Client=False),
+                           lambda r:r['qualification'].update(genuineNonAdministrator=False),
+                           lambda r:r['qualification'].update(interactiveToken=False),
+                           lambda r:r['qualification'].update(preflightPassed='true')]:
+                bad = copy.deepcopy(receipt); change(bad)
+                (acceptance / 'release-acceptance.json').write_text(json.dumps(bad))
+                self.assertNotEqual(run().returncode, 0)
+                self.assertEqual(json.loads(state.read_text()), [[]])

@@ -26,6 +26,11 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "24.22.3"
+      - name: Test signed standard-user qualification contracts
+        shell: pwsh
+        run: |
+          ./tests/windows-msi-policy-contract.ps1
+          ./tests/windows-release-qualification-contract.ps1
       - id: source
         env:
           GH_TOKEN: ${{ github.token }}
@@ -233,11 +238,15 @@ jobs:
           mapfile -t receipts < <(find acceptance -type f -name release-acceptance.json)
           test "${#receipts[@]}" -eq 1
           jq -e --arg head "$GITHUB_SHA" --arg sha "$DIGEST" --arg manifest "$MANIFEST" '
+            .schema=="localapi-signed-windows-release-acceptance-v2" and .signedLifecyclePassed==true and
+            .qualification=={schema:"localapi-windows-standard-user-qualification-v1",
+              preflightPassed:true,windows11Client:true,nativeX64:true,uacEnabled:true,
+              genuineNonAdministrator:true,interactiveToken:true,installerPolicyObserved:true} and
             .head==$head and .standardUser==true and .projectFilesPreserved==true and
             .registrationVerified==true and (.sha256|ascii_downcase)==$sha and (.manifestSha256|ascii_downcase)==$manifest
           ' "${receipts[0]}"
           jq --arg ci "$CI_RUN" --arg journey "$JOURNEY_RUN" --arg run "$GITHUB_RUN_ID" --arg version "$VERSION" '
-            {head,sha256,manifestSha256,standardUser,os,publisher,previousReleaseUpgraded,projectFilesPreserved,registrationVerified} +
+            {schema,qualification,signedLifecyclePassed,head,sha256,manifestSha256,standardUser,os,publisher,previousReleaseUpgraded,projectFilesPreserved,registrationVerified} +
             {version:$version,ciRun:$ci,journeyRun:$journey,releaseRun:$run}
           ' "${receipts[0]}" > media/verification.json
           cd media
