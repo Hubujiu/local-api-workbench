@@ -6,7 +6,20 @@
 
 - `main` 精确提交 `f59b11ac3dc96c567db155dd871ef08ba445937c`，tree `4869acc4fc433b16b1d6b62750c310884c6f2f96`，由 [#264](https://github.com/Hubujiu/local-api-workbench/pull/264) 合并；[主线 CI](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449) 47/47 jobs 成功，46 个产物。不能把当前文档 PR 或后续功能 PR 视为继承这一结果。
 - [Windows 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852416)、[macOS 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852333)、[Linux 下载验证](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134209852444)及[汇总闸门](https://github.com/Hubujiu/local-api-workbench/actions/runs/44130790449/job/134215707659) 均成功。平台包、外层摘要和到期时间见[单一下载入口](PORTABLE-QUICKSTART.md)。这不是原生 Windows 生命周期、完整产品验收或正式发行。
-- [历史分支归档及清理](https://github.com/Hubujiu/local-api-workbench/actions/runs/44219019196)成功；新功能仍以 `main` 开短期任务分支。仓库端规则与 CI 是不同机制，见 [main 保护配置](MAIN-PROTECTION.md)。
+- [历史分支归档及清理](https://github.com/Hubujiu/local-api-workbench/actions/runs/44219019196)成功；新功能仍以 `main` 开短期任务分支。仓库端规则与 CI 是不同机制；已核对 `main` 的有效规则和检查绑定，见 [main 保护配置](MAIN-PROTECTION.md)。
+
+## 开发候选的增量验收（未合入 main）
+
+- [MCP 数据库授权与撤销 #272](https://github.com/Hubujiu/local-api-workbench/pull/272)：
+  head `8130184a1289e21bf645a32f47a6e48abfc85dd3` 的 [浏览器 job](https://github.com/Hubujiu/local-api-workbench/actions/runs/44230620400/job/134557143937)
+  通过 UI smoke 与重启旅程。这个结果不替代各真实远程数据库的兼容验收。
+- [Windows 安装产品旅程 #277](https://github.com/Hubujiu/local-api-workbench/pull/277)：
+  测试 head `a44afb8b5c213860d1905d64c3e87c202c5451be` 以同一安装家族编译了真实
+  0.1.0 → 0.1.1 产品候选。GitHub 托管 Windows 上，0.1.0 首次安装返回码为 0，
+  安装后首启、无效导入恢复及测试项目保存已执行。原 [Windows job](https://github.com/Hubujiu/local-api-workbench/actions/runs/44230439530/job/134559218749)
+  在升级步骤 120 秒超时。已核对 [日志归档](https://github.com/Hubujiu/local-api-workbench/actions/runs/44230439530/artifacts/14395148631)
+  SHA-256 `3d6fca933847b06abc98db9f78fb4c8e11e03b21243e741bf5b9c08070f224bb`：
+  到期后 Windows Installer 服务仍记录文件复制，未确认升级终态；此轮不重试、不拆除证据，升级、卸载、回滚及普通用户均不能据此记为通过。
 
 ## 历史精确已验证候选
 
