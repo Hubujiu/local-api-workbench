@@ -17,3 +17,45 @@
 ```
 
 恢复工具核对发布者、时间戳、安装包摘要、旧版程序清单，以及当前账号的产品注册。它先将程序目录整体保存在同一磁盘的 `LocalAPI-R-…` 目录，再通过 Windows Installer 注销旧通告并从原 MSI 全新安装。人工放入程序目录的文件可在输出的保留目录中取回。项目和历史位于独立的数据目录，验收会逐文件核对。
+
+## Publisher rollover during signed acceptance
+
+New MSI and installed binaries remain pinned to `WORKBENCH_PUBLISHER_THUMBPRINT`.
+The predecessor is the exact latest official non-prerelease version, with its MSI
+and `verification.json` independently SHA-256 checked against their GitHub asset
+metadata. Receipt size is bounded before parsing. Receipt version, MSI hash and
+source commit must match that release and the resolved `commits/tags/vX.Y.Z` ref,
+not a possibly moving `target_commitish` branch. This commit API resolves the tag
+to its commit for both lightweight and annotated tags.
+
+By default the predecessor must have the same pinned publisher. A deliberate
+certificate rollover requires an independently authorized, single-entry
+`WORKBENCH_PUBLISHER_ROTATION` environment configuration (not a receipt field):
+
+```json
+{"schema":"localapi-publisher-rotation-v1","previousVersion":"0.1.0","previousPublisher":"<40 hex old thumbprint>","currentPublisher":"<40 hex current thumbprint>"}
+```
+
+All four fields must match exactly (thumbprints case-insensitively), with no extra
+fields. This is not a generic certificate allowlist. A downloaded receipt cannot
+introduce trusted publishers. The verifier still requires trusted, timestamped
+Authenticode and signtool verification; explicit publisher override is forbidden
+for signing. No certificate, trust store, environment setting or permission is
+changed by the code. Final verification retains the predecessor hash/publisher
+pins and whether the matching rollover authorization was used.
+
+This change does not modify the separate recovery command or authorize its use.
+Audit limitation: that older command derives publisher trust from its supplied
+local verification receipt; do not treat an unverified local receipt as independent
+publisher authorization. Recovery hardening needs a separate reviewed change.
+Portable mocks do not constitute native signed upgrade or certificate-rollover
+acceptance; no actual signing, release or Windows installation was run for this slice.
+
+Parsing rejects top-level arrays (including one-element arrays), scalar coercion,
+array-valued string fields, and unrecognized schemas. Official predecessor receipts
+must identify `localapi-signed-windows-release-acceptance-v1` or `-v2` and contain
+literal boolean `signedLifecyclePassed: true`; older schema-less receipts fail
+closed rather than silently gaining authority. Partial predecessor argument sets
+are rejected even when no media path was supplied. Draft verification requires
+predecessor evidence exactly when an upgrade was performed, with older version,
+complete pins and a rollover flag consistent with the two publishers.

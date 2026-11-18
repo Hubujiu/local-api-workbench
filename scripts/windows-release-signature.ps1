@@ -1,10 +1,12 @@
 param(
   [Parameter(Mandatory)][string]$File,
+  [string]$ExpectedPublisher,
   [switch]$Sign
 )
 $ErrorActionPreference = 'Stop'
 $File = (Resolve-Path -LiteralPath $File).Path
-$publisher = $env:WORKBENCH_PUBLISHER_THUMBPRINT
+if ($Sign -and $ExpectedPublisher) { throw 'Signing cannot override configured publisher' }
+$publisher = if ($ExpectedPublisher) { $ExpectedPublisher } else { $env:WORKBENCH_PUBLISHER_THUMBPRINT }
 if ($publisher -notmatch '^[0-9a-fA-F]{40}$') { throw 'Expected publisher certificate thumbprint required' }
 $kits = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
 $sdk = Get-ChildItem -LiteralPath $kits -Directory | Where-Object Name -Match '^10\.0\.\d+\.\d+$' | Sort-Object { [version]$_.Name } -Descending
@@ -18,6 +20,5 @@ if ($Sign) {
 & $signTool verify /pa /v /all $File
 if ($LASTEXITCODE) { throw 'Authenticode verification failed' }
 $auth = Get-AuthenticodeSignature -LiteralPath $File
-if ($auth.Status -ne 'Valid' -or $auth.SignerCertificate.Thumbprint -ne $publisher -or -not $auth.TimeStamperCertificate) {
-  throw 'Publisher, trust chain or timestamp mismatch'
-}
+. (Join-Path $PSScriptRoot 'windows_release_predecessor.ps1')
+Assert-PinnedAuthenticode $auth $publisher
