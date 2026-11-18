@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "repository": "Hubujiu/local-api-workbench",
+  "head": "f59b11ac3dc96c567db155dd871ef08ba445937c",
+  "sourceUrl": "https://github.com/Hubujiu/local-api-workbench/tree/f59b11ac3dc96c567db155dd871ef08ba445937c",
+  "version": "0.1.0",
+  "nodeVersion": "24.22.3",
+  "files": {
+    "package.json": "313bf4d492872f3d9add3e3baaf7b8b9f2aaf7361da5fd7386670a11442231ec",
+    "package-lock.json": "36311436fd9d1d0e338a740fb57810b68a74d0360ebeff1873c1fca9796fd4ba",
+    "desktop/package.json": "f875d671408c8d3fb8628fece1cfaee25c2417b1dfd54c1844295ebbaa543b74",
+    "desktop/package-lock.json": "735b81e77fe65c9e26bf60832236eed8fa92e486c4b6b86a9a2366c6f720d24b"
+  }
+}
