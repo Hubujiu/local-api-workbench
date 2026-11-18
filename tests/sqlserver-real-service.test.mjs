@@ -1,3 +1,4 @@
+import { verifySQLServerExactFixture } from "./helpers/sqlserver-exact-fixture.mjs";
 import { queryRemoteDatabase } from "../src/remote-database.mjs";
 import { DatabaseSessions } from "../src/database-sessions.mjs";
 // Opt-in only. Never provisions a database, downloads a server or accepts terms.
@@ -160,15 +161,34 @@ test("opt-in real SQL Server READ_ONLY prepared read and READ_WRITE dispatch rej
       if (match) exactResult(result);
       else requireGate(result.rows.length === 0 && result.truncated === false);
     }
+    // Diagnose individual fixed types without printing database values. Keep
+    // the original combined projection below as an independent final check.
+    await verifySQLServerExactFixture(config.readOnly, {
+      onStage: (value) => {
+        stage = "public-provider-exact/" + value;
+      },
+    });
     stage = "public-provider-exact-decimal-temporal-output";
     for (const id of [1, 2]) {
+      stage =
+        id === 1
+          ? "public-provider-exact-combined/value/provider-query"
+          : "public-provider-exact-combined/null/provider-query";
       const output = await queryRemoteDatabase({
         type: "sqlserver",
         ...config.readOnly,
         sql: "SELECT exact_amount, exact_stamp, exact_offset, exact_clock, exact_day FROM dbo.workbench_sqlserver_gate WHERE id=@p0",
         parameters: [id],
       });
+      stage =
+        id === 1
+          ? "public-provider-exact-combined/value/result-shape"
+          : "public-provider-exact-combined/null/result-shape";
       requireGate(output.rows.length === 1 && output.truncated === false);
+      stage =
+        id === 1
+          ? "public-provider-exact-combined/value/exact-values"
+          : "public-provider-exact-combined/null/exact-values";
       requireGate(
         JSON.stringify(Object.values(output.rows[0])) ===
           JSON.stringify(
