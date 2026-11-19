@@ -1485,7 +1485,7 @@ function render(preserveEditingFocus = false) {
   }
 }
 function editor(r) {
-  return `<section class="editor ${mode === "debug" && responseLayout === "split" ? "split-layout" : ""}"><div class="subnav">${[
+  return `<section data-editor-mode="${esc(mode)}" class="editor ${mode === "debug" && responseLayout === "split" ? "split-layout" : ""}"><div class="subnav">${[
     ["design", "设计"],
     ["debug", "调试"],
     ["cases", "接口用例"],

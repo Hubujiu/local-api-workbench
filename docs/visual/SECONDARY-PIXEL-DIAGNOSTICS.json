@@ -1,0 +1,102 @@
+[
+  {
+    "state": "cases",
+    "source": "api-cases-empty-light.png",
+    "implementation": "secondary-v2/cases.png",
+    "crop": [
+      0,
+      0,
+      1188,
+      812
+    ],
+    "resized": false,
+    "masks": false,
+    "changedPixels": 503681,
+    "totalPixels": 964656,
+    "changedPercent": 52.213535187673116,
+    "maeRGB": 3.6579436953000175,
+    "sourceSHA256": "c63324f12002cda0c1048c521fe80a9bf43cf71a7b58352a0192af17475581f5",
+    "implementationSHA256": "3876f6cae6e8b63424844015bedab1172726fb409ec08e2e756f53f1ae8dbe1a",
+    "strictParity": "blocked: branding, capability and fixture content differ; environment underlying page also differs"
+  },
+  {
+    "state": "plans",
+    "source": "ai-plans-empty-light.png",
+    "implementation": "secondary-v2/plans-empty-light.png",
+    "crop": [
+      0,
+      0,
+      1188,
+      812
+    ],
+    "resized": false,
+    "masks": false,
+    "changedPixels": 606168,
+    "totalPixels": 964656,
+    "changedPercent": 62.83773697566801,
+    "maeRGB": 2.4804019947698106,
+    "sourceSHA256": "f3a8841ff7405a2fb5a9829cd6d03c6698081252589f6695e96dc99517d97c57",
+    "implementationSHA256": "e243cf89b1036b845dcfeb2eee14f96e98c7c7c0eb3b044f8e47f61c159f9d5f",
+    "strictParity": "blocked: branding, capability and fixture content differ; environment underlying page also differs"
+  },
+  {
+    "state": "settings",
+    "source": "project-settings-light.png",
+    "implementation": "secondary-v2/settings.png",
+    "crop": [
+      0,
+      0,
+      1188,
+      812
+    ],
+    "resized": false,
+    "masks": false,
+    "changedPixels": 327111,
+    "totalPixels": 964656,
+    "changedPercent": 33.909600935463004,
+    "maeRGB": 4.1421249301996435,
+    "sourceSHA256": "53ccdda41e040613d0ca2cf44fb1ef19a4efe1b4812fd7fd571c43f072e5a62c",
+    "implementationSHA256": "a8b8242546f3e4eeddc8b25b99786186a28ce2f75fb01c3adf5bfd0f1b13ddd4",
+    "strictParity": "blocked: branding, capability and fixture content differ; environment underlying page also differs"
+  },
+  {
+    "state": "mcp-off",
+    "source": "mcp-settings-off-light.png",
+    "implementation": "secondary-v2/mcp-off.png",
+    "crop": [
+      0,
+      0,
+      1188,
+      812
+    ],
+    "resized": false,
+    "masks": false,
+    "changedPixels": 816932,
+    "totalPixels": 964656,
+    "changedPercent": 84.68635451394073,
+    "maeRGB": 8.44599076423789,
+    "sourceSHA256": "028b605f0cb629a31b1dfd7562ade99d10472494b8cb2a815b08c815d61e94a1",
+    "implementationSHA256": "2e5c23e139d2e0e08320d8cb868fe0753c6938b4d50f3862a448866ad2eb5fc0",
+    "strictParity": "blocked: branding, capability and fixture content differ; environment underlying page also differs"
+  },
+  {
+    "state": "environment",
+    "source": "environment-new-light.png",
+    "implementation": "secondary-v2/environment-new-light.png",
+    "crop": [
+      0,
+      0,
+      1188,
+      812
+    ],
+    "resized": false,
+    "masks": false,
+    "changedPixels": 672431,
+    "totalPixels": 964656,
+    "changedPercent": 69.70681776716259,
+    "maeRGB": 14.30513986332952,
+    "sourceSHA256": "882f9bfc681bfcddf2243ff5a12b57d92b3fe8c6499041509abb3b4902740278",
+    "implementationSHA256": "c88312552e5e3e70fbc4557ce7c54ee951e40273f8e28ce217d5c33e21cea6c0",
+    "strictParity": "blocked: branding, capability and fixture content differ; environment underlying page also differs"
+  }
+]
