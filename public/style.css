@@ -2374,3 +2374,27 @@ input[data-select-case] {
   border-radius: 3px;
   padding: 2px 7px;
 }
+
+.dark .http-response-view {
+  background: #1d1913;
+}
+.dark .http-response-code {
+  color: #d4d4d4;
+  background: #1d1913;
+}
+.dark .http-response-code .syntax-key {
+  color: #9cdcfe;
+}
+.dark .http-response-code .syntax-string {
+  color: #ce9178;
+}
+.dark .http-response-code .syntax-number {
+  color: #b5cea8;
+}
+.dark .http-response-gutter {
+  color: #858585;
+}
+.dark .http-response-toolbar button[aria-pressed="true"] {
+  background: #241f17;
+  color: #e6dfce;
+}
