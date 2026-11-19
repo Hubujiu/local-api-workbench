@@ -87,6 +87,8 @@ export async function captureHTTPWorkbenchBaseline(
           ".request-panel",
           ".body-editor-shell",
           "#body-code",
+          "#code-highlight",
+          "#code-gutter",
           ".response-tabs",
           ".response",
         ];
@@ -120,6 +122,22 @@ export async function captureHTTPWorkbenchBaseline(
         const bySelector = Object.fromEntries(
           metrics.elements.map((element) => [element.selector, element]),
         );
+        for (const selector of [
+          "#body-code",
+          "#code-highlight",
+          "#code-gutter",
+        ]) {
+          assert.equal(
+            bySelector[selector].fontSize,
+            "12px",
+            `${theme} ${selector} font size`,
+          );
+          assert.equal(
+            bySelector[selector].lineHeight,
+            "16px",
+            `${theme} ${selector} native row pitch`,
+          );
+        }
         for (const [selector, key, expected] of [
           [".rail", "width", 50],
           [".sidebar", "width", 263],
