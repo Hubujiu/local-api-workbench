@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "note": "This is an unfilled coverage template, NOT captured evidence. Every null side must stay blocked until current inspected screenshots with equivalent state exist.",
+  "pairs": [
+    {
+      "id": "01-http-editor-empty-response-light",
+      "reference": null,
+      "workbench": null
+    },
+    {
+      "id": "01-http-editor-empty-response-dark",
+      "reference": null,
+      "workbench": null
+    },
+    {
+      "id": "02-http-response-json-light",
+      "reference": null,
+      "workbench": null
+    },
+    {
+      "id": "02-http-response-json-dark",
+      "reference": null,
+      "workbench": null
+    },
+    {
+      "id": "03-project-settings-light",
+      "reference": null,
+      "workbench": null
+    },
+    {
+      "id": "03-project-settings-dark",
+      "reference": null,
+      "workbench": null
+    },
+    {
+      "id": "04-environment-variables-light",
+      "reference": null,
+      "workbench": null
+    },
+    {
+      "id": "04-environment-variables-dark",
+      "reference": null,
+      "workbench": null
+    },
+    {
+      "id": "05-case-list-light",
+      "reference": null,
+      "workbench": null
+    },
+    {
+      "id": "05-case-list-dark",
+      "reference": null,
+      "workbench": null
+    },
+    {
+      "id": "06-database-connection-light",
+      "reference": null,
+      "workbench": null
+    },
+    {
+      "id": "06-database-connection-dark",
+      "reference": null,
+      "workbench": null
+    },
+    {
+      "id": "07-mcp-disabled-light",
+      "reference": null,
+      "workbench": null
+    },
+    {
+      "id": "07-mcp-disabled-dark",
+      "reference": null,
+      "workbench": null
+    }
+  ]
+}
