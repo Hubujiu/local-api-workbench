@@ -2175,6 +2175,12 @@ try {
     "Visible deterministic verification plan",
   );
   await page.locator('[data-page="apis"]').click();
+  const casesRequestURL = await page.locator("#url").inputValue();
+  await page.locator('[data-mode="cases"]').click();
+  assert.equal(await page.locator(".urlbar").isVisible(), false);
+  await page.locator('[data-mode="debug"]').click();
+  assert.equal(await page.locator("#url").inputValue(), casesRequestURL);
+  assert(await page.locator("#send").isVisible());
   await page.locator('[data-mode="cases"]').click();
   await page.locator("#new-interface-case").click();
   await page.locator("#case-name").fill("Independent persisted case");
