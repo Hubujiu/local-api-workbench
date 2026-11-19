@@ -1,3 +1,4 @@
+import { captureHTTPWorkbenchBaseline } from "./helpers/http-workbench-visual-baseline.mjs";
 import { exerciseMCPDatabaseUI } from "./helpers/mcp-database-ui.mjs";
 import { exercisePlanHistoryRefreshUI } from "./helpers/plan-history-refresh-ui.mjs";
 import { exerciseAgentRegisterLoginUI } from "./helpers/agent-register-login-ui.mjs";
@@ -596,6 +597,7 @@ try {
   await page.locator('[data-param="body"]').click();
 
   await page.screenshot({ path: "/tmp/local-api-reference-light.png" });
+  await captureHTTPWorkbenchBaseline(page);
   await page.locator("#compact-ui").click();
   assert.equal(await page.locator(".sidebar").isVisible(), false);
   await page.locator("#response-layout").click();

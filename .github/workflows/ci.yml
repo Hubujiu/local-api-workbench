@@ -70,6 +70,7 @@ jobs:
           name: ui-evidence
           path: |
             /tmp/local-api-*.png
+            /tmp/local-api-http-workbench.json
             /tmp/local-api-trace.zip
             /tmp/local-api-restart-journey-trace.zip
             /tmp/local-api-video/
