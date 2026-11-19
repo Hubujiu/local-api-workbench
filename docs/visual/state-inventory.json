@@ -1,0 +1,384 @@
+{
+  "version": 1,
+  "asOf": "2026-11-19",
+  "sourceCommit": "d89cc05ca368a157c169615731c587f40d6bafba",
+  "referenceVersion": "Apipost standalone 2.0.1",
+  "sourceFiles": [
+    "public/app.js",
+    "public/plan-view.js",
+    "public/settings-view.js",
+    "public/grpc-unary-workbench.js",
+    "public/socketio-workbench.js"
+  ],
+  "pairedSameStateCount": 0,
+  "states": [
+    {
+      "id": "http-empty",
+      "surface": "HTTP raw JSON / empty response, light and dark",
+      "coverage": "needs-captures",
+      "reference": "http-editor-{theme}.png",
+      "workbench": "workbench-http-{theme}.png",
+      "reason": "Both screenshots exist, but existing strict report is blocked. Recapture identical full fixture/viewport/selection; component crops cannot salvage mismatch."
+    },
+    {
+      "id": "http-201",
+      "surface": "HTTP response201, light and dark",
+      "coverage": "needs-captures",
+      "reference": "http-response-201-{theme}.png",
+      "workbench": "workbench-response-201-{theme}.png",
+      "reason": "Both screenshots exist, but existing strict report is blocked. Recapture identical full fixture/viewport/selection; component crops cannot salvage mismatch."
+    },
+    {
+      "id": "plans",
+      "surface": "AI plan empty light",
+      "coverage": "needs-captures",
+      "reference": "ai-plans-empty-light.png",
+      "workbench": "workbench-ai-plans-empty-light.png",
+      "reason": "Both screenshots exist, but existing strict report is blocked. Recapture identical full fixture/viewport/selection; component crops cannot salvage mismatch."
+    },
+    {
+      "id": "cases",
+      "surface": "API cases empty light",
+      "coverage": "needs-captures",
+      "reference": "api-cases-empty-light.png",
+      "workbench": "workbench-api-cases-empty-light.png",
+      "reason": "Both screenshots exist, but existing strict report is blocked. Recapture identical full fixture/viewport/selection; component crops cannot salvage mismatch."
+    },
+    {
+      "id": "environment",
+      "surface": "New environment light",
+      "coverage": "needs-captures",
+      "reference": "environment-new-light.png",
+      "workbench": "workbench-environment-new-light.png",
+      "reason": "Both screenshots exist, but existing strict report is blocked. Recapture identical full fixture/viewport/selection; component crops cannot salvage mismatch."
+    },
+    {
+      "id": "settings",
+      "surface": "Basic settings light",
+      "coverage": "needs-captures",
+      "reference": "project-settings-light.png",
+      "workbench": "workbench-settings-basic-light.png",
+      "reason": "Both screenshots exist, but existing strict report is blocked. Recapture identical full fixture/viewport/selection; component crops cannot salvage mismatch."
+    },
+    {
+      "id": "mcp",
+      "surface": "MCP off light",
+      "coverage": "needs-captures",
+      "reference": "mcp-settings-off-light.png",
+      "workbench": "workbench-settings-mcp-off-light.png",
+      "reason": "Both screenshots exist, but existing strict report is blocked. Recapture identical full fixture/viewport/selection; component crops cannot salvage mismatch."
+    },
+    {
+      "id": "design",
+      "surface": "API design light/dark",
+      "coverage": "needs-captures",
+      "reference": "api-design-{theme}.png",
+      "workbench": "workbench-api-design-{theme}.png",
+      "reason": "Both screenshots exist; no validated inspected immutable same-state manifest reviewed."
+    },
+    {
+      "id": "state-8",
+      "surface": "Header rows (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-9",
+      "surface": "Query rows (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-10",
+      "surface": "Path rows (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-11",
+      "surface": "Authentication types (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-12",
+      "surface": "Cookie rows (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-13",
+      "surface": "Body none (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-14",
+      "surface": "Body form-data/files (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-15",
+      "surface": "Body urlencoded (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-16",
+      "surface": "Body raw text/XML (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-17",
+      "surface": "Before scripts/operations (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-18",
+      "surface": "After scripts/operations (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-19",
+      "surface": "Assertions (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-20",
+      "surface": "Extract variables (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-21",
+      "surface": "Response headers (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-22",
+      "surface": "Response cookies (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-23",
+      "surface": "Response failed/cancelled (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-24",
+      "surface": "Send/save menus (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-25",
+      "surface": "Selected plan editor (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-26",
+      "surface": "Plan history (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-27",
+      "surface": "Populated interface case (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-28",
+      "surface": "API documentation (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-29",
+      "surface": "Dictionary/functions (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-30",
+      "surface": "Recent request history (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-31",
+      "surface": "Git/export (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-32",
+      "surface": "Recycle bin (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "state-33",
+      "surface": "Import/scoped export dialogs (light and dark)",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": null,
+      "reason": "No inspected same-state pair with immutable fixture metadata."
+    },
+    {
+      "id": "database-manager-empty-dark",
+      "surface": "database-manager-empty-dark",
+      "coverage": "needs-captures",
+      "reference": "database-manager-empty-dark.png",
+      "workbench": null,
+      "reason": "Reference-only; native deep capture in progress is not yet paired. Light state missing too."
+    },
+    {
+      "id": "database-connection-new-dark",
+      "surface": "database-connection-new-dark",
+      "coverage": "needs-captures",
+      "reference": "database-connection-new-dark.png",
+      "workbench": null,
+      "reason": "Reference-only; native deep capture in progress is not yet paired. Light state missing too."
+    },
+    {
+      "id": "database-before-step-dark",
+      "surface": "database-before-step-dark",
+      "coverage": "needs-captures",
+      "reference": "database-before-step-dark.png",
+      "workbench": null,
+      "reason": "Reference-only; native deep capture in progress is not yet paired. Light state missing too."
+    },
+    {
+      "id": "onboarding-light",
+      "surface": "onboarding-light",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": "workbench-onboarding-light.png",
+      "reason": "Implementation-only; narrow views must never compare against desktop viewport."
+    },
+    {
+      "id": "environment-edit-light",
+      "surface": "environment-edit-light",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": "workbench-environment-edit-light.png",
+      "reason": "Implementation-only; narrow views must never compare against desktop viewport."
+    },
+    {
+      "id": "environment-narrow",
+      "surface": "environment-narrow",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": "workbench-environment-narrow.png",
+      "reason": "Implementation-only; narrow views must never compare against desktop viewport."
+    },
+    {
+      "id": "settings-basic-narrow",
+      "surface": "settings-basic-narrow",
+      "coverage": "needs-captures",
+      "reference": null,
+      "workbench": "workbench-settings-basic-narrow.png",
+      "reason": "Implementation-only; narrow views must never compare against desktop viewport."
+    },
+    {
+      "id": "nonoverlap-41",
+      "surface": "Local API branding",
+      "coverage": "non-overlap",
+      "reference": null,
+      "workbench": null,
+      "reason": "Product-owned identity/security/capability; preserve semantics. Not permission to mask a shared component. Functional testing remains separate."
+    },
+    {
+      "id": "nonoverlap-42",
+      "surface": "Local authorization and credential controls",
+      "coverage": "non-overlap",
+      "reference": null,
+      "workbench": null,
+      "reason": "Product-owned identity/security/capability; preserve semantics. Not permission to mask a shared component. Functional testing remains separate."
+    },
+    {
+      "id": "nonoverlap-43",
+      "surface": "gRPC-specific controls",
+      "coverage": "non-overlap",
+      "reference": null,
+      "workbench": null,
+      "reason": "Product-owned identity/security/capability; preserve semantics. Not permission to mask a shared component. Functional testing remains separate."
+    },
+    {
+      "id": "nonoverlap-44",
+      "surface": "Socket.IO-specific controls",
+      "coverage": "non-overlap",
+      "reference": null,
+      "workbench": null,
+      "reason": "Product-owned identity/security/capability; preserve semantics. Not permission to mask a shared component. Functional testing remains separate."
+    },
+    {
+      "id": "nonoverlap-45",
+      "surface": "Typed execution/recovery evidence",
+      "coverage": "non-overlap",
+      "reference": null,
+      "workbench": null,
+      "reason": "Product-owned identity/security/capability; preserve semantics. Not permission to mask a shared component. Functional testing remains separate."
+    }
+  ]
+}
