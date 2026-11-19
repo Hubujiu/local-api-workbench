@@ -1,0 +1,358 @@
+#dialog:has(.environment-dialog) {
+  width: 832px;
+  height: 600px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 48px);
+  border: 0;
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: 0 10px 24px #0002;
+}
+#dialog:has(.environment-dialog) > form {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr);
+  grid-template-rows: 63px minmax(0, 1fr) 68px;
+}
+#dialog:has(.environment-dialog) > form > header {
+  grid-column: 2;
+  padding: 20px 20px 14px;
+  border: 0;
+  z-index: 1;
+}
+#dialog:has(.environment-dialog) #dialog-title {
+  font-size: 16px;
+  font-weight: 500;
+}
+#dialog:has(.environment-dialog) > form > header button {
+  font-size: 20px;
+}
+#dialog:has(.environment-dialog) #dialog-content {
+  display: contents;
+  padding: 0;
+  overflow: visible;
+  max-height: none;
+}
+.environment-dialog {
+  display: contents;
+}
+.environment-dialog-nav {
+  grid-column: 1;
+  grid-row: 1 / 4;
+  background: #faf6ec;
+  padding: 22px 16px 20px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.environment-section-label {
+  margin: 6px 0 12px;
+  font-size: 12px;
+  color: #a29683;
+}
+.environment-dialog-nav button {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #75664e;
+  font-size: 14px;
+  text-align: left;
+  margin-bottom: 8px;
+}
+.environment-list {
+  flex: 1;
+}
+.environment-dialog-nav button[aria-current="page"] {
+  background: #f2e9d7;
+  color: #8b6d3b;
+}
+.environment-dialog-nav button:hover {
+  background: #f2e9d7;
+}
+.environment-nav-icon {
+  width: 18px;
+  height: 18px;
+  color: #219eff;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.environment-nav-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.environment-nav-icon.cookie {
+  color: #ff971a;
+}
+.environment-nav-icon.global {
+  color: #b780ed;
+}
+.environment-list button > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.environment-dialog-nav .environment-create {
+  border: 1px dashed #ddcbaa;
+  min-height: 32px;
+  margin: 16px 0 0;
+  justify-content: center;
+}
+.environment-dialog-main {
+  grid-column: 2;
+  grid-row: 2;
+  padding: 0 20px;
+  overflow: auto;
+  color: #75664e;
+  min-width: 0;
+}
+.environment-dialog-notice {
+  background: #faf6ec;
+  padding: 8px 16px;
+  font-size: 12px;
+  line-height: 17px;
+  margin: 0 0 16px;
+}
+#dialog-content .environment-dialog-main > label {
+  font-size: 14px;
+  margin: 0 0 9px;
+}
+#dialog-content .environment-dialog-main > input {
+  height: 32px;
+  padding: 5px 12px;
+  border-color: #eee7da;
+  background: transparent;
+  font-size: 14px;
+}
+.environment-service-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 18px 0;
+  font-size: 14px;
+}
+.environment-service-heading button {
+  border: 0;
+  background: transparent;
+  color: #a29580;
+  font-size: 12px;
+  padding: 0 16px;
+}
+.environment-table-wrap {
+  border: 1px solid #eee7da;
+  border-radius: 3px;
+  overflow: auto;
+}
+.environment-dialog-main table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 14px;
+}
+.environment-dialog-main th {
+  height: 35px;
+  background: transparent;
+  font-weight: 400;
+  color: #a29580;
+  padding: 0 12px;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid #eee7da;
+}
+.environment-dialog-main td {
+  height: 36px;
+  padding: 4px 12px;
+  border: 0;
+  border-bottom: 1px solid #eee7da;
+  overflow-wrap: anywhere;
+}
+.environment-dialog-main tr:last-child td {
+  border-bottom: 0;
+}
+.environment-service-table th:first-child {
+  width: 66.4%;
+  padding-left: 36px;
+}
+.environment-service-empty {
+  color: #a29580;
+}
+.environment-variable-heading {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+}
+#dialog-content .environment-variable-heading label {
+  white-space: nowrap;
+  margin: 0;
+  font-size: 14px;
+}
+#dialog-content .environment-dialog-main .environment-variable-heading input {
+  width: 180px;
+  height: 26px;
+  min-height: 0;
+  padding: 3px 10px;
+  border-color: #eee7da;
+  font-size: 14px;
+}
+.environment-value-table th:nth-child(1) {
+  width: 29%;
+}
+.environment-value-table th:nth-child(2) {
+  width: 29%;
+}
+.environment-value-table small {
+  font-size: 9px;
+}
+#dialog-content .environment-value-table input {
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  min-width: 0;
+  height: 27px;
+  font-size: 13px;
+}
+.environment-value-table td:last-child {
+  position: relative;
+  padding-right: 38px;
+  font-size: 12px;
+}
+.environment-value-table [data-env-remove] {
+  position: absolute;
+  right: 4px;
+  top: 8px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #a29580;
+  font-size: 11px;
+}
+.environment-empty-row td {
+  color: #a29580;
+  font-size: 12px;
+}
+.environment-add-variable {
+  margin: 8px 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: #8b6d3b;
+  font-size: 12px;
+}
+.environment-json {
+  margin: 6px 0 12px;
+  font-size: 12px;
+  color: #a29580;
+}
+.environment-json summary {
+  cursor: pointer;
+}
+.environment-json p {
+  line-height: 1.6;
+}
+#environment-dialog-error {
+  color: var(--danger, #c43535);
+  font-size: 12px;
+  margin: 4px 0;
+}
+#dialog:has(.environment-dialog) > form > footer {
+  grid-column: 2;
+  grid-row: 3;
+  padding: 12px 20px 24px;
+  border: 0;
+  gap: 12px;
+}
+#dialog:has(.environment-dialog) > form > footer button {
+  height: 32px;
+  min-height: 32px;
+  padding: 4px 16px;
+  border-radius: 3px;
+  border: 0;
+  font-size: 14px;
+}
+#dialog:has(.environment-dialog) > form > footer .primary {
+  background: #8b6d3b;
+  color: white;
+}
+.environment-dialog button:focus-visible,
+.environment-dialog input:focus-visible,
+.environment-json summary:focus-visible {
+  outline: 2px solid #8b6d3b;
+  outline-offset: 2px;
+}
+body.dark .environment-dialog-nav,
+body.dark .environment-dialog-notice {
+  background: var(--panel);
+}
+body.dark .environment-dialog-main,
+body.dark .environment-dialog-nav button {
+  color: var(--text);
+}
+body.dark .environment-dialog-nav button[aria-current="page"],
+body.dark .environment-dialog-nav button:hover {
+  background: var(--line);
+}
+@media (max-width: 680px) {
+  #dialog:has(.environment-dialog) > form {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+  .environment-dialog-nav {
+    padding: 16px 8px;
+  }
+  .environment-dialog-nav button {
+    padding: 0 8px;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .environment-dialog-main {
+    padding: 0 12px;
+  }
+  .environment-variable-heading {
+    flex-wrap: wrap;
+  }
+  .environment-dialog-main table {
+    min-width: 340px;
+  }
+}
+
+.environment-list button {
+  width: calc(100% - 8px);
+  margin-bottom: 11px;
+}
+#dialog:has(.environment-dialog) > form > footer {
+  padding-right: 98px;
+}
+#dialog:has(.environment-dialog) > form > footer button[value="cancel"] {
+  display: none;
+}
+#dialog:has(.environment-dialog) > form > footer .primary {
+  background: #f7f5f1;
+  color: #8b6d3b;
+}
+#environment-save-stay {
+  min-width: 66px;
+  grid-column: 2;
+  grid-row: 3;
+  align-self: start;
+  justify-self: end;
+  margin: 12px 20px 24px 0;
+  height: 32px;
+  padding: 4px 16px;
+  border: 0;
+  border-radius: 3px;
+  background: #8b6d3b;
+  color: white;
+  font-size: 14px;
+  z-index: 1;
+}
+body.dark #dialog:has(.environment-dialog) > form > footer .primary {
+  background: var(--panel);
+  color: var(--text);
+}

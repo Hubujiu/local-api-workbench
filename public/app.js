@@ -1,3 +1,8 @@
+import { emptyCasePanel } from "./case-empty-view.js";
+import {
+  environmentDialogHTML,
+  mountEnvironmentDialog,
+} from "./environment-dialog.js";
 import { bindMCPDatabase } from "./mcp-database-view.js";
 import {
   loadDatabasePreviewCapabilities,
@@ -1718,6 +1723,15 @@ function modePanel(r) {
     return `<div class="page">${r.importNotes?.length ? `<div class="notice import-notes" role="region" aria-label="导入兼容性提示" tabindex="0">导入提示：${r.importNotes.map(esc).join("<br>")}</div>` : ""}${importedScriptTasksHTML(r.importedScriptTasks)}<div class="form-grid"><label>全局请求参数</label><label><input id="inherit-global-parameters" type="checkbox" ${r.inheritGlobalParameters !== false ? "checked" : ""}>继承项目及目录 Header / Query / Cookie / 表单参数</label><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>HTTPS代理 CA（PEM，与目标站点CA分开）</label><textarea data-tls="proxyCa">${esc(r.tls?.proxyCa || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select>${attributeFields(project.settings?.attributes || [], r.attributes)}<label>请求 JSON Schema</label><div><button id="visual-schema" type="button">可视化编辑结构</button><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div><label>响应定义（状态、描述、Content 与 Schema）</label><div><div class="response-schema-actions"><button id="new-response-schema" type="button">新增响应结构</button>${(r.responses || []).flatMap((definition, index) => (Object.keys(definition.content || {}).length ? Object.keys(definition.content) : ["application/json"]).map((media) => `<button type="button" data-response-schema="${esc(JSON.stringify([index, media]))}">编辑 ${esc(definition.status)} · ${esc(media)}</button>`)).join("")}</div>${r.openapiExampleBindingsVersion === 1 ? '<p class="muted">此处可修改 Schema。绑定示例请用示例编辑器，响应状态请用可视编辑按钮；直接改源示例注解会产生导出冲突。</p>' : ""}<textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
   if (mode === "mock")
     return `<div class="page"><h2>本地 Mock 与响应示例</h2><button id="edit-mock-rules">编辑条件响应期望规则</button><button data-page="settings" data-settings-target="settings-mock-fields">配置智能字段 Mock</button><p class="muted">指定示例时直接返回该示例；否则按顺序匹配规则，不匹配时返回首个示例；没有示例时按 2xx JSON 响应 Schema 和项目字段规则生成。</p><p class="muted">Mock 地址只在本机应用运行时可用。切换调试会先保存当前改动；指定示例会停用请求中同名 example 参数，其他全局参数与脚本仍会执行。HTML 响应隔离展示，不运行页面脚本；禁止 Set-Cookie 等修改浏览器状态的头。</p><input class="mock-url" readonly value="${esc(mockURL(location.origin, project.id, r.id))}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${esc(e.status)}</strong><button data-use-example="${i}">调试此示例</button><button data-edit-example="${i}">编辑</button><button data-delete-example="${i}">删除</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
+  if (
+    mode === "cases" &&
+    !(
+      caseBatch?.projectId === project.id && caseBatch?.sourceRequestId === r.id
+    )
+  ) {
+    const empty = emptyCasePanel(project, r.id, busy);
+    if (empty) return empty;
+  }
   if (mode === "cases")
     return `<div class="page"><h2>接口用例</h2><p class="muted">每个用例保存独立请求快照，可覆盖参数、断言和脚本。原接口修改不会自动覆盖用例。分组仅组织用例，移动分组不会改写已保存的请求快照。</p><button id="new-interface-case" class="primary" ${busy ? "disabled" : ""}>＋ 新建接口用例</button><button id="new-case-folder" ${busy ? "disabled" : ""}>＋ 新建用例分组</button><button id="create-case">从当前接口创建执行计划</button>${caseSelectionToolbar()}${caseCards(project, r.id, caseResults.results(project.id), busy, selectedInterfaceCases(), caseResults.collapsed(project.id))}</div>`;
   return `<div class="page"><h2>一键压测</h2><p class="muted">仅对你有权测试的接口使用。最多100次主请求执行、并发10，支持取消。包含脚本、动态值和断言；每次执行的变量独立，不回写项目。脚本子请求另计（各自受沙箱上限约束），HTTP调用数不等于网络往返次数。P50/P95是主请求耗时，逐次elapsed另含脚本等待；脚本与子请求也可能产生副作用。</p><p class="muted">按时长模式限定1至60秒，仍受请求上限约束；先到时长或请求上限即停止，不保证持续到指定秒数。到时会中断尚未完成的请求和脚本，并保留记录。</p><div class="row load-controls"><label>模式 <select id="load-mode" ${busy ? "disabled" : ""}><option value="count" ${loadOptions.get(project.id + ":" + r.id)?.mode !== "duration" ? "selected" : ""}>按请求数</option><option value="duration" ${loadOptions.get(project.id + ":" + r.id)?.mode === "duration" ? "selected" : ""}>按持续时长</option></select></label><label>时长（秒，仅时长模式） <input id="load-duration" type="number" min="1" max="60" value="${esc(loadOptions.get(project.id + ":" + r.id)?.durationSeconds ?? 10)}" ${busy ? "disabled" : ""}></label><label>请求数 / 上限 <input id="load-count" type="number" value="${esc(loadOptions.get(project.id + ":" + r.id)?.count ?? 10)}" min="1" max="100"></label><label>并发 <input id="load-concurrency" type="number" value="${esc(loadOptions.get(project.id + ":" + r.id)?.concurrency ?? 1)}" min="1" max="10"></label><button id="load-run" class="primary" ${busy ? "disabled" : ""}>开始压测</button>${busy ? '<button id="cancel">停止</button>' : ""}</div><div class="load-data-panel"><label for="load-data">参数化数据（UTF-8 CSV，可选）</label><p class="muted">首行为变量名，后续行依次循环供 {{变量名}} 使用，仅覆盖本次运行。最多64 KiB、100行、50列；数据只保留在当前页面会话，不保存到项目。</p><textarea id="load-data" rows="4" spellcheck="false" ${busy ? "disabled" : ""} placeholder="id,name&#10;1,示例">${esc(loadOptions.get(project.id + ":" + r.id)?.dataCSV ?? "")}</textarea><label>导入 CSV <input id="load-data-file" type="file" accept=".csv,text/csv" ${busy ? "disabled" : ""}></label></div>${
@@ -4150,36 +4164,72 @@ function bind() {
     mark();
     render();
   });
-  on("#add-env", "click", () =>
+  function editEnvironment(id) {
+    const owner = project;
+    let item = project.environments.find((value) => value.id === id);
+    let editor;
+    const apply = () => {
+      if (project !== owner) throw Error("项目已变化，请重新打开环境设置");
+      const values = editor.read();
+      const name = $("#env-name, #edit-env-name").value.trim();
+      if (item) {
+        item.name = name || item.name;
+        item.variables = values;
+      } else {
+        item = { id: uid(), name: name || "新环境", variables: values };
+        project.environments.push(item);
+      }
+      mark();
+      render();
+    };
     modal(
-      "新建环境",
-      '<label>环境名称</label><input id="env-name"><label>变量（JSON 对象）</label>' +
-        jsonEditor({ baseUrl: "http://localhost:8080" }),
-      () => {
-        project.environments.push({
-          id: uid(),
-          name: $("#env-name").value || "新环境",
-          variables: JSON.parse($("#modal-json").value),
-        });
-        mark();
-        render();
-      },
-    ),
-  );
-  on("[data-edit-env]", "click", (_, e) => {
-    const v = project.environments.find((v) => v.id === e.dataset.editEnv);
-    modal(
-      "编辑 " + v.name,
-      `<label>环境名称</label><input id="edit-env-name" value="${esc(v.name)}"><p>JSON仅编辑当前值，已有初始值和说明保持不变。</p>` +
-        jsonEditor(v.variables),
-      () => {
-        v.name = $("#edit-env-name").value.trim() || v.name;
-        v.variables = JSON.parse($("#modal-json").value);
-        mark();
-        render();
-      },
+      "环境设置",
+      environmentDialogHTML(project, item),
+      apply,
+      "保存并关闭",
     );
-  });
+    editor = mountEnvironmentDialog($("#dialog-content"), item);
+    $("#environment-save-stay").onclick = () => {
+      try {
+        apply();
+        editEnvironment(item.id);
+      } catch (error) {
+        toast(error.message);
+      }
+    };
+    const leave = (action) => {
+      if (editor.changed && !confirm("放弃尚未保存的环境修改？")) return;
+      action();
+    };
+    for (const button of $("#dialog-content").querySelectorAll(
+      "[data-env-open]",
+    ))
+      button.onclick = () =>
+        leave(() => editEnvironment(button.dataset.envOpen));
+    $("#dialog-content [data-env-new]").onclick = () =>
+      leave(() => editEnvironment());
+    $("#dialog-content [data-env-current]")?.addEventListener("click", () =>
+      $("#env-name").focus(),
+    );
+    $("#dialog-content [data-env-services]").onclick = () =>
+      leave(() => editService());
+    for (const button of $("#dialog-content").querySelectorAll(
+      "[data-env-section]",
+    ))
+      button.onclick = () =>
+        leave(() => {
+          if (button.dataset.envSection === "cookies")
+            return openCookieManager();
+          if (button.dataset.envSection === "globals")
+            return editVariableDefinitions();
+          $("#dialog").close();
+          page = "settings";
+          settingsSection = "settings-global-parameters";
+          render();
+        });
+  }
+  on("#add-env", "click", () => editEnvironment());
+  on("[data-edit-env]", "click", (_, e) => editEnvironment(e.dataset.editEnv));
   on("[data-delete-env]", "click", (_, e) => {
     if (project.environments.length === 1) throw Error("至少保留一个环境");
     project.environments = project.environments.filter(
