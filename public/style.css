@@ -2308,3 +2308,44 @@ input[data-select-case] {
     padding-right: 24px;
   }
 }
+
+.request-pairs-panel .pair-actions {
+  margin-bottom: 12px;
+}
+.request-pairs-table .pair-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.request-pairs-table .pair-description-heading {
+  width: 15%;
+}
+@media (min-width: 1060px) and (min-height: 720px) {
+  .editor:not(.split-layout) > .request-pairs-panel {
+    height: 274px;
+    min-height: 274px;
+    flex: 0 0 274px;
+    padding: 12px 0;
+  }
+  .request-pairs-table {
+    border: 1px solid var(--line);
+  }
+  .request-pairs-table th {
+    height: 36px;
+    background: transparent;
+    border-right: 1px solid var(--line);
+  }
+  .request-pairs-table th:first-child {
+    border-right: 0;
+  }
+  .request-pairs-table td {
+    height: 36px;
+  }
+}
+@media (max-width: 760px) {
+  .request-pairs-table .pair-description-heading,
+  .request-pairs-table .pair-description {
+    display: none;
+  }
+}
