@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderPlans } from "../public/plan-view.js";
+import { renderPlans, renderRuns } from "../public/plan-view.js";
 const project = { plans: [], runs: [], environments: [] };
 test("empty plan surface describes actual permissions and keeps creation reachable", () => {
   const html = renderPlans({ project });
@@ -18,7 +18,16 @@ test("record tab remains read-only refresh with truthful selected state", () => 
   assert.match(html, /data-plan-tab="runs" aria-pressed="true"/);
   assert.match(html, /id="refresh-plan-history"/);
   assert.match(html, /不运行计划或保存草稿/);
-  assert.doesNotMatch(html, /请选择或新建一个执行计划/);
+  assert.match(html, /id="plan-history-refresh-status" role="status"/);
+  assert.ok(
+    html.indexOf('id="refresh-plan-history"') <
+      html.indexOf("plan-history-layout"),
+  );
+  assert.equal(
+    renderRuns([]),
+    '<p class="plan-history-empty">暂无执行记录</p>',
+  );
+  assert.doesNotMatch(html, /请选择或新建一个执行计划|最近 50 条/);
 });
 test("populated and busy plans retain editor, stop, escaping and selection", () => {
   const p = {
@@ -32,4 +41,18 @@ test("populated and busy plans retain editor, stop, escaping and selection", () 
   assert.match(html, /id="cancel"/);
   assert.match(html, /id="save-plan-details"/);
   assert.doesNotMatch(html, /暂无执行计划|请选择或新建一个执行计划/);
+});
+
+test("refresh rendering can swap an empty canvas for real records and export", () => {
+  const run = {
+    id: "one",
+    status: "passed",
+    planName: "<local plan>",
+    results: [],
+  };
+  const html = renderRuns([run], run);
+  assert.match(html, /data-plan-run-id="one" open/);
+  assert.match(html, /&lt;local plan&gt;/);
+  assert.match(html, /data-export-run="one"/);
+  assert.doesNotMatch(html, /plan-history-empty/);
 });

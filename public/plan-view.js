@@ -15,8 +15,8 @@ export function renderPlans({ project, planId, lastRun, busy, tab = "plans" }) {
   const runs = lastRun
     ? [lastRun, ...project.runs.filter((run) => run.id !== lastRun.id)]
     : project.runs;
-  return (
-    '<div class="page plans-page"><header class="plans-heading"><h1>AI执行计划</h1><p>手动编排接口步骤，执行后查看报告；AI 可通过已授权的 MCP 连接协助操作。</p></header><div class="plan-tabs" aria-label="计划与记录"><button data-plan-tab="plans" aria-pressed="' +
+  const tabs =
+    '<div class="plan-tabs" aria-label="计划与记录"><button data-plan-tab="plans" aria-pressed="' +
     (tab === "plans") +
     '" class="' +
     (tab === "plans" ? "primary" : "") +
@@ -24,8 +24,18 @@ export function renderPlans({ project, planId, lastRun, busy, tab = "plans" }) {
     (tab === "runs") +
     '" class="' +
     (tab === "runs" ? "primary" : "") +
-    '">执行记录</button></div><p id="mcp-plan-status" class="subtle"></p>' +
-    '<div class="plan-layout"><aside class="plan-list"><div class="row"><strong class="grow">执行计划</strong><button id="new-plan" class="primary">新建计划</button></div>' +
+    '">执行记录</button></div>';
+  return (
+    '<div class="page plans-page"><header class="plans-heading"><h1>AI执行计划</h1><p>手动编排接口步骤，执行后查看报告；AI 可通过已授权的 MCP 连接协助操作。</p></header>' +
+    (tab === "runs"
+      ? '<div class="plan-history-controls">' +
+        tabs +
+        '<div class="plan-history-actions"><button type="button" class="ghost" id="refresh-plan-history" title="只读刷新已保存记录，不运行计划或保存草稿。">刷新执行记录</button><span id="plan-history-refresh-status" role="status" class="subtle"></span></div></div>'
+      : tabs) +
+    '<p id="mcp-plan-status" class="subtle"></p>' +
+    '<div class="plan-layout' +
+    (tab === "runs" ? " plan-history-layout" : "") +
+    '"><aside class="plan-list"><div class="row"><strong class="grow">执行计划</strong><button id="new-plan" class="primary">新建计划</button></div>' +
     project.plans
       .map(
         (item) =>
@@ -43,9 +53,7 @@ export function renderPlans({ project, planId, lastRun, busy, tab = "plans" }) {
       : '<p class="plan-list-empty">暂无执行计划</p>') +
     '</aside><section class="plan-main">' +
     (tab === "runs"
-      ? '<div class="row"><button id="refresh-plan-history">刷新执行记录</button><span id="plan-history-refresh-status" role="status" class="subtle">只读刷新已保存记录，不运行计划或保存草稿。</span></div><div id="plan-run-records">' +
-        renderRuns(runs, lastRun) +
-        "</div>"
+      ? '<div id="plan-run-records">' + renderRuns(runs, lastRun) + "</div>"
       : plan
         ? renderEditor(plan, busy, project.environments)
         : '<div class="plan-selection-empty"><p>请选择或新建一个执行计划</p></div>') +
@@ -193,9 +201,10 @@ function renderPlanStep(step, index, plan) {
   );
 }
 export function renderRuns(runs, lastRun) {
+  if (!runs.length) return '<p class="plan-history-empty">暂无执行记录</p>';
   return (
     '<h2>执行记录 <span class="subtle">最近 50 条</span></h2>' +
-    (runs
+    runs
       .map(
         (run) =>
           '<details class="card" data-plan-run-id="' +
@@ -249,7 +258,7 @@ export function renderRuns(runs, lastRun) {
           esc(run.id) +
           '">导出证据 JSON</button></details>',
       )
-      .join("") || '<div class="empty"><p>计划运行后会保留逐步证据。</p></div>')
+      .join("")
   );
 }
 
