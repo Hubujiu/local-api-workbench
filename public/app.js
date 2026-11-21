@@ -2349,10 +2349,17 @@ function bind() {
       input.selectionEnd,
     );
     if (!edit) return;
-    input.setRangeText(edit.replacement, edit.start, edit.end);
+    const originalStart = input.selectionStart;
+    const originalEnd = input.selectionEnd;
+    const originalDirection = input.selectionDirection;
     input.focus({ preventScroll: true });
+    input.setSelectionRange(edit.start, edit.end);
+    // Keep formatting in the same native undo history as typing and pasting.
+    if (!document.execCommand("insertText", false, edit.replacement)) {
+      input.setSelectionRange(originalStart, originalEnd, originalDirection);
+      return;
+    }
     input.setSelectionRange(edit.anchor, edit.anchor + edit.length);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
   };
   on("[data-design-markdown]", "click", (_, el) => {
     applyDesignMarkdown(el.dataset.designMarkdown);

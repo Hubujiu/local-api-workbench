@@ -80,10 +80,15 @@ try {
   const toolbar = descriptionSection.getByRole("group", {
     name: "说明格式工具",
   });
-  await description.fill("Verification");
-  await description.selectText();
+  const original = "first line\nVerification";
+  await description.press("End");
+  await description.pressSequentially("first line");
+  await description.press("Enter");
+  await description.pressSequentially("Verification");
+  await description.press("Home");
+  await description.press("Shift+End");
   await toolbar.getByRole("button", { name: "加粗" }).click();
-  assert.equal(await description.inputValue(), "**Verification**");
+  assert.equal(await description.inputValue(), "first line\n**Verification**");
   assert.equal(
     await page.locator("#design-description-preview strong").innerText(),
     "Verification",
@@ -94,6 +99,30 @@ try {
     ),
     "Verification",
   );
+  const mac = await page.evaluate(() => /Mac/.test(navigator.platform));
+  const modifier = mac ? "Meta" : "Control";
+  await description.press(modifier + "+z");
+  assert.equal(
+    await description.inputValue(),
+    original,
+    "undo only formatting",
+  );
+  assert.equal(
+    await page.locator("#design-description-preview strong").count(),
+    0,
+  );
+  assert.deepEqual(put, []);
+  await description.press(modifier + "+Shift+z");
+  assert.equal(
+    await description.inputValue(),
+    "first line\n**Verification**",
+    "redo formatting",
+  );
+  assert.equal(
+    await page.locator("#design-description-preview strong").innerText(),
+    "Verification",
+  );
+  assert.deepEqual(put, []);
   if (process.env.DESIGN_TOOLBAR_SCREENSHOT) {
     await page.mouse.move(1000, 282);
     await page.screenshot({
