@@ -80,16 +80,22 @@ export function settingsPanel(
     content = mcpSettingsPanel(project, projects, mcp);
   } else {
     content =
-      '<div class="card"><div class="form-grid"><label>项目名称</label><input id="project-name" value="' +
+      '<section class="project-basic-details"><div class="project-identity"><span class="project-folder-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V6h9l3 4h12v17H4Z"/><path d="M4 10h24"/></svg></span><label class="project-name-label" for="project-name">项目名称</label><input id="project-name" aria-label="项目名称" value="' +
       esc(project.name) +
-      '"></div></div><div class="notice">数据保存在项目所选的本地位置（桌面默认应用数据目录）。变量可能包含密钥；导出或 Git 提交前请移除秘密。默认不上传任何内容。</div>';
+      '"></div><section class="project-storage-summary"><h2>存储位置</h2><p class="muted">数据保存在项目所选的本地位置（桌面默认应用数据目录）。</p></section><p class="project-storage-safety muted">变量可能包含密钥；导出或 Git 提交前请移除秘密。默认不上传任何内容。</p></section>';
   }
   return (
-    '<div class="page settings-content"><div class="page-head"><div><h1>' +
+    '<div class="page settings-content ' +
+    (active === "settings-basic"
+      ? "settings-basic-page"
+      : active === "settings-mcp"
+        ? "settings-mcp-page"
+        : "") +
+    '"><div class="page-head"><div><h1>' +
     title +
     '</h1><span class="muted">' +
     (active === "settings-mcp"
-      ? "本机服务 · 项目授权独立配置"
+      ? "让本机 AI 工具读取已授权的项目与接口，权限由你独立控制。"
       : "项目配置 · " + esc(project.name)) +
     "</span></div>" +
     (active === "settings-mcp"
