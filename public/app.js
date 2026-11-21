@@ -3192,8 +3192,7 @@ function bind() {
       openingSequence = projectOpenSequence,
       generation = ++bodyGenerationSequence,
       targetPage = page,
-      targetMode = mode,
-      targetDesignParameter = designParameter;
+      targetMode = mode;
     if (!targetProject || !targetRequest) throw Error("请先选择接口");
     const data = await api(
       "/projects/" + targetProject.id + "/sample",
@@ -3209,8 +3208,7 @@ function bind() {
       editVersion !== version ||
       projectOpenSequence !== openingSequence ||
       page !== targetPage ||
-      mode !== targetMode ||
-      (targetMode === "design" && designParameter !== targetDesignParameter)
+      mode !== targetMode
     )
       throw Error("接口、项目或草稿已变化，未应用生成结果；当前内容仍保留");
     targetRequest.body = JSON.stringify(data.sample, null, 2);
