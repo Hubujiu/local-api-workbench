@@ -427,7 +427,12 @@ export async function createApp({
       const origin = req.headers.origin;
       if (
         origin &&
-        ![base, `http://localhost:${server.address().port}`].includes(origin)
+        ![base, `http://localhost:${server.address().port}`].includes(origin) &&
+        !(
+          origin === "null" &&
+          req.method === "GET" &&
+          req.url === "/visualizer.css"
+        )
       )
         return json(res, 403, { error: "Origin rejected" });
       const u = new URL(req.url, base),
