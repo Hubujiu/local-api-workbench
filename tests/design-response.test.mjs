@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   designResponsePanel,
+  editDesignResponseHeader,
   responseSelection,
 } from "../public/design-response.js";
 
@@ -51,4 +52,58 @@ test("preview safely escapes names and supports boolean JSON Schema without repl
   assert.match(html, /&lt;svg&gt;（404）/);
   assert.match(html, /design-response-kind">false</);
   assert.doesNotMatch(html, /<svg>/);
+});
+
+test("response Header edits preserve other header identities, media and raw contract data", () => {
+  const trace = {
+    schema: { type: "string", minLength: 2 },
+    example: "abc",
+    "x-flag": false,
+  };
+  const original = {
+    ...definitions[1],
+    headers: {
+      "X-Trace": trace,
+      "X-Other": { $ref: "#/components/headers/Example" },
+    },
+  };
+  const updated = editDesignResponseHeader(original, "X-Trace", "x-trace", {
+    ...trace,
+    example: "xyz",
+  });
+  assert.equal(updated.headers["x-trace"].example, "xyz");
+  assert.equal(original.headers["X-Trace"].example, "abc");
+  assert.deepEqual(updated.headers["X-Other"], original.headers["X-Other"]);
+  assert.deepEqual(updated.content, original.content);
+  assert.throws(
+    () => editDesignResponseHeader(original, null, "x-TRACE", trace),
+    /同名响应头/,
+  );
+  assert.throws(
+    () => editDesignResponseHeader(original, "X-Trace", "x-other", trace),
+    /同名响应头/,
+  );
+  assert.throws(
+    () => editDesignResponseHeader(original, null, "bad header", trace),
+    /有效的响应头/,
+  );
+  assert.throws(
+    () => editDesignResponseHeader(original, null, "Content-Type", trace),
+    /媒体类型/,
+  );
+  assert.throws(
+    () => editDesignResponseHeader(original, null, "X-Four", ["bad"]),
+    /JSON 对象/,
+  );
+  assert.equal(
+    editDesignResponseHeader(original, null, "__proto__", trace).headers
+      .__proto__,
+    trace,
+  );
+  assert.equal(
+    Object.getPrototypeOf(
+      editDesignResponseHeader(original, null, "__proto__", trace).headers,
+    ),
+    Object.prototype,
+  );
 });

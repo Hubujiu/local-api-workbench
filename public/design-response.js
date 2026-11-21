@@ -47,6 +47,63 @@ function schemaPreview(schema) {
   }
 }
 
+const record = (value) =>
+  value && typeof value === "object" && !Array.isArray(value);
+
+export function editDesignResponseHeader(definition, source, name, header) {
+  name = String(name).trim();
+  if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name))
+    throw Error("请输入有效的响应头名称");
+  if (name.toLowerCase() === "content-type")
+    throw Error("Content-Type 请在响应 Body 的媒体类型中设置");
+  if (
+    !record(definition) ||
+    !record(header) ||
+    (definition.headers !== undefined && !record(definition.headers))
+  )
+    throw Error("响应头定义必须是 JSON 对象");
+  const headers = definition.headers || {};
+  if (source !== null && !Object.hasOwn(headers, source))
+    throw Error("响应头已不存在，请重新打开");
+  if (
+    Object.keys(headers).some(
+      (key) => key !== source && key.toLowerCase() === name.toLowerCase(),
+    )
+  )
+    throw Error("同名响应头已存在（不区分大小写）");
+  const entries = Object.entries(headers).map(([key, value]) =>
+    key === source ? [name, header] : [key, value],
+  );
+  if (source === null) entries.push([name, header]);
+  return { ...definition, headers: Object.fromEntries(entries) };
+}
+
+export function headerEditorFields(name, header) {
+  return `<label>响应头名称<input id="design-header-name" value="${esc(name)}" autocomplete="off"></label><label>响应头定义 JSON<textarea id="design-header-json" rows="10" spellcheck="false">${esc(JSON.stringify(header, null, 2))}</textarea></label>`;
+}
+
+function headerPreview(definition) {
+  const headers = record(definition?.headers)
+    ? Object.entries(definition.headers)
+    : [];
+  const rows = headers
+    .map(([name, header]) => {
+      const example = Object.hasOwn(header ?? {}, "example")
+        ? JSON.stringify(header.example)
+        : "";
+      const type = header?.$ref
+        ? "$ref"
+        : Array.isArray(header?.schema?.type)
+          ? header.schema.type.join(" | ")
+          : header?.schema?.type || "";
+      return `<tr><td><button type="button" class="ghost" data-response-header="${esc(name)}" aria-label="${esc("编辑响应头 " + name)}">${esc(name)}</button>${type ? ` <span class="design-response-kind">${esc(type)}</span>` : ""}</td><td>${esc(example)}</td><td>${esc(header?.description || "")}</td></tr>`;
+    })
+    .join("");
+  const add =
+    '<button type="button" class="ghost" id="new-response-header">＋ 添加响应头</button>';
+  return `<table class="design-response-header-table"><thead><tr><th scope="col">参数名</th><th scope="col">示例值</th><th scope="col">描述</th></tr></thead><tbody>${rows || `<tr><td colspan="3">${add}</td></tr>`}</tbody></table>${rows ? add : ""}`;
+}
+
 export function designResponsePanel(definitions, selection, bindingNotice) {
   const { index, definition, media, mediaTypes } = responseSelection(
     definitions,
@@ -65,5 +122,19 @@ export function designResponsePanel(definitions, selection, bindingNotice) {
     })
     .join(
       "",
-    )}</div><button id="new-response-schema" type="button" class="ghost">＋ 新建响应</button></div><div class="design-response-surface" id="design-response-selected"${index < 0 ? "" : ` role="tabpanel" aria-labelledby="design-response-${index}" tabindex="0"`}>${index < 0 ? '<p class="design-response-empty">尚未定义响应。可新建响应或直接编辑 JSON。</p>' : `<div class="design-response-tools"><span>Body · 数据结构</span>${mediaTypes.length > 1 ? `<label>Content-Type <select id="design-response-media" aria-label="响应 Content-Type">${mediaTypes.map((key) => `<option value="${esc(key)}" ${key === media ? "selected" : ""}>${esc(key)}</option>`).join("")}</select></label>` : media ? `<small>${esc(media)}</small>` : ""}${edit}</div>${schemaPreview(definition?.content?.[media]?.schema)}`}</div>${raw}</div>`;
+    )}</div><button id="new-response-schema" type="button" class="ghost">＋ 新建响应</button></div><div class="design-response-surface" id="design-response-selected"${index < 0 ? "" : ` role="tabpanel" aria-labelledby="design-response-${index}" tabindex="0"`}>${
+    index < 0
+      ? '<p class="design-response-empty">尚未定义响应。可新建响应或直接编辑 JSON。</p>'
+      : `<div class="design-response-views" role="group" aria-label="响应定义视图">${[
+          ["body", "Body"],
+          ["headers", "Header"],
+        ]
+          .map(
+            ([key, label]) =>
+              `<button type="button" class="ghost" id="design-response-view-${key}" data-response-view="${key}" aria-pressed="${(selection?.view || "body") === key}">${label}</button>`,
+          )
+          .join(
+            "",
+          )}</div>${selection?.view === "headers" ? headerPreview(definition) : `<div class="design-response-tools"><span>数据结构</span>${mediaTypes.length > 1 ? `<label>Content-Type <select id="design-response-media" aria-label="响应 Content-Type">${mediaTypes.map((key) => `<option value="${esc(key)}" ${key === media ? "selected" : ""}>${esc(key)}</option>`).join("")}</select></label>` : media ? `<small>${esc(media)}</small>` : ""}${edit}</div>${schemaPreview(definition?.content?.[media]?.schema)}`}`
+  }</div>${raw}</div>`;
 }

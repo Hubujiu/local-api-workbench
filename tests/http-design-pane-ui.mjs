@@ -107,6 +107,14 @@ try {
     "the disclosure must be visible below the Design details heading",
   );
   await disclosure.press("Enter");
+  const headerView = responseRegion.getByRole("button", {
+    name: "Header",
+    exact: true,
+  });
+  const bodyView = responseRegion.getByRole("button", {
+    name: "Body",
+    exact: true,
+  });
   const responseScreenshots = process.env.DESIGN_RESPONSE_SCREENSHOTS;
   if (responseScreenshots) {
     await tab("Query").click();
@@ -125,6 +133,15 @@ try {
       });
     }
     await responseTab(/200/).click();
+    await headerView.click();
+    await page.mouse.move(1000, 282);
+    await page.screenshot({
+      path: responseScreenshots + "/candidate-design-response-200-headers.png",
+      clip: { x: 0, y: 0, width: 1363, height: 980 },
+      caret: "hide",
+      animations: "disabled",
+    });
+    await bodyView.click();
     await tab("Header").click();
   }
   const screenshotDirectory = process.env.DESIGN_PARAMETER_SCREENSHOTS;
@@ -318,6 +335,52 @@ try {
     await responseTab(/404/).evaluate((e) => e === document.activeElement),
     true,
   );
+  await headerView.click();
+  await responseRegion
+    .getByRole("button", { name: "编辑响应头 X-Trace" })
+    .click();
+  const headerJson = page.getByRole("textbox", { name: "响应头定义 JSON" });
+  await headerJson.fill('{"schema":{"type":"integer"}}');
+  await page.locator("#dialog").press("Escape");
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert.deepEqual(
+    JSON.parse(await rawResponses.inputValue()),
+    JSON.parse(responseDraft),
+  );
+  await responseRegion.getByRole("button", { name: "＋ 添加响应头" }).click();
+  const headerName = page.getByRole("textbox", { name: "响应头名称" });
+  await headerName.fill("x-trace");
+  await page.locator("#dialog-save").click();
+  await page
+    .getByText("同名响应头已存在（不区分大小写）", { exact: true })
+    .waitFor();
+  assert.deepEqual(
+    JSON.parse(await rawResponses.inputValue()),
+    JSON.parse(responseDraft),
+  );
+  await headerName.fill("X-Reason");
+  await headerJson.fill(
+    '{"description":"Synthetic failure","schema":{"type":"string","maxLength":80},"example":"not-found","x-retain":true}',
+  );
+  await page.locator("#dialog-save").click();
+  await responseRegion
+    .getByRole("button", { name: "编辑响应头 X-Reason" })
+    .waitFor();
+  await responseTab(/200/).click();
+  assert.equal(await headerView.getAttribute("aria-pressed"), "true");
+  assert.equal(
+    await responseRegion
+      .getByRole("button", { name: "编辑响应头 X-Reason" })
+      .count(),
+    0,
+  );
+  await responseTab(/404/).click();
+  await responseRegion
+    .getByRole("button", { name: "编辑响应头 X-Reason" })
+    .waitFor();
+  await bodyView.click();
+  const responseAfterHeader = await rawResponses.inputValue();
+  assert.deepEqual(put, []);
   const media = responseRegion.getByRole("combobox", {
     name: "响应 Content-Type",
   });
@@ -331,7 +394,7 @@ try {
   assert.equal(await page.locator("#dialog").isVisible(), true);
   assert.deepEqual(
     JSON.parse(await rawResponses.inputValue()),
-    JSON.parse(responseDraft),
+    JSON.parse(responseAfterHeader),
   );
   assert.deepEqual(put, []);
   await targetMedia.fill("application/problem+json");
@@ -351,6 +414,12 @@ try {
   const retained = JSON.parse(await rawResponses.inputValue())[1];
   assert.equal(retained.content["text/plain"].example, "retain-me");
   assert.equal(retained.headers["X-Trace"].schema.type, "string");
+  assert.deepEqual(retained.headers["X-Reason"], {
+    description: "Synthetic failure",
+    schema: { type: "string", maxLength: 80 },
+    example: "not-found",
+    "x-retain": true,
+  });
   assert.equal(retained.content["application/json"].schema.type, "object");
   assert.equal(retained.content["text/plain"].schema.type, "string");
   assert.equal(
@@ -400,6 +469,10 @@ try {
   );
   assert.deepEqual(put, ["PUT"]);
   await responseTab(/未找到.*404/).click();
+  await headerView.click();
+  await responseRegion
+    .getByRole("button", { name: "编辑响应头 X-Reason" })
+    .waitFor();
   const reloadedResponses = JSON.parse(await rawResponses.inputValue());
   assert.deepEqual(reloadedResponses[1], retained);
   assert.deepEqual(forbidden, []);
