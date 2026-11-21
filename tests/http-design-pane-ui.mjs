@@ -59,6 +59,10 @@ try {
     "#design-description > summary",
   );
   const description = page.getByRole("textbox", { name: "接口详细说明" });
+  const tabs = page.getByRole("tablist", { name: "设计请求参数标签" });
+  const tab = (name) => tabs.getByRole("tab", { name, exact: true });
+  const panel = page.getByRole("tabpanel");
+  const pair = (key, field) => panel.locator(`[data-pair="${key}:0:${field}"]`);
   const draft = "**说明草稿**\n\n<script>window.unexpected = true;</script>";
   await design.click();
   assert.equal(await description.count(), 0, "empty details start closed");
@@ -77,6 +81,26 @@ try {
     "the disclosure must be visible below the Design details heading",
   );
   await disclosure.press("Enter");
+  const screenshotDirectory = process.env.DESIGN_PARAMETER_SCREENSHOTS;
+  if (screenshotDirectory) {
+    for (const [name, key] of [
+      ["Header", "headers"],
+      ["Query", "query"],
+      ["Path", "path"],
+      ["Body", "body"],
+      ["认证", "auth"],
+    ]) {
+      await tab(name).click();
+      await page.mouse.move(1000, 282);
+      await page.screenshot({
+        path: screenshotDirectory + "/candidate-design-param-" + key + ".png",
+        clip: { x: 0, y: 0, width: 1363, height: 980 },
+        caret: "hide",
+        animations: "disabled",
+      });
+    }
+    await tab("Header").click();
+  }
   const toolbar = descriptionSection.getByRole("group", {
     name: "说明格式工具",
   });
@@ -152,9 +176,57 @@ try {
   await dialog.getByText("说明草稿", { exact: true }).waitFor();
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
   assert.deepEqual(put, []);
+  assert.equal(await tab("Header").getAttribute("aria-selected"), "true");
+  await panel.getByRole("button", { name: "＋ 添加参数" }).click();
+  assert.equal(
+    await pair("headers", "key").evaluate(
+      (input) => input === document.activeElement,
+    ),
+    true,
+  );
+  await pair("headers", "key").fill("X-Verification");
+  await pair("headers", "value").fill("draft-header");
+  await tab("Header").press("ArrowRight");
+  assert.equal(await tab("Query").getAttribute("aria-selected"), "true");
+  assert.equal(
+    await tab("Query").evaluate((input) => input === document.activeElement),
+    true,
+  );
+  await panel
+    .getByRole("checkbox", { name: "空值 Query 参数添加等号" })
+    .uncheck();
+  await panel.getByRole("button", { name: "＋ 添加参数" }).click();
+  await pair("query", "key").fill("preview");
+  await pair("query", "value").fill("draft-query");
+  await tab("Path").click();
+  await panel.getByRole("button", { name: "＋ 添加参数" }).click();
+  await pair("path", "key").fill("id");
+  await pair("path", "value").fill("sample-path");
+  await tab("Body").click();
+  await panel.getByText("当前请求未包含 Body", { exact: true }).waitFor();
+  await panel.getByRole("radio", { name: "raw", exact: true }).check();
+  await panel
+    .getByRole("textbox", { name: "请求体" })
+    .fill('{"state":"draft"}');
+  await tab("Body").press("End");
+  assert.equal(await tab("认证").getAttribute("aria-selected"), "true");
+  await panel.locator("#auth-type").selectOption("bearer");
+  await panel.locator('[data-auth="token"]').fill("synthetic-only");
+  await tab("Header").click();
+  assert.equal(await pair("headers", "value").inputValue(), "draft-header");
   await debug.click();
+  assert.equal(
+    await page.locator("[data-param].active").getAttribute("data-param"),
+    "body",
+  );
   await design.click();
   assert.equal(await description.inputValue(), draft);
+  await tab("Body").click();
+  assert.equal(
+    await panel.getByRole("textbox", { name: "请求体" }).inputValue(),
+    '{"state":"draft"}',
+  );
+  assert.deepEqual(put, []);
 
   await disclosure.press("Enter");
   assert.equal(await description.count(), 0);
@@ -166,6 +238,27 @@ try {
   await disclosure.press("Enter");
   assert.equal(await description.inputValue(), draft);
   assert.equal(await page.locator("#visual-schema").count(), 1);
+  const requestSchema = page.getByRole("textbox", { name: "请求 JSON Schema" });
+  await requestSchema.fill('{"type":');
+  await tab("Query").click();
+  assert.equal(await tab("Body").getAttribute("aria-selected"), "true");
+  assert.equal(await requestSchema.inputValue(), '{"type":');
+  assert.deepEqual(put, []);
+  await page
+    .getByRole("textbox", { name: "请求 JSON Schema" })
+    .fill('{"type":"object","description":"retained"}');
+  await tab("Query").click();
+  assert.equal(
+    await panel
+      .getByRole("checkbox", { name: "空值 Query 参数添加等号" })
+      .isChecked(),
+    false,
+  );
+  assert.equal(await pair("query", "value").inputValue(), "draft-query");
+  assert.equal(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+    680,
+  );
   assert.equal(await page.locator("#new-response-schema").count(), 1);
   await page.locator("#save").click();
   await page
@@ -176,10 +269,41 @@ try {
   await page.reload();
   await design.click();
   assert.equal(await description.inputValue(), draft);
+  assert.equal(
+    JSON.parse(
+      await page
+        .getByRole("textbox", { name: "请求 JSON Schema" })
+        .inputValue(),
+    ).description,
+    "retained",
+  );
+  await tab("Header").click();
+  assert.equal(await pair("headers", "key").inputValue(), "X-Verification");
+  await tab("Query").click();
+  assert.equal(await pair("query", "value").inputValue(), "draft-query");
+  assert.equal(
+    await panel
+      .getByRole("checkbox", { name: "空值 Query 参数添加等号" })
+      .isChecked(),
+    false,
+  );
+  await tab("Path").click();
+  assert.equal(await pair("path", "value").inputValue(), "sample-path");
+  await tab("Body").click();
+  assert.equal(
+    await panel.getByRole("textbox", { name: "请求体" }).inputValue(),
+    '{"state":"draft"}',
+  );
+  await tab("认证").click();
+  assert.equal(
+    await panel.locator('[data-auth="token"]').inputValue(),
+    "synthetic-only",
+  );
+  assert.deepEqual(put, ["PUT"]);
   assert.deepEqual(forbidden, []);
   assert.deepEqual(errors, []);
   console.log(
-    "HTTP_DESIGN_PANE_PASS disclosure/preview/scope/explicit-save/reload",
+    "HTTP_DESIGN_PANE_PASS undo/redo/parameter-tabs/draft/explicit-save/reload",
   );
 } finally {
   await browser?.close();

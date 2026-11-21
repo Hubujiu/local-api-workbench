@@ -165,6 +165,14 @@ const $ = (s) => document.querySelector(s),
 const uid = () => crypto.randomUUID();
 const responses = new Map();
 const openDesignDescriptions = new WeakMap();
+const designParameterTabs = [
+  ["headers", "Header"],
+  ["query", "Query"],
+  ["path", "Path"],
+  ["body", "Body"],
+  ["auth", "认证"],
+];
+let designParameter = "headers";
 const caseResults = createCaseResultStore();
 const caseSelections = new Map();
 let caseBatch = null;
@@ -1533,7 +1541,7 @@ function editor(r) {
           )
           .join(
             "",
-          )}</div><div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
+          )}</div><div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
           ["body", "实时响应"],
           ["headers", "响应头"],
           ["cookies", "Cookie"],
@@ -1558,9 +1566,16 @@ function editor(r) {
       : modePanel(r)
   }</section>`;
 }
-function pairs(rows, key) {
+function pairs(rows, key, designOptions) {
+  const design = Boolean(designOptions);
   const metadataColumn = ["headers", "query", "path", "cookies"].includes(key);
-  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}"><thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>参数值</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}<th class="pair-actions-heading">操作</th></tr></thead><tbody>${rows
+  const queryEquality =
+    design && key === "query"
+      ? `<label class="design-query-equality" title="空值 Query 参数添加等号（仅参数表）"><input id="query-add-equal" type="checkbox" ${designOptions.queryAddEqual !== false ? "checked" : ""} aria-label="空值 Query 参数添加等号"><span aria-hidden="true">=</span></label>`
+      : "";
+  const compactEmpty =
+    design && (key === "headers" || key === "query") && !rows.length;
+  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}"><thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${queryEquality}参数值</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${compactEmpty ? `<tr><td colspan="4"><button type="button" class="ghost design-empty-pair" data-add-pair="${key}">＋ 添加参数</button></td></tr>` : ""}${rows
     .map((p, i) => {
       const selector =
         key === "form"
@@ -1574,15 +1589,19 @@ function pairs(rows, key) {
     })
     .join(
       "",
-    )}</tbody></table><div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`;
+    )}</tbody></table>${compactEmpty ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
 }
-function paramPanel(r) {
+function paramPanel(r, param, design = false) {
   if (["headers", "query", "path", "cookies"].includes(param))
     return (
       (param === "headers"
         ? `<div class="header-common-parameters"><button type="button" class="ghost" data-page="settings" data-settings-target="settings-global-parameters" title="管理项目及目录公共请求参数">${lineIcon("⚙")}公共参数（Header）</button></div>`
         : "") +
-      pairs(r[param], param) +
+      pairs(
+        r[param],
+        param,
+        design ? { queryAddEqual: r.queryAddEqual } : null,
+      ) +
       (param === "cookies"
         ? `<div class="cookie-toolbar"><div class="cookie-manager-row"><button id="cookie-manager">Cookie管理器</button><span class="muted">按项目与环境隔离，默认关闭</span></div><label class="cookie-encoding-field">参数表 Cookie 编码<select id="cookie-encoding">${[
             ["raw", "保持原值"],
@@ -1596,16 +1615,16 @@ function paramPanel(r) {
             .join(
               "",
             )}</select></label></div><p class="muted">只作用于参数表，不重写显式 Cookie 请求头或 Cookie 管理器内容。</p>`
-        : param === "query"
+        : param === "query" && !design
           ? `<label><input id="query-add-equal" type="checkbox" ${r.queryAddEqual !== false ? "checked" : ""}>空值 Query 参数添加等号</label><p class="muted">只控制参数表的空值；URL 内已有查询保持原样。</p>`
           : "")
     );
   if (param === "body")
-    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" ? "" : `<div class="body-actions"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button><button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${bodyExpanded ? "收起编辑器" : "展开编辑器"}</button></div>`}${
+    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" ? "" : `<div class="body-actions"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${bodyExpanded ? "收起编辑器" : "展开编辑器"}</button>`}</div>`}${
       ["form-data", "urlencoded"].includes(r.bodyType)
         ? pairs(r.form, "form")
         : r.bodyType === "none"
-          ? `<div class="body-none"><span class="body-none-icon">${lineIcon("body-empty")}</span><p>当前请求未包含 Body</p><button id="generate-body" class="ghost">基于数据结构生成</button></div>`
+          ? `<div class="body-none"><span class="body-none-icon">${lineIcon("body-empty")}</span><p>当前请求未包含 Body</p>${design ? "" : '<button id="generate-body" class="ghost">基于数据结构生成</button>'}</div>`
           : `<div class="body-editor-shell"><div class="code-editor"><pre id="code-gutter" aria-hidden="true">${r.body
               .split("\n")
               .map((_, i) => i + 1)
@@ -1733,14 +1752,25 @@ function responseContent() {
   }
   return `${failure}${response.rawBodyBase64 ? '<button id="download-response-binary">下载原始二进制响应</button>' : ""}${response.codecError ? `<div class="notice">解码失败，以下为 Base64：${esc(response.codecError)}</div>` : ""}<pre>${esc(typeof v === "string" ? v : JSON.stringify(v, null, 2))}</pre>`;
 }
+function designParameterPanel(r) {
+  return `<div class="design-parameter-tabs" role="tablist" aria-label="设计请求参数标签">${designParameterTabs
+    .map(([key, label]) => {
+      const selected = key === designParameter;
+      return `<button type="button" class="ghost" id="design-tab-${key}" role="tab" aria-selected="${selected}" tabindex="${selected ? 0 : -1}" aria-controls="design-parameter-panel" data-design-parameter="${key}">${label}</button>`;
+    })
+    .join(
+      "",
+    )}</div><div id="design-parameter-panel" class="design-parameter-panel" role="tabpanel" aria-labelledby="design-tab-${designParameter}" tabindex="0">${paramPanel(r, designParameter, true)}</div>`;
+}
 function modePanel(r) {
   if (mode === "design") {
     const descriptionOpen =
       openDesignDescriptions.get(r) ?? Boolean(r.description);
     return `<div class="page http-design-canvas">${r.importNotes?.length ? `<div class="notice import-notes" role="region" aria-label="导入兼容性提示" tabindex="0">导入提示：${r.importNotes.map(esc).join("<br>")}</div>` : ""}${importedScriptTasksHTML(r.importedScriptTasks)}<div class="design-meta"><label for="folder">目录<input id="folder" value="${esc(r.folder)}" placeholder="根目录"></label><label for="request-service">绑定服务<select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select></label></div>
     <section class="request-description-section" aria-label="详细说明"><h2><span>${lineIcon("▧")}</span>详细说明</h2><details id="design-description" ${descriptionOpen ? "open" : ""}><summary><span class="design-description-closed">＋ 添加详细说明</span><span class="design-description-open">收起</span></summary><div class="design-description-toolbar" role="group" aria-label="说明格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-design-markdown="${key}" aria-label="${label}" title="${label}">${esc(glyph)}</button>`).join("")}</div><div class="design-description-editor"><textarea id="description" aria-label="接口详细说明" spellcheck="false">${esc(r.description)}</textarea><div id="design-description-preview" class="markdown-content" role="region" aria-label="说明预览">${descriptionOpen ? renderMarkdown(r.description) : ""}</div></div><small id="design-description-count">字数: ${Array.from(r.description || "").length}　行数: ${(r.description || "").split("\n").length}</small></details></section>
-    <section class="design-request-structure" aria-label="设计请求参数"><h2><span>${lineIcon("☷")}</span>设计请求参数</h2><div><button id="visual-schema" type="button">可视化编辑结构</button><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div></section>
+    <section class="design-request-parameters" aria-label="设计请求参数"><h2><span>${lineIcon("☷")}</span>设计请求参数</h2>${designParameterPanel(r)}</section>
     <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2><div><div class="response-schema-actions"><button id="new-response-schema" type="button">新增响应结构</button>${(r.responses || []).flatMap((definition, index) => (Object.keys(definition.content || {}).length ? Object.keys(definition.content) : ["application/json"]).map((media) => `<button type="button" data-response-schema="${esc(JSON.stringify([index, media]))}">编辑 ${esc(definition.status)} · ${esc(media)}</button>`)).join("")}</div>${r.openapiExampleBindingsVersion === 1 ? '<p class="muted">此处可修改 Schema。绑定示例请用示例编辑器，响应状态请用可视编辑按钮；直接改源示例注解会产生导出冲突。</p>' : ""}<textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div></section>
+    <section class="design-request-structure" aria-label="请求数据结构"><h2><span>${lineIcon("☷")}</span>请求数据结构</h2><div><button id="visual-schema" type="button">可视化编辑结构</button>${designParameter === "body" && r.bodyType !== "none" ? "" : '<button id="generate-body" type="button" class="ghost">基于数据结构生成</button>'}<textarea id="schema" aria-label="请求 JSON Schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div></section>
     <section class="design-advanced" aria-label="请求选项"><h2><span>${lineIcon("⚙")}</span>请求选项</h2><div class="form-grid"><label>全局请求参数</label><label><input id="inherit-global-parameters" type="checkbox" ${r.inheritGlobalParameters !== false ? "checked" : ""}>继承项目及目录 Header / Query / Cookie / 表单参数</label><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>HTTPS代理 CA（PEM，与目标站点CA分开）</label><textarea data-tls="proxyCa">${esc(r.tls?.proxyCa || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}">${attributeFields(project.settings?.attributes || [], r.attributes)}</div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div></section></div>`;
   }
   if (mode === "mock")
@@ -2489,6 +2519,7 @@ function bind() {
     ),
   );
   on("[data-dictionary-pair]", "click", (_, element) => {
+    if (mode === "design") collect();
     const [kind, index] = element.dataset.dictionaryPair.split(":");
     modal(
       "选择字典参数",
@@ -2652,6 +2683,7 @@ function bind() {
     }
   });
   on("[data-define-pair]", "click", (_, element) => {
+    if (mode === "design") collect();
     const [kind, index] = element.dataset.definePair.split(":"),
       parameter = request()[kind][Number(index)];
     modal(
@@ -3054,6 +3086,36 @@ function bind() {
     mode = e.dataset.mode;
     render();
   });
+  const selectDesignParameter = (key) => {
+    if (key === designParameter) return;
+    collect();
+    const top = $(".http-design-canvas")?.scrollTop || 0;
+    const left = $(".design-parameter-tabs")?.scrollLeft || 0;
+    designParameter = key;
+    bodyGenerationSequence++;
+    render();
+    $(".http-design-canvas").scrollTop = top;
+    $(".design-parameter-tabs").scrollLeft = left;
+    $("#design-tab-" + key)?.focus();
+  };
+  on("[data-design-parameter]", "click", (_, e) =>
+    selectDesignParameter(e.dataset.designParameter),
+  );
+  on("[data-design-parameter]", "keydown", (event, e) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const index = designParameterTabs.findIndex(
+      ([key]) => key === e.dataset.designParameter,
+    );
+    const size = designParameterTabs.length;
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? size - 1
+          : (index + (event.key === "ArrowRight" ? 1 : size - 1)) % size;
+    selectDesignParameter(designParameterTabs[next][0]);
+  });
   on("[data-param]", "click", (_, e) => {
     collect();
     param = e.dataset.param;
@@ -3201,17 +3263,30 @@ function bind() {
     mark();
   });
   on("[data-add-pair]", "click", (_, e) => {
-    request()[e.dataset.addPair].push({ key: "", value: "", enabled: true });
+    if (mode === "design") collect();
+    const key = e.dataset.addPair;
+    const index = request()[key].length;
+    request()[key].push({ key: "", value: "", enabled: true });
     mark();
     render();
+    if (mode === "design") $(`[data-pair="${key}:${index}:key"]`)?.focus();
   });
   on("[data-remove-pair]", "click", (_, e) => {
+    if (mode === "design") collect();
     const [k, i] = e.dataset.removePair.split(":");
     request()[k].splice(Number(i), 1);
     mark();
     render();
   });
   on("#auth-type", "change", (_, e) => {
+    if (mode === "design") {
+      try {
+        collect();
+      } catch (error) {
+        e.value = request().auth.type;
+        throw error;
+      }
+    }
     const focused = document.activeElement === e;
     request().auth.type = e.value;
     mark();
