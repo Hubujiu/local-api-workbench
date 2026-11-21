@@ -1,3 +1,4 @@
+import { markdownEdit, markdownTools } from "./design-markdown.js";
 import { emptyCasePanel } from "./case-empty-view.js";
 import {
   environmentDialogHTML,
@@ -1737,7 +1738,7 @@ function modePanel(r) {
     const descriptionOpen =
       openDesignDescriptions.get(r) ?? Boolean(r.description);
     return `<div class="page http-design-canvas">${r.importNotes?.length ? `<div class="notice import-notes" role="region" aria-label="导入兼容性提示" tabindex="0">导入提示：${r.importNotes.map(esc).join("<br>")}</div>` : ""}${importedScriptTasksHTML(r.importedScriptTasks)}<div class="design-meta"><label for="folder">目录<input id="folder" value="${esc(r.folder)}" placeholder="根目录"></label><label for="request-service">绑定服务<select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select></label></div>
-    <section class="request-description-section" aria-label="详细说明"><h2><span>${lineIcon("▧")}</span>详细说明</h2><details id="design-description" ${descriptionOpen ? "open" : ""}><summary><span class="design-description-closed">＋ 添加详细说明</span><span class="design-description-open">Markdown 说明 · 收起</span></summary><div class="design-description-editor"><textarea id="description" aria-label="接口详细说明" spellcheck="false">${esc(r.description)}</textarea><div id="design-description-preview" class="markdown-content" role="region" aria-label="说明预览">${descriptionOpen ? renderMarkdown(r.description) : ""}</div></div><small id="design-description-count">字数: ${Array.from(r.description || "").length}　行数: ${(r.description || "").split("\n").length}</small></details></section>
+    <section class="request-description-section" aria-label="详细说明"><h2><span>${lineIcon("▧")}</span>详细说明</h2><details id="design-description" ${descriptionOpen ? "open" : ""}><summary><span class="design-description-closed">＋ 添加详细说明</span><span class="design-description-open">收起</span></summary><div class="design-description-toolbar" role="group" aria-label="说明格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-design-markdown="${key}" aria-label="${label}" title="${label}">${esc(glyph)}</button>`).join("")}</div><div class="design-description-editor"><textarea id="description" aria-label="接口详细说明" spellcheck="false">${esc(r.description)}</textarea><div id="design-description-preview" class="markdown-content" role="region" aria-label="说明预览">${descriptionOpen ? renderMarkdown(r.description) : ""}</div></div><small id="design-description-count">字数: ${Array.from(r.description || "").length}　行数: ${(r.description || "").split("\n").length}</small></details></section>
     <section class="design-request-structure" aria-label="设计请求参数"><h2><span>${lineIcon("☷")}</span>设计请求参数</h2><div><button id="visual-schema" type="button">可视化编辑结构</button><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div></section>
     <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2><div><div class="response-schema-actions"><button id="new-response-schema" type="button">新增响应结构</button>${(r.responses || []).flatMap((definition, index) => (Object.keys(definition.content || {}).length ? Object.keys(definition.content) : ["application/json"]).map((media) => `<button type="button" data-response-schema="${esc(JSON.stringify([index, media]))}">编辑 ${esc(definition.status)} · ${esc(media)}</button>`)).join("")}</div>${r.openapiExampleBindingsVersion === 1 ? '<p class="muted">此处可修改 Schema。绑定示例请用示例编辑器，响应状态请用可视编辑按钮；直接改源示例注解会产生导出冲突。</p>' : ""}<textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div></section>
     <section class="design-advanced" aria-label="请求选项"><h2><span>${lineIcon("⚙")}</span>请求选项</h2><div class="form-grid"><label>全局请求参数</label><label><input id="inherit-global-parameters" type="checkbox" ${r.inheritGlobalParameters !== false ? "checked" : ""}>继承项目及目录 Header / Query / Cookie / 表单参数</label><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>HTTPS代理 CA（PEM，与目标站点CA分开）</label><textarea data-tls="proxyCa">${esc(r.tls?.proxyCa || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}">${attributeFields(project.settings?.attributes || [], r.attributes)}</div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div></section></div>`;
@@ -2337,6 +2338,44 @@ function bind() {
       $("#design-description-preview").innerHTML = renderMarkdown(
         r.description,
       );
+  });
+  const applyDesignMarkdown = (action) => {
+    const input = $("#description");
+    if (!input || !$("#design-description").open) return;
+    const edit = markdownEdit(
+      action,
+      input.value,
+      input.selectionStart,
+      input.selectionEnd,
+    );
+    if (!edit) return;
+    const originalStart = input.selectionStart;
+    const originalEnd = input.selectionEnd;
+    const originalDirection = input.selectionDirection;
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(edit.start, edit.end);
+    // Keep formatting in the same native undo history as typing and pasting.
+    if (!document.execCommand("insertText", false, edit.replacement)) {
+      input.setSelectionRange(originalStart, originalEnd, originalDirection);
+      return;
+    }
+    input.setSelectionRange(edit.anchor, edit.anchor + edit.length);
+  };
+  on("[data-design-markdown]", "click", (_, el) => {
+    applyDesignMarkdown(el.dataset.designMarkdown);
+  });
+  on("#description", "keydown", (event) => {
+    if (
+      event.isComposing ||
+      event.altKey ||
+      event.shiftKey ||
+      !(event.ctrlKey || event.metaKey)
+    )
+      return;
+    const action = { b: "bold", i: "italic" }[event.key.toLowerCase()];
+    if (typeof action !== "string") return;
+    event.preventDefault();
+    applyDesignMarkdown(action);
   });
   on("#description", "input", (_, el) => {
     $("#design-description-preview").innerHTML = renderMarkdown(el.value);

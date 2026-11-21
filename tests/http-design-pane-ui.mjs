@@ -77,6 +77,66 @@ try {
     "the disclosure must be visible below the Design details heading",
   );
   await disclosure.press("Enter");
+  const toolbar = descriptionSection.getByRole("group", {
+    name: "说明格式工具",
+  });
+  const original = "first line\nVerification";
+  await description.press("End");
+  await description.pressSequentially("first line");
+  await description.press("Enter");
+  await description.pressSequentially("Verification");
+  await description.press("Home");
+  await description.press("Shift+End");
+  await toolbar.getByRole("button", { name: "加粗" }).click();
+  assert.equal(await description.inputValue(), "first line\n**Verification**");
+  assert.equal(
+    await page.locator("#design-description-preview strong").innerText(),
+    "Verification",
+  );
+  assert.equal(
+    await description.evaluate((field) =>
+      field.value.slice(field.selectionStart, field.selectionEnd),
+    ),
+    "Verification",
+  );
+  const mac = await page.evaluate(() => /Mac/.test(navigator.platform));
+  const modifier = mac ? "Meta" : "Control";
+  await description.press(modifier + "+z");
+  assert.equal(
+    await description.inputValue(),
+    original,
+    "undo only formatting",
+  );
+  assert.equal(
+    await page.locator("#design-description-preview strong").count(),
+    0,
+  );
+  assert.deepEqual(put, []);
+  await description.press(modifier + "+Shift+z");
+  assert.equal(
+    await description.inputValue(),
+    "first line\n**Verification**",
+    "redo formatting",
+  );
+  assert.equal(
+    await page.locator("#design-description-preview strong").innerText(),
+    "Verification",
+  );
+  assert.deepEqual(put, []);
+  if (process.env.DESIGN_TOOLBAR_SCREENSHOT) {
+    await page.mouse.move(1000, 282);
+    await page.screenshot({
+      path: process.env.DESIGN_TOOLBAR_SCREENSHOT,
+      clip: { x: 0, y: 0, width: 1363, height: 980 },
+      caret: "hide",
+      animations: "disabled",
+    });
+  }
+  await description.fill("keyboard");
+  await description.selectText();
+  await description.press("Control+i");
+  assert.equal(await description.inputValue(), "*keyboard*");
+  assert.deepEqual(put, []);
   await description.fill(draft);
   assert.equal(
     await page.locator("#design-description-preview strong").innerText(),

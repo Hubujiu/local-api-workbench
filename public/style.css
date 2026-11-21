@@ -3344,11 +3344,46 @@ body:not(.dark) .plans-heading {
 #design-description[open] .design-description-closed {
   display: none;
 }
+#design-description[open] {
+  position: relative;
+}
 #design-description[open] > summary {
-  justify-content: start;
-  padding-inline: 10px;
+  position: absolute;
+  inset: 0 0 auto auto;
+  width: 55px;
+  min-height: 31px;
+  z-index: 1;
+}
+.design-description-toolbar {
+  display: flex;
+  min-height: 32px;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 0 58px 0 12px;
   background: var(--top);
   border-bottom: 1px solid var(--line);
+}
+.design-description-toolbar button {
+  padding: 0;
+  min-width: 32px;
+  min-height: 29px;
+  color: var(--accent);
+  font-size: 17px;
+}
+.design-description-toolbar [data-design-markdown="italic"] {
+  font-style: italic;
+}
+.design-description-toolbar [data-design-markdown="bold"] {
+  font-weight: 700;
+}
+.design-description-toolbar [data-design-markdown="strike"] {
+  text-decoration: line-through;
+}
+@media (max-width: 850px) {
+  .design-description-toolbar {
+    flex-wrap: wrap;
+  }
 }
 .design-description-editor {
   display: grid;
