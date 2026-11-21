@@ -434,6 +434,18 @@ try {
   await page.goto(app.launchUrl);
   await page.getByRole("button", { name: "发 送", exact: true }).waitFor();
   await page.screenshot({ path: "/tmp/local-api-initial.png" });
+  const commonHeaderParameters = page.getByRole("button", {
+    name: "公共参数（Header）",
+    exact: true,
+  });
+  assert.equal(await commonHeaderParameters.count(), 0);
+  await page.locator('[data-param="headers"]').click();
+  await commonHeaderParameters.click();
+  await page.locator("#parameter-scope").waitFor();
+  await page.locator('.rail [data-page="apis"]').click();
+  await page.locator('[data-param="query"]').click();
+  assert.equal(await commonHeaderParameters.count(), 0);
+  await page.locator('[data-param="body"]').click();
   const helperLabelBox = await page
     .locator("#toggle-parameter-helper .helper-label")
     .boundingBox();
@@ -488,7 +500,31 @@ try {
   await page.getByRole("button", { name: "关闭", exact: true }).click();
 
   await page.locator('input[name="body-type"][value="none"]').check();
-  await page.getByText("此请求没有 Body", { exact: true }).waitFor();
+  await page.getByText("当前请求未包含 Body", { exact: true }).waitFor();
+  assert.equal(
+    await page.locator(".body-none #generate-body").isVisible(),
+    true,
+  );
+  assert.equal(await page.locator(".body-none #format-json").count(), 0);
+  await page.setViewportSize({ width: 1363, height: 1023 });
+  const bodyEmptyFrame = await page.locator(".body-none").boundingBox();
+  const emptyResponseTabs = await page.locator(".response-tabs").boundingBox();
+  assert.deepEqual(
+    [
+      bodyEmptyFrame.x,
+      bodyEmptyFrame.y,
+      bodyEmptyFrame.width,
+      bodyEmptyFrame.height,
+    ],
+    [371, 273, 976, 140],
+  );
+  assert(Math.abs(emptyResponseTabs.y - 584) <= 1);
+  assert.deepEqual(
+    await page
+      .locator(".response-tabs button")
+      .evaluateAll((nodes) => nodes.slice(0, 6).map((n) => n.dataset.response)),
+    ["body", "headers", "cookies", "examples", "request", "logs"],
+  );
   await page.locator('input[name="body-type"][value="raw"]').check();
   assert.equal(await page.locator("#body-code").inputValue(), originalBody);
   await page.locator("#raw-format").selectOption("raw");

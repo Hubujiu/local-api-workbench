@@ -1,5 +1,7 @@
 // Original line icons. No external image, font, or icon CDN dependency.
 const paths = {
+  "body-empty":
+    '<path d="M7 9V3h10v6m-8-3h6m-6 2h6M4 9h16l2 5v7H2v-7zm-2 5h7l1 3h4l1-3h7"/>',
   "plan-play": '<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>',
   "↗": '<path d="M6 18 18 6m-8 0h8v8"/>',
   rocket:

@@ -117,7 +117,7 @@ import {
   bindSchemaEditor,
   editRequestResponseDefinition,
 } from "./schema-editor.js";
-import { authPanel } from "./auth-view.js";
+import { httpAuthPane } from "./auth-view.js";
 import { renderMarkdown } from "./vendor/markdown-renderer.js";
 import { attributeFields, attributeChooser } from "./attribute-view.js";
 import {
@@ -1531,17 +1531,17 @@ function editor(r) {
           )
           .join(
             "",
-          )}</div><div class="request-panel ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
+          )}</div><div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
           ["body", "实时响应"],
-          ["visualization", "可视化"],
-          ["scriptResponse", "脚本视图"],
           ["headers", "响应头"],
           ["cookies", "Cookie"],
           ["examples", "响应示例"],
           ["request", "实际请求"],
+          ["logs", "控制台"],
+          ["visualization", "可视化"],
+          ["scriptResponse", "脚本视图"],
           ["assertions", "断言结果"],
           ["extracted", "提取变量"],
-          ["logs", "控制台"],
           ...(response?.subrequests?.length
             ? [["subrequests", "脚本子请求"]]
             : []),
@@ -1557,7 +1557,8 @@ function editor(r) {
   }</section>`;
 }
 function pairs(rows, key) {
-  return `<table class="pairs-table"><thead><tr><th class="pair-enabled-heading"></th><th class="pair-name-heading">参数名</th><th>参数值</th><th class="pair-actions-heading">操作</th></tr></thead><tbody>${rows
+  const metadataColumn = ["headers", "query", "path", "cookies"].includes(key);
+  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}"><thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>参数值</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}<th class="pair-actions-heading">操作</th></tr></thead><tbody>${rows
     .map((p, i) => {
       const selector =
         key === "form"
@@ -1567,7 +1568,7 @@ function pairs(rows, key) {
         p.type === "file"
           ? `<span class="pair-file"><input type="file" data-field-file="${i}"><small title="${esc(p.filename || "未选择文件")}">${esc(p.filename || "未选择文件")}</small></span>`
           : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`;
-      return `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td><div class="pair-value">${selector}${value}</div></td><td><div class="pair-row-actions"><button data-dynamic-pair="${key}:${i}">${p.dynamic ? "动态✓" : "动态"}</button><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></div></td></tr>`;
+      return `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td><div class="pair-value">${selector}${value}</div></td>${metadataColumn ? `<td class="pair-description" title="${esc(p.description || "")}">${esc(p.description || "")}</td>` : ""}<td><div class="pair-row-actions"><button data-dynamic-pair="${key}:${i}">${p.dynamic ? "动态✓" : "动态"}</button><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></div></td></tr>`;
     })
     .join(
       "",
@@ -1576,6 +1577,10 @@ function pairs(rows, key) {
 function paramPanel(r) {
   if (["headers", "query", "path", "cookies"].includes(param))
     return (
+      (param === "headers"
+        ? `<div class="header-common-parameters"><button type="button" class="ghost" data-page="settings" data-settings-target="settings-global-parameters" title="管理项目及目录公共请求参数">${lineIcon("⚙")}公共参数（Header）</button></div>`
+        : "") +
+      pairs(r[param], param) +
       (param === "cookies"
         ? `<div class="cookie-toolbar"><div class="cookie-manager-row"><button id="cookie-manager">Cookie管理器</button><span class="muted">按项目与环境隔离，默认关闭</span></div><label class="cookie-encoding-field">参数表 Cookie 编码<select id="cookie-encoding">${[
             ["raw", "保持原值"],
@@ -1588,17 +1593,17 @@ function paramPanel(r) {
             )
             .join(
               "",
-            )}</select></label></div><p class="muted">只作用于下方参数表，不重写显式 Cookie 请求头或 Cookie 管理器内容。</p>`
+            )}</select></label></div><p class="muted">只作用于参数表，不重写显式 Cookie 请求头或 Cookie 管理器内容。</p>`
         : param === "query"
-          ? `<label><input id="query-add-equal" type="checkbox" ${r.queryAddEqual !== false ? "checked" : ""}>空值 Query 参数添加等号</label><p class="muted">只控制下方参数表的空值；URL 内已有查询保持原样。</p>`
-          : "") + pairs(r[param], param)
+          ? `<label><input id="query-add-equal" type="checkbox" ${r.queryAddEqual !== false ? "checked" : ""}>空值 Query 参数添加等号</label><p class="muted">只控制参数表的空值；URL 内已有查询保持原样。</p>`
+          : "")
     );
   if (param === "body")
-    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div><div class="body-actions"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button><button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${bodyExpanded ? "收起编辑器" : "展开编辑器"}</button></div>${
+    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" ? "" : `<div class="body-actions"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button><button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${bodyExpanded ? "收起编辑器" : "展开编辑器"}</button></div>`}${
       ["form-data", "urlencoded"].includes(r.bodyType)
         ? pairs(r.form, "form")
         : r.bodyType === "none"
-          ? '<div class="empty"><p>此请求没有 Body</p></div>'
+          ? `<div class="body-none"><span class="body-none-icon">${lineIcon("body-empty")}</span><p>当前请求未包含 Body</p><button id="generate-body" class="ghost">基于数据结构生成</button></div>`
           : `<div class="body-editor-shell"><div class="code-editor"><pre id="code-gutter" aria-hidden="true">${r.body
               .split("\n")
               .map((_, i) => i + 1)
@@ -1635,11 +1640,7 @@ function paramPanel(r) {
                 : ""
             }</div>`
     }`;
-  if (param === "auth")
-    return (
-      `<label class="notice"><input id="inherit-auth" type="checkbox" ${r.inheritAuth !== false ? "checked" : ""}>接口认证为 none 时继承项目/目录认证；取消勾选则明确不使用共享认证。</label>` +
-      authPanel(r.auth)
-    );
+  if (param === "auth") return httpAuthPane(r.auth, r.inheritAuth);
   if (param === "assertions")
     return `<table><thead><tr><th>目标</th><th>操作</th><th>预期值（JSON 或文本）</th><th></th></tr></thead><tbody>${r.assertions.map((a, i) => `<tr><td><input data-rule="${i}:target" value="${esc(a.target)}" placeholder="status / $.data.id / duration"></td><td><select data-rule="${i}:op">${["eq", "neq", "contains", "exists", "lt", "gt"].map((op) => `<option ${a.op === op ? "selected" : ""}>${op}</option>`).join("")}</select></td><td><input data-rule="${i}:value" value="${esc(JSON.stringify(a.value))}"></td><td><button data-remove-rule="${i}">×</button></td></tr>`).join("")}</tbody></table><p><button id="add-assertion">＋ 添加断言</button> <button id="edit-operations">JSON 高级编辑</button></p><div class="notice">status 为状态码，duration 为毫秒，body 为原文；JSON 路径如 $.data.id；响应头使用 header:content-type。</div>`;
   if (param === "extract")
@@ -1698,7 +1699,7 @@ function responseContent() {
         .join("") || '<div class="empty"><p>在 Mock 页添加响应示例</p></div>'
     );
   if (!response)
-    return `<div class="empty"><div class="empty-symbol">${lineIcon("rocket")}</div><p>输入 URL 后点击发送获取响应结果</p><small>Ctrl + Enter 发送请求 · Ctrl + S 保存接口</small></div>`;
+    return `<div class="empty http-response-empty"><div class="empty-symbol">${lineIcon("rocket")}</div><p>输入 URL 后点击发送获取响应结果</p><small>Ctrl + Enter 发送请求 · Ctrl + S 保存接口</small></div>`;
   if (responseTab === "scriptResponse") {
     if (!response.scriptResponse)
       return '<div class="notice">后置脚本可用 pm.response.setBody(value) / setCode(code) 创建处理视图；不改写原始网络证据。</div>';
@@ -3137,9 +3138,11 @@ function bind() {
     render();
   });
   on("#auth-type", "change", (_, e) => {
+    const focused = document.activeElement === e;
     request().auth.type = e.value;
     mark();
     render();
+    if (focused) $("#auth-type")?.focus({ preventScroll: true });
   });
   on("[data-auth]", "input", (_, e) => {
     request().auth[e.dataset.auth] = e.value;
