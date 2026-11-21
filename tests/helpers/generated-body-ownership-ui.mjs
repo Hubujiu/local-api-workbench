@@ -1,3 +1,4 @@
+import { fillHTTPDesignSchema } from "./http-design-source-ui.mjs";
 import assert from "node:assert/strict";
 import { createImportOwnershipFixture } from "./project-import-ownership-ui.mjs";
 export async function exerciseGeneratedBodyOwnership(page) {
@@ -5,7 +6,8 @@ export async function exerciseGeneratedBodyOwnership(page) {
   await page.locator('.rail [data-page="apis"]').click();
   await page.locator("#add-request").click();
   await page.locator('[data-mode="design"]').click();
-  await page.locator("#schema").fill(
+  await fillHTTPDesignSchema(
+    page,
     JSON.stringify({
       type: "object",
       properties: { value: { const: "owned sample" } },

@@ -1,3 +1,4 @@
+import { fillHTTPDesignSchema } from "./helpers/http-design-source-ui.mjs";
 import { captureHTTPWorkbenchBaseline } from "./helpers/http-workbench-visual-baseline.mjs";
 import { exerciseMCPDatabaseUI } from "./helpers/mcp-database-ui.mjs";
 import { exercisePlanHistoryRefreshUI } from "./helpers/plan-history-refresh-ui.mjs";
@@ -2491,7 +2492,15 @@ try {
     customerId: "",
   });
   await page.locator('[data-mode="design"]').click();
-  await page.locator("#schema").fill(
+  assert.equal(
+    await page
+      .locator(".http-design-page .design-schema-source")
+      .evaluate((details) => details.open),
+    false,
+  );
+  assert.equal(await page.locator("#schema").isVisible(), false);
+  await fillHTTPDesignSchema(
+    page,
     JSON.stringify({
       type: "object",
       properties: {
@@ -2645,7 +2654,7 @@ try {
     type: "string",
     $anchor: "real-anchor",
   };
-  await page.locator("#schema").fill(JSON.stringify(identifierSchema));
+  await fillHTTPDesignSchema(page, JSON.stringify(identifierSchema));
   await page.locator("#visual-schema").click();
   await page
     .locator(".schema-tree tbody tr")
@@ -2691,7 +2700,7 @@ try {
   );
   delete identifierSaved.properties["metadata-protected"];
   assert.deepEqual(identifierSaved, visualSchema);
-  await page.locator("#schema").fill(JSON.stringify(visualSchema));
+  await fillHTTPDesignSchema(page, JSON.stringify(visualSchema));
   await saveAndWait("#save");
   const compositionSchema = {
     type: "integer",
@@ -2700,7 +2709,7 @@ try {
     example: 3,
     "x-data": { $ref: "#/allOf/0" },
   };
-  await page.locator("#schema").fill(JSON.stringify(compositionSchema));
+  await fillHTTPDesignSchema(page, JSON.stringify(compositionSchema));
   const appendNumberBranch = async () => {
     await page.locator('[data-schema-branch-add="0"]').click();
     await page.locator("[data-schema-combination]").selectOption("allOf");
@@ -2749,7 +2758,7 @@ try {
     allOf: [...compositionSaved.allOf, { type: "number" }],
     $defs: { Keep: { $ref: "#/allOf/1" } },
   };
-  await page.locator("#schema").fill(JSON.stringify(guardedComposition));
+  await fillHTTPDesignSchema(page, JSON.stringify(guardedComposition));
   await page.locator("#visual-schema").click();
   await compositionRow(1).locator("[data-schema-branch-remove]").click();
   await page
@@ -2758,7 +2767,7 @@ try {
     .waitFor();
   await page.screenshot({ path: "/tmp/local-api-schema-compositions.png" });
   await page.getByRole("button", { name: "关闭", exact: true }).click();
-  await page.locator("#schema").fill(JSON.stringify(visualSchema));
+  await fillHTTPDesignSchema(page, JSON.stringify(visualSchema));
   await saveAndWait("#save");
   const originalResponse = {
     status: "200",
@@ -2918,7 +2927,7 @@ try {
       },
     ],
   };
-  await page.locator("#schema").fill(JSON.stringify(tupleSchema));
+  await fillHTTPDesignSchema(page, JSON.stringify(tupleSchema));
   await page.locator('[data-mode="debug"]').click();
   await page.locator('[data-param="body"]').click();
   await page.locator("#generate-body").click();
