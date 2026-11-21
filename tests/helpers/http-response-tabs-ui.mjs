@@ -1,5 +1,51 @@
 import assert from "node:assert/strict";
 
+const cookieColumns = [
+  "Name",
+  "Value",
+  "Domain",
+  "Path",
+  "Expires",
+  "HttpOnly",
+  "Secure",
+];
+
+export async function checkUnsentResponseData(page, name, requireScroll) {
+  const body = page.locator(".response .response-body");
+  const pane = body.locator(`[data-unsent-response="${name}"]`);
+  await pane.getByText("暂无数据", { exact: true }).waitFor();
+  assert.equal(await body.locator(".http-response-empty").count(), 0);
+  const bounds = await body.boundingBox();
+  const box = await pane.boundingBox();
+  assert.ok(
+    box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1,
+    JSON.stringify({ name, bounds, box }),
+  );
+  if (name === "headers") {
+    assert.equal(await pane.getAttribute("aria-label"), "尚无响应头");
+    assert.equal(await pane.getByRole("table").count(), 0);
+  } else {
+    const table = pane.getByRole("table", { name: "响应 Cookie" });
+    assert.deepEqual(
+      await table.getByRole("columnheader").allTextContents(),
+      cookieColumns,
+    );
+    assert.equal(await table.locator("tbody td").count(), 1);
+    assert.equal(await table.locator("tbody td").getAttribute("colspan"), "7");
+    if (requireScroll) {
+      assert.ok(await pane.evaluate((el) => el.scrollWidth > el.clientWidth));
+      await pane.focus();
+      await page.keyboard.press("ArrowRight");
+      await page.waitForFunction(
+        () =>
+          document.querySelector(".unsent-response-cookie-scroll").scrollLeft >
+          0,
+      );
+    }
+  }
+  return box;
+}
+
 export async function exerciseHTTPResponseTabs(page) {
   const viewport = page.viewportSize();
   const editor = page.locator('.editor[data-editor-mode="debug"]');
@@ -12,9 +58,6 @@ export async function exerciseHTTPResponseTabs(page) {
     .locator("[aria-pressed=true]")
     .getAttribute("data-response");
   const url = await editor.locator("#url").inputValue();
-  const body = await response
-    .locator(".response-body .http-response-empty p")
-    .textContent();
   const activate = async (name) => {
     await tab(name).focus();
     await page.keyboard.press("Enter");
@@ -33,6 +76,10 @@ export async function exerciseHTTPResponseTabs(page) {
     assert.equal(await editor.locator("#url").inputValue(), url);
   };
   try {
+    await activate("body");
+    const body = await response
+      .locator(".response-body .http-response-empty p")
+      .textContent();
     assert.deepEqual(
       await strip
         .locator("[data-response]")
@@ -61,7 +108,9 @@ export async function exerciseHTTPResponseTabs(page) {
         Math.abs(tabBox.x + tabBox.width - topBox.x - topBox.width) <= 1,
       );
       await activate("headers");
+      await checkUnsentResponseData(page, "headers", false);
       await activate("cookies");
+      await checkUnsentResponseData(page, "cookies", width === 360);
       await activate("examples");
       assert.equal(await response.locator(".http-response-empty").count(), 0);
       await activate("extracted");
@@ -79,6 +128,10 @@ export async function exerciseHTTPResponseTabs(page) {
     await page.setViewportSize({ width: 900, height: 800 });
     if (!wasSplit) await layout.click();
     assert.match(await editor.getAttribute("class"), /split-layout/);
+    await activate("headers");
+    await checkUnsentResponseData(page, "headers", false);
+    await activate("cookies");
+    await checkUnsentResponseData(page, "cookies", true);
     await activate("extracted");
     await activate("body");
   } finally {
