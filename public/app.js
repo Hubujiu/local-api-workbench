@@ -1,3 +1,4 @@
+import { responseBodyView, bindResponseBody } from "./http-response-view.js";
 import { bindMCPDatabase } from "./mcp-database-view.js";
 import {
   loadDatabasePreviewCapabilities,
@@ -1711,7 +1712,7 @@ function responseContent() {
       v = JSON.stringify(JSON.parse(v), null, 2);
     } catch {}
   }
-  return `${failure}${response.rawBodyBase64 ? '<button id="download-response-binary">下载原始二进制响应</button>' : ""}${response.codecError ? `<div class="notice">解码失败，以下为 Base64：${esc(response.codecError)}</div>` : ""}<pre>${esc(typeof v === "string" ? v : JSON.stringify(v, null, 2))}</pre>`;
+  return `${failure}${response.rawBodyBase64 ? '<button id="download-response-binary">下载原始二进制响应</button>' : ""}${response.codecError ? `<div class="notice">解码失败，以下为 Base64：${esc(response.codecError)}</div>` : ""}${responseTab === "body" ? responseBodyView(response.body) : `<pre>${esc(typeof v === "string" ? v : JSON.stringify(v, null, 2))}</pre>`}`;
 }
 function modePanel(r) {
   if (mode === "design")
@@ -2013,6 +2014,7 @@ function showMCPClientConfiguration(configuration) {
     };
 }
 function bind() {
+  if (response) bindResponseBody(document, response.body);
   bindSocketIOWorkbench();
   on("#socketio-project-reload", "click", () => openProject(project.id));
   bindGrpcWorkbench();

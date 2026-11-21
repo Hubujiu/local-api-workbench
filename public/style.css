@@ -2278,10 +2278,10 @@ input[data-select-case] {
     width: calc(100% - 62px);
   }
   .editor:not(.split-layout) > .response > .response-top {
-    min-height: 45px;
+    min-height: 44px;
   }
   .editor:not(.split-layout) > .response .response-tabs {
-    min-height: 44px;
+    min-height: 43px;
   }
   .editor:not(.split-layout) > .urlbar > #send,
   .editor:not(.split-layout) > .urlbar > #save {
@@ -2307,4 +2307,94 @@ input[data-select-case] {
   .editor:not(.split-layout) > .body-panel:not(.body-expanded) #code-gutter {
     padding-right: 24px;
   }
+}
+
+.http-response-view {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.http-response-toolbar {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.http-response-toolbar button {
+  height: 32px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--muted);
+}
+.http-response-toolbar button[aria-pressed="true"] {
+  background: var(--hover);
+  color: var(--text);
+}
+.http-response-format {
+  height: 32px;
+  margin: 0 12px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.http-response-code {
+  display: flex;
+  flex: 1;
+  min-height: 150px;
+  overflow: auto;
+  align-items: stretch;
+}
+.http-response-gutter,
+.http-response-code pre {
+  padding: 0;
+  font:
+    12px/16px Consolas,
+    monospace;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.http-response-gutter {
+  flex: 0 0 62px;
+  padding-right: 24px;
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+  border-right: 1px solid var(--line);
+}
+.http-response-code pre {
+  min-width: 0;
+  flex: 1;
+}
+.response-top .metrics > span:first-child {
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 2px 7px;
+}
+
+.dark .http-response-view {
+  background: #1d1913;
+}
+.dark .http-response-code {
+  color: #d4d4d4;
+  background: #1d1913;
+}
+.dark .http-response-code .syntax-key {
+  color: #9cdcfe;
+}
+.dark .http-response-code .syntax-string {
+  color: #ce9178;
+}
+.dark .http-response-code .syntax-number {
+  color: #b5cea8;
+}
+.dark .http-response-gutter {
+  color: #858585;
+}
+.dark .http-response-toolbar button[aria-pressed="true"] {
+  background: #241f17;
+  color: #e6dfce;
 }

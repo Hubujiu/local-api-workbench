@@ -613,12 +613,36 @@ try {
   await page.locator("#compact-ui").click();
   assert.equal(await page.locator(".sidebar").isVisible(), true);
   await page.setViewportSize({ width: 1440, height: 950 });
+  const initialResponseEvidence = page.waitForResponse(
+    (reply) =>
+      reply.request().method() === "POST" && reply.url().endsWith("/execute"),
+  );
   await page.getByRole("button", { name: "发 送", exact: true }).click();
   await page
     .locator(".response-body")
     .getByText("欢迎使用 Local API", { exact: false })
     .waitFor();
   assert(await page.getByText("200", { exact: true }).isVisible());
+  const initialNetworkBody = (await (await initialResponseEvidence).json())
+    .body;
+  await page.locator('[data-response-format="raw"]').click();
+  assert.equal(
+    await page.locator("#http-response-text").textContent(),
+    initialNetworkBody,
+  );
+  await page.locator('[data-response-format="pretty"]').click();
+  assert.deepEqual(
+    JSON.parse(await page.locator("#http-response-text").textContent()),
+    JSON.parse(initialNetworkBody),
+  );
+  assert.equal(
+    await page
+      .locator('[data-response-format="pretty"]')
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  await page.screenshot({ path: "/tmp/local-api-http-response-formatted.png" });
+
   await page.getByRole("button", { name: "新建接口", exact: true }).click();
   await page
     .getByRole("textbox", { name: "接口名称", exact: true })
