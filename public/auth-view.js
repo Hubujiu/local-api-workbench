@@ -97,14 +97,51 @@ const options = (list, selected) =>
         `<option ${value === selected ? "selected" : ""}>${esc(value)}</option>`,
     )
     .join("");
-export function authPanel(auth = {}, { acquire = true, shared = false } = {}) {
+const httpMethodLabels = {
+  none: "无具体认证",
+  bearer: "Bearer Token",
+  basic: "Basic Auth",
+  digest: "Digest Auth",
+  ntlm: "NTLM",
+  oauth1: "OAuth 1.0",
+  oauth2: "OAuth 2.0",
+  aws: "AWS Signature V4",
+  hawk: "Hawk",
+  edgegrid: "EdgeGrid",
+  apiKey: "API Key",
+  jwt: "JWT",
+  asap: "ASAP",
+};
+
+export function httpAuthPane(auth, inherit = true) {
+  return (
+    '<section class="http-auth-pane" aria-label="请求认证">' +
+    authPanel(auth, { standaloneHTTP: true }) +
+    '<label class="http-auth-inheritance"><input id="inherit-auth" type="checkbox" ' +
+    (inherit !== false ? "checked" : "") +
+    ">接口未设置具体认证时，继承项目/目录认证；取消勾选则明确不使用共享认证。</label></section>"
+  );
+}
+export function authPanel(
+  auth = {},
+  { acquire = true, shared = false, standaloneHTTP = false } = {},
+) {
   const attribute = shared ? "data-shared-auth" : "data-auth";
   const type = auth.type || "none";
   let html =
-    '<div class="form-grid"><label>认证类型</label><select id="' +
+    (standaloneHTTP
+      ? '<div class="form-grid"><label for="auth-type">类型</label><select id="'
+      : '<div class="form-grid"><label>认证类型</label><select id="') +
     (shared ? "shared-auth-type" : "auth-type") +
     '">' +
-    options(authTypes, type) +
+    (standaloneHTTP
+      ? authTypes
+          .map(
+            (value) =>
+              `<option value="${esc(value)}" ${type === value ? "selected" : ""}>${esc(httpMethodLabels[value])}</option>`,
+          )
+          .join("")
+      : options(authTypes, type)) +
     "</select>";
   if (type === "asap")
     html +=
@@ -167,7 +204,9 @@ export function authPanel(auth = {}, { acquire = true, shared = false } = {}) {
           ? `<label>${esc(key === "secret" ? "Secret / PEM私钥" : key)}</label><textarea ${attribute}="${key}" rows="3" autocomplete="off" spellcheck="false">${esc(auth[key] ?? (key === "secret" ? "" : "{}"))}</textarea>`
           : key === "privateKey"
             ? `<label>privateKey (${type === "asap" ? "RSA / EC" : "RSA"} PEM)</label><textarea ${attribute}="privateKey" rows="4" autocomplete="off" spellcheck="false" placeholder="${type === "asap" ? "未加密PEM或{{变量}}，不读取文件路径" : "仅RSA-SHA1；直接粘贴PEM或{{变量}}，不读取文件路径"}">${esc(auth[key])}</textarea>`
-            : `<label>${key === "ttlSeconds" ? "有效期（秒）" : key}</label><input ${attribute}="${key}" value="${esc(auth[key] ?? (type === "jwt" ? { headerPrefix: "Bearer", queryParamKey: "token" }[key] : type === "asap" && key === "ttlSeconds" ? "60" : ""))}" type="${secret.has(key) || (type === "hawk" && key === "key") ? "password" : "text"}" placeholder="${esc(hints[key] || "支持 {{变量}}")}">`,
+            : standaloneHTTP && type === "bearer" && key === "token"
+              ? `<label for="http-auth-bearer-token">Token</label><input id="http-auth-bearer-token" data-auth="token" value="${esc(auth.token)}" type="password" placeholder="Token（支持变量）" autocomplete="off">`
+              : `<label>${key === "ttlSeconds" ? "有效期（秒）" : key}</label><input ${attribute}="${key}" value="${esc(auth[key] ?? (type === "jwt" ? { headerPrefix: "Bearer", queryParamKey: "token" }[key] : type === "asap" && key === "ttlSeconds" ? "60" : ""))}" type="${secret.has(key) || (type === "hawk" && key === "key") ? "password" : "text"}" placeholder="${esc(hints[key] || "支持 {{变量}}")}">`,
       )
       .join("") + "</div>";
   if (type === "jwt")
