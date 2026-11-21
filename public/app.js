@@ -1,4 +1,8 @@
 import {
+  httpRequestActions,
+  requestCurlAction,
+} from "./http-request-actions.js";
+import {
   designResponsePanel,
   responseSelection,
   editDesignResponseHeader,
@@ -1546,7 +1550,7 @@ function editor(r) {
     )
     .join(
       "",
-    )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button><button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : `<button id="send" class="primary" ${busy ? "disabled" : ""}>${busy ? "请求中…" : "发 送"}</button><details class="button-menu"><summary aria-label="发送更多操作">▾</summary><div><button id="send-menu-curl">生成 cURL</button><button id="send-menu-plan">创建执行计划</button></div></details>${busy && mode !== "cases" && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}<button id="save" class="${dirty ? "primary" : ""}">保存</button><details class="button-menu"><summary aria-label="保存更多操作">▾</summary><div><button id="save-menu-copy">创建接口副本</button><button id="save-menu-project">保存整个项目</button></div></details><button id="curl" title="生成 cURL">⌘</button>`}</div>${
+    )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button>${requestCurlAction(mode === "debug")}<button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : httpRequestActions({ debug: mode === "debug", busy, cancel: busy && mode !== "cases" && !caseCancellationOwner(), dirty })}</div>${
     mode === "debug"
       ? `<div class="param-tabs">${[
           ["headers", "Header"],
@@ -3684,8 +3688,17 @@ function bind() {
     mark();
     render();
   });
+  on(".http-action-split details", "keydown", (event, details) => {
+    if (event.key !== "Escape" || !details.open) return;
+    event.preventDefault();
+    event.stopPropagation();
+    details.open = false;
+    details.querySelector("summary").focus();
+  });
   on("#send-menu-curl", "click", (_, element) => {
-    element.closest("details").open = false;
+    const details = element.closest("details");
+    details.open = false;
+    details.querySelector("summary").focus();
     $("#curl").click();
   });
   on("#send-menu-plan", "click", () => {

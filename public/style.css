@@ -3809,3 +3809,80 @@ body:not(.dark) .plans-heading {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.editor[data-editor-mode="debug"] .url-input #method {
+  width: 112px;
+}
+.editor[data-editor-mode="debug"] .url-input #url {
+  min-width: 0;
+}
+.editor[data-editor-mode="debug"] .url-input #http-version {
+  font-weight: 400;
+  color: var(--text);
+}
+.editor[data-editor-mode="debug"] .subnav #curl {
+  flex: 0 0 auto;
+}
+.http-action-split {
+  display: flex;
+  flex: 0 0 93px;
+  min-height: 40px;
+}
+.http-action-split > button {
+  width: 70px;
+  padding-inline: 2px;
+  border-inline-end: 0;
+  border-radius: 4px 0 0 4px;
+}
+.http-action-split > details {
+  width: 23px;
+}
+.http-action-split > details > summary {
+  justify-content: center;
+  padding: 0;
+  border-radius: 0 4px 4px 0;
+}
+.http-action-split > button.primary + details > summary {
+  background: var(--accent);
+  border-color: var(--accent);
+  border-inline-start-color: #fff4;
+  color: white;
+}
+.http-action-split > details > summary:hover,
+.http-action-split > button.primary + details > summary:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.http-action-split > button:focus-visible,
+.http-action-split > details > summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -3px;
+}
+@media (max-width: 900px) {
+  .editor[data-editor-mode="debug"] .url-input #method,
+  .editor[data-editor-mode="debug"] .url-input #http-version {
+    width: clamp(58px, 12vw, 78px);
+    min-width: 0;
+    padding-inline: 3px;
+  }
+}
+@media (max-width: 650px) {
+  .http-action-split {
+    position: relative;
+  }
+  .http-action-split > details {
+    position: static;
+  }
+  .http-action-split > details > div {
+    right: auto;
+    left: 0;
+    min-width: min(160px, calc(100vw - 175px));
+  }
+}
+
+@media (min-width: 380px) and (max-width: 650px) {
+  .http-action-split > #save + details > div {
+    right: 0;
+    left: auto;
+  }
+}
