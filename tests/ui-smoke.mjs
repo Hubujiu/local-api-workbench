@@ -508,15 +508,34 @@ try {
     [
       "history",
       "apis",
-      "grpc",
-      "socketio",
       "docs",
       "dictionary",
       "settings",
       "git",
+      "grpc",
+      "socketio",
       "trash",
     ],
   );
+  const railAPIs = page.locator('.rail [data-page="apis"]');
+  await railAPIs.focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await railAPIs.getAttribute("aria-current"), "page");
+  assert.equal(
+    await railAPIs.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await page.locator(".rail :focus").getAttribute("data-page"),
+    "docs",
+  );
+  await page.keyboard.press("Shift+Tab");
+  assert.equal(
+    await railAPIs.evaluate((el) => el === document.activeElement),
+    true,
+  );
+
   const bodyPanelBox = await page.locator(".request-panel").boundingBox();
   const bodyEditorBox = await page.locator(".body-editor-shell").boundingBox();
   assert(
