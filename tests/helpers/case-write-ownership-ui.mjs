@@ -44,6 +44,7 @@ export async function exerciseCaseWriteOwnership(page) {
   await page.route(endpoint + "/cases", handler);
   try {
     await page.locator('[data-mode="cases"]').click();
+    assert.equal(await page.locator("#save").isVisible(), false);
     await page.locator("#new-interface-case").click();
     await page.locator("#case-name").fill("Late saved case");
     await page.locator("#dialog-save").click();
@@ -65,7 +66,7 @@ export async function exerciseCaseWriteOwnership(page) {
       await page.locator("#request-name").inputValue(),
       "Newer case source draft",
     );
-    await page.locator("#save").click();
+    await page.locator("#save-project").click();
     await page
       .locator("#toast")
       .getByText(/核对用例保存结果/)
@@ -112,6 +113,9 @@ export async function exerciseCaseWriteOwnership(page) {
       reloaded.cases.filter((c) => c.name === "Late saved case").length,
       1,
     );
+    assert.equal(puts, 0, "reconciliation is read-only");
+    assert.equal(posts, 1, "reconciliation does not replay the case write");
+    assert.equal(await page.locator("#save").isVisible(), false);
     await page.locator("#request-name").fill("Reconciled case source");
     await Promise.all([
       page.waitForResponse(
@@ -120,7 +124,7 @@ export async function exerciseCaseWriteOwnership(page) {
           r.request().method() === "PUT" &&
           r.status() === 200,
       ),
-      page.locator("#save").click(),
+      page.locator("#save-project").click(),
     ]);
     assert.equal(puts, 1);
     assert.equal(posts, 1);
