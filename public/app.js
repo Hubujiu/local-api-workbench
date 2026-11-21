@@ -1422,6 +1422,10 @@ function render(preserveEditingFocus = false) {
   syncSocketIOWorkbench();
   syncGrpcStreamWorkbench();
   const active = document.activeElement;
+  const oldTabs = $(".tab-scroll");
+  const oldTabScroll = oldTabs?.scrollLeft || 0;
+  const oldSelectedTab = oldTabs?.querySelector(".selected [data-open-tab]")
+    ?.dataset.openTab;
   const editing =
     preserveEditingFocus &&
     active &&
@@ -1479,7 +1483,7 @@ function render(preserveEditingFocus = false) {
             )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="定位当前接口" aria-label="定位当前接口">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button><button data-page="grpc">gRPC unary</button><button data-page="socketio">Socket.IO</button><button id="new-folder">新建目录</button></div></details>`
     }</aside><main class="workspace">${
       page === "apis"
-        ? `<div class="tabs">${opened
+        ? `<div class="tabs"><div class="tab-scroll">${opened
             .filter((id) =>
               project.requests.some((r) => r.id === id && !r.deletedAt),
             )
@@ -1489,10 +1493,20 @@ function render(preserveEditingFocus = false) {
             })
             .join(
               "",
-            )}<button id="tab-add" class="ghost">＋</button><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button data-page="settings" data-settings-target="settings-environments" class="ghost" title="环境设置">☷</button></div></div>${r ? editor(r) : '<div class="empty"><span class="empty-symbol">↗</span><p>从一个请求开始</p><small>创建或导入接口，所有数据只留在本机。</small><button id="welcome-add" class="primary">＋ 新建接口</button></div>'}`
+            )}<button id="tab-add" class="ghost" aria-label="新建接口标签页">＋</button></div><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button data-page="settings" data-settings-target="settings-environments" class="ghost" title="环境设置" aria-label="环境设置">☷</button></div></div>${r ? editor(r) : '<div class="empty"><span class="empty-symbol">↗</span><p>从一个请求开始</p><small>创建或导入接口，所有数据只留在本机。</small><button id="welcome-add" class="primary">＋ 新建接口</button></div>'}`
         : renderPage()
     }</main></div><footer class="statusbar"><span>◈ 本地工作空间 &nbsp; / &nbsp; ${esc(project?.name || "")} &nbsp; <span id="saved-state">${dirty ? "● 未保存" : "✓ 已保存"}</span></span><span class="status-actions"><button id="compact-ui" aria-pressed="${compactUI}" title="隐藏项目树，保留导航和工作区">${compactUI ? "完整模式" : "精简模式"}</button><button id="response-layout" ${page !== "apis" || mode !== "debug" ? "disabled" : ""} aria-pressed="${responseLayout === "split"}">${responseLayout === "split" ? "上下布局" : "左右布局"}</button><span>Local API 0.1.0</span></span></footer>`;
   bind();
+  const tabScroll = $(".tab-scroll");
+  if (tabScroll) {
+    tabScroll.scrollLeft = oldTabScroll;
+    const selectedTab = tabScroll.querySelector(".selected [data-open-tab]");
+    if (selectedTab && selectedTab.dataset.openTab !== oldSelectedTab)
+      selectedTab.parentElement.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+  }
   if (focusState) {
     const replacement = focusKey.id
       ? document.getElementById(focusKey.id)
@@ -1519,7 +1533,7 @@ function render(preserveEditingFocus = false) {
   }
 }
 function editor(r) {
-  return `<section data-editor-mode="${esc(mode)}" class="editor ${mode === "debug" && responseLayout === "split" ? "split-layout" : ""}"><div class="subnav">${[
+  return `<section data-editor-mode="${esc(mode)}" class="editor ${mode === "debug" && responseLayout === "split" ? "split-layout" : ""}"><div class="subnav"><div class="request-modes" role="group" aria-label="接口工作模式">${[
     ["design", "设计"],
     ["debug", "调试"],
     ["cases", "接口用例"],
@@ -1528,11 +1542,11 @@ function editor(r) {
   ]
     .map(
       ([key, label]) =>
-        `<button data-mode="${key}" class="${mode === key ? "active" : ""}">${label}</button>`,
+        `<button data-mode="${key}" class="${mode === key ? "active" : ""}" aria-pressed="${mode === key}">${label}</button>`,
     )
     .join(
       "",
-    )}<select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button><button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : `<button id="send" class="primary" ${busy ? "disabled" : ""}>${busy ? "请求中…" : "发 送"}</button><details class="button-menu"><summary aria-label="发送更多操作">▾</summary><div><button id="send-menu-curl">生成 cURL</button><button id="send-menu-plan">创建执行计划</button></div></details>${busy && mode !== "cases" && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}<button id="save" class="${dirty ? "primary" : ""}">保存</button><details class="button-menu"><summary aria-label="保存更多操作">▾</summary><div><button id="save-menu-copy">创建接口副本</button><button id="save-menu-project">保存整个项目</button></div></details><button id="curl" title="生成 cURL">⌘</button>`}</div>${
+    )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button><button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : `<button id="send" class="primary" ${busy ? "disabled" : ""}>${busy ? "请求中…" : "发 送"}</button><details class="button-menu"><summary aria-label="发送更多操作">▾</summary><div><button id="send-menu-curl">生成 cURL</button><button id="send-menu-plan">创建执行计划</button></div></details>${busy && mode !== "cases" && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}<button id="save" class="${dirty ? "primary" : ""}">保存</button><details class="button-menu"><summary aria-label="保存更多操作">▾</summary><div><button id="save-menu-copy">创建接口副本</button><button id="save-menu-project">保存整个项目</button></div></details><button id="curl" title="生成 cURL">⌘</button>`}</div>${
     mode === "debug"
       ? `<div class="param-tabs">${[
           ["headers", "Header"],
@@ -2150,13 +2164,16 @@ function bind() {
     render();
     if (fromRailKeyboard) $(".rail [aria-current='page']")?.focus();
   });
-  on("[data-open-tab]", "click", (_, e) => {
+  on("[data-open-tab]", "click", (event, e) => {
+    const fromKeyboard = event.detail === 0 && e === document.activeElement;
     collect();
     current = e.dataset.openTab;
     response = responses.get(project.id + ":" + current) || null;
     render();
+    if (fromKeyboard) $(".tab.selected .tab-switch")?.focus();
   });
-  on("[data-close-tab]", "click", (_, e) => {
+  on("[data-close-tab]", "click", (event, e) => {
+    const fromKeyboard = event.detail === 0 && e === document.activeElement;
     collect();
     opened = opened.filter((id) => id !== e.dataset.closeTab);
     if (current === e.dataset.closeTab) {
@@ -2164,6 +2181,8 @@ function bind() {
       response = responses.get(project.id + ":" + current) || null;
     }
     render();
+    if (fromKeyboard)
+      ($(".tab.selected .tab-switch") || $("#tab-add"))?.focus();
   });
   on("#git-terminal", "click", async () => {
     if (window.desktop?.openProjectTerminal)
@@ -3284,10 +3303,12 @@ function bind() {
     request().schema = JSON.parse(e.value);
     mark();
   });
-  on("[data-mode]", "click", (_, e) => {
+  on("[data-mode]", "click", (event, e) => {
+    const fromKeyboard = event.detail === 0 && e === document.activeElement;
     collect();
     mode = e.dataset.mode;
     render();
+    if (fromKeyboard) $('.request-modes [aria-pressed="true"]')?.focus();
   });
   const selectDesignParameter = (key) => {
     if (key === designParameter) return;

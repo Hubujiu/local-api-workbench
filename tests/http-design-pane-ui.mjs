@@ -111,6 +111,56 @@ try {
   await page.goto(app.launchUrl);
   const design = page.locator('[data-mode="design"]');
   const debug = page.locator('[data-mode="debug"]');
+  const modes = page.getByRole("group", { name: "接口工作模式" });
+  const environment = page.getByRole("combobox", { name: "执行环境" });
+  const environmentSettings = page.getByRole("button", { name: "环境设置" });
+  const verificationTab = page.locator(`[data-open-tab="${request.id}"]`);
+  const profileTab = page.locator(`[data-open-tab="${profileRequest.id}"]`);
+  await page.setViewportSize({ width: 360, height: 760 });
+  await page.locator(`[data-request="${profileRequest.id}"]`).click();
+  await profileTab.press("Enter");
+  assert.equal(
+    await profileTab.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  const strip = page.locator(".tab-scroll");
+  const stripAfterSwitch = await strip.evaluate((el) => el.scrollLeft);
+  assert(
+    stripAfterSwitch > 0,
+    "the active request tab must scroll into view: " +
+      JSON.stringify(
+        await strip.evaluate((el) => [el.clientWidth, el.scrollWidth]),
+      ),
+  );
+  const stripBox = await strip.boundingBox();
+  const environmentBox = await environment.boundingBox();
+  assert(stripBox.x + stripBox.width <= environmentBox.x);
+  assert(await environmentSettings.isVisible());
+  const viewport = await page.evaluate(() => [
+    innerWidth,
+    document.documentElement.scrollWidth,
+  ]);
+  assert.equal(viewport[0], viewport[1]);
+  await modes.getByRole("button", { name: "设计", exact: true }).press("Enter");
+  assert.equal(await design.getAttribute("aria-pressed"), "true");
+  assert.equal(
+    await design.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  assert.equal(await strip.evaluate((el) => el.scrollLeft), stripAfterSwitch);
+  await verificationTab.press("Enter");
+  assert.equal(
+    await verificationTab.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.locator(`[data-close-tab="${profileRequest.id}"]`).press("Enter");
+  assert.equal(await profileTab.count(), 0);
+  assert.equal(
+    await verificationTab.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.setViewportSize({ width: 1363, height: 1023 });
+  await debug.click();
   const descriptionSection = page.getByRole("region", {
     name: "详细说明",
     exact: true,

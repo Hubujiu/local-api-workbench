@@ -193,7 +193,7 @@ body:not(.dark) nav.rail {
 }
 .search {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   margin-bottom: 6px;
 }
 .search input {
@@ -267,27 +267,82 @@ body:not(.dark) nav.rail {
   height: 43px;
   background: var(--panel);
   display: flex;
-  align-items: end;
+  align-items: center;
   border-bottom: 1px solid var(--line);
-  padding-left: 12px;
-  gap: 5px;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-right: 16px;
+}
+.tab-scroll {
+  display: flex;
+  align-items: end;
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .tab {
-  height: 36px;
-  padding: 10px 15px;
   display: flex;
   align-items: center;
-  gap: 9px;
+  flex: 0 0 auto;
+  height: 32px;
+  max-width: 230px;
+  border-radius: 5px 5px 0 0;
+}
+.tab.selected {
   background: var(--bg);
-  border-radius: 6px 6px 0 0;
-  min-width: 140px;
+}
+.tab-switch {
+  min-width: 0;
+  max-width: 190px;
+  height: 32px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tab.selected .tab-switch {
+  font-weight: 600;
+}
+.tab-close {
+  flex-shrink: 0;
+  padding: 4px 6px;
+}
+.tab-scroll button:focus-visible {
+  outline-offset: -3px;
+}
+#tab-add {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
 }
 .tools {
-  margin-left: auto;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
+  align-items: stretch;
+  max-width: 45%;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+}
+.tools #env {
+  min-width: 0;
+  width: 130px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  text-overflow: ellipsis;
+}
+.tools > button {
+  flex: 0 0 24px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0 3px 3px 0;
+}
+.tools :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 .editor {
   padding: 0 16px;
@@ -313,6 +368,25 @@ body:not(.dark) nav.rail {
   color: var(--accent);
   background: var(--panel);
 }
+.request-modes {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  height: 32px;
+  border-radius: 4px;
+  background: var(--panel);
+}
+.subnav .request-modes button {
+  padding: 0 12px;
+}
+.subnav .request-modes button.active {
+  color: var(--text);
+  background: var(--hover);
+}
+.request-modes button:focus-visible {
+  outline-offset: -3px;
+}
+
 .request-name {
   margin-left: 16px;
   flex: 1;
@@ -820,8 +894,14 @@ dialog footer {
   .grid-stats {
     grid-template-columns: repeat(2, 1fr);
   }
-  .tools {
-    padding: 4px;
+  .tabs {
+    padding-right: 8px;
+  }
+  .tabs .tools {
+    max-width: 35%;
+  }
+  .tab-switch {
+    max-width: 106px;
   }
   .request-panel {
     height: 35vh;
@@ -836,34 +916,6 @@ dialog footer {
 .mock-url {
   width: 100%;
   margin: 10px 0 15px;
-}
-.tabs {
-  overflow-x: auto;
-  flex-shrink: 0;
-}
-.tab {
-  min-width: 0;
-  max-width: 230px;
-  padding: 0 5px;
-  gap: 0;
-  background: var(--panel);
-}
-.tab.selected {
-  background: var(--bg);
-  border-top: 2px solid var(--accent);
-}
-.tab-switch {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 190px;
-}
-.tab-close {
-  padding: 4px 6px !important;
-}
-.tabs .tools {
-  position: sticky;
-  right: 0;
-  background: var(--panel);
 }
 .icon svg {
   width: 20px;
@@ -1933,6 +1985,22 @@ body.compact-ui .sidebar {
   font-size: 12px;
   color: var(--muted);
 }
+.search-filter,
+.search #add-request {
+  height: 32px;
+}
+.search-filter input {
+  padding-block: 0;
+}
+.search #add-request {
+  width: 32px;
+  flex: 0 0 32px;
+  padding: 0;
+}
+.search-filter:focus-within {
+  border-color: var(--accent);
+}
+
 .section-label > div {
   display: flex;
   gap: 2px;
@@ -1943,7 +2011,6 @@ body.compact-ui .sidebar {
 }
 
 .subnav #request-status,
-.tools #env,
 .top #project-select {
   border-color: transparent;
   background: transparent;
