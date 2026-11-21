@@ -68,7 +68,10 @@ export async function exerciseRestartJourney({
     const card = page.locator("details.card").filter({ has: exportButton });
     const summary = card.locator(":scope > summary");
     await summary.waitFor({ state: "visible" });
-    assert.match(await summary.innerText(), /✓ 通过/);
+    assert.equal(
+      await summary.locator(".plan-run-verdict.success").innerText(),
+      "通过",
+    );
     assert.ok((await summary.innerText()).includes(expected.planName));
     if ((await card.getAttribute("open")) === null) await summary.click();
     await card
@@ -236,7 +239,12 @@ export async function exerciseRestartJourney({
   assert.equal(run.status, "passed");
   assert.equal(run.results.length, 1);
   assert.equal(hits.length, 3);
-  await page.getByText("✓ 通过", { exact: false }).waitFor();
+  await page
+    .locator(
+      `[data-plan-run-id="${run.id}"] > summary .plan-run-verdict.success`,
+    )
+    .getByText("通过", { exact: true })
+    .waitFor();
   await page.locator('.rail [data-page="apis"]').click();
   mark("backup");
   const saved = await backup();
