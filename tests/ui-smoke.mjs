@@ -434,6 +434,18 @@ try {
   await page.goto(app.launchUrl);
   await page.getByRole("button", { name: "发 送", exact: true }).waitFor();
   await page.screenshot({ path: "/tmp/local-api-initial.png" });
+  const commonHeaderParameters = page.getByRole("button", {
+    name: "公共参数（Header）",
+    exact: true,
+  });
+  assert.equal(await commonHeaderParameters.count(), 0);
+  await page.locator('[data-param="headers"]').click();
+  await commonHeaderParameters.click();
+  await page.locator("#parameter-scope").waitFor();
+  await page.locator('.rail [data-page="apis"]').click();
+  await page.locator('[data-param="query"]').click();
+  assert.equal(await commonHeaderParameters.count(), 0);
+  await page.locator('[data-param="body"]').click();
   const helperLabelBox = await page
     .locator("#toggle-parameter-helper .helper-label")
     .boundingBox();

@@ -1514,7 +1514,7 @@ function editor(r) {
           )
           .join(
             "",
-          )}</div><div class="request-panel ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
+          )}</div><div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
           ["body", "实时响应"],
           ["visualization", "可视化"],
           ["scriptResponse", "脚本视图"],
@@ -1540,7 +1540,8 @@ function editor(r) {
   }</section>`;
 }
 function pairs(rows, key) {
-  return `<table class="pairs-table"><thead><tr><th class="pair-enabled-heading"></th><th class="pair-name-heading">参数名</th><th>参数值</th><th class="pair-actions-heading">操作</th></tr></thead><tbody>${rows
+  const metadataColumn = ["headers", "query", "path", "cookies"].includes(key);
+  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}"><thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>参数值</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}<th class="pair-actions-heading">操作</th></tr></thead><tbody>${rows
     .map((p, i) => {
       const selector =
         key === "form"
@@ -1550,7 +1551,7 @@ function pairs(rows, key) {
         p.type === "file"
           ? `<span class="pair-file"><input type="file" data-field-file="${i}"><small title="${esc(p.filename || "未选择文件")}">${esc(p.filename || "未选择文件")}</small></span>`
           : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`;
-      return `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td><div class="pair-value">${selector}${value}</div></td><td><div class="pair-row-actions"><button data-dynamic-pair="${key}:${i}">${p.dynamic ? "动态✓" : "动态"}</button><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></div></td></tr>`;
+      return `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td><div class="pair-value">${selector}${value}</div></td>${metadataColumn ? `<td class="pair-description" title="${esc(p.description || "")}">${esc(p.description || "")}</td>` : ""}<td><div class="pair-row-actions"><button data-dynamic-pair="${key}:${i}">${p.dynamic ? "动态✓" : "动态"}</button><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></div></td></tr>`;
     })
     .join(
       "",
@@ -1559,6 +1560,10 @@ function pairs(rows, key) {
 function paramPanel(r) {
   if (["headers", "query", "path", "cookies"].includes(param))
     return (
+      (param === "headers"
+        ? `<div class="header-common-parameters"><button type="button" class="ghost" data-page="settings" data-settings-target="settings-global-parameters" title="管理项目及目录公共请求参数">${lineIcon("⚙")}公共参数（Header）</button></div>`
+        : "") +
+      pairs(r[param], param) +
       (param === "cookies"
         ? `<div class="cookie-toolbar"><div class="cookie-manager-row"><button id="cookie-manager">Cookie管理器</button><span class="muted">按项目与环境隔离，默认关闭</span></div><label class="cookie-encoding-field">参数表 Cookie 编码<select id="cookie-encoding">${[
             ["raw", "保持原值"],
@@ -1571,10 +1576,10 @@ function paramPanel(r) {
             )
             .join(
               "",
-            )}</select></label></div><p class="muted">只作用于下方参数表，不重写显式 Cookie 请求头或 Cookie 管理器内容。</p>`
+            )}</select></label></div><p class="muted">只作用于参数表，不重写显式 Cookie 请求头或 Cookie 管理器内容。</p>`
         : param === "query"
-          ? `<label><input id="query-add-equal" type="checkbox" ${r.queryAddEqual !== false ? "checked" : ""}>空值 Query 参数添加等号</label><p class="muted">只控制下方参数表的空值；URL 内已有查询保持原样。</p>`
-          : "") + pairs(r[param], param)
+          ? `<label><input id="query-add-equal" type="checkbox" ${r.queryAddEqual !== false ? "checked" : ""}>空值 Query 参数添加等号</label><p class="muted">只控制参数表的空值；URL 内已有查询保持原样。</p>`
+          : "")
     );
   if (param === "body")
     return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div><div class="body-actions"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button><button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${bodyExpanded ? "收起编辑器" : "展开编辑器"}</button></div>${
