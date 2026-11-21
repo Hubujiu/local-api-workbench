@@ -6397,12 +6397,19 @@ try {
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.locator('.rail [data-page="apis"]').click();
   await page.locator("#add-request").click();
+  await page.locator("#request-name").fill("Other case source");
+  await saveAndWait();
+  await page.locator("#add-request").click();
   await page.locator("#request-name").fill("Batch execution source");
   await page.locator("#url").fill(fixtureURL + "/case-batch/first");
   await saveAndWait();
   const batchProjectId = await page.locator("#project-select").inputValue();
-  const batchSource = (await app.store.get(batchProjectId)).requests.find(
+  const batchRequests = (await app.store.get(batchProjectId)).requests;
+  const batchSource = batchRequests.find(
     (r) => r.name === "Batch execution source",
+  );
+  const otherCaseSource = batchRequests.find(
+    (r) => r.name === "Other case source",
   );
   await page.locator('[data-mode="cases"]').click();
   async function createBatchCase(name, endpoint) {
@@ -6491,12 +6498,21 @@ try {
   } finally {
     clearTimeout(slowTimer);
   }
-  await page.locator("#cancel").click();
+  assert.equal(await page.locator(".urlbar").isVisible(), false);
+  assert.equal(await page.locator("#cancel").count(), 0);
+  await page.locator('[data-mode="debug"]').click();
+  assert.equal(await page.locator("#cancel, #cancel-case-run").count(), 0);
+  await page.locator('[data-mode="cases"]').click();
+  await page.locator(`[data-request="${otherCaseSource.id}"]`).click();
+  assert.equal(await page.locator("#cancel, #cancel-case-run").count(), 0);
+  await page.locator(`[data-request="${batchSource.id}"]`).click();
+  await page.locator("#cancel-case-run").click();
   await page
     .locator("#case-batch-status")
     .getByText("已取消", { exact: false })
     .waitFor();
   releaseCaseBatchSlow();
+  assert.equal(await page.locator("#cancel-case-run").count(), 0);
   const interruptedSummary = await page
     .locator(`[data-case-result="${firstBatchCase.id}"] summary`)
     .textContent();

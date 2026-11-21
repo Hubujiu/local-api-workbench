@@ -166,6 +166,18 @@ const responses = new Map();
 const caseResults = createCaseResultStore();
 const caseSelections = new Map();
 let caseBatch = null;
+let singleCaseRun = null;
+function caseCancellationOwner() {
+  return caseBatch?.running ? caseBatch : singleCaseRun;
+}
+function canCancelCurrentCase() {
+  const owner = caseCancellationOwner();
+  return (
+    mode === "cases" &&
+    owner?.projectId === project.id &&
+    owner?.sourceRequestId === current
+  );
+}
 function selectedInterfaceCases() {
   const key = project.id + ":" + current;
   const eligible = new Set(
@@ -182,7 +194,7 @@ function selectedInterfaceCases() {
 function caseSelectionToolbar() {
   const selected = selectedInterfaceCases(),
     all = (project.cases || []).filter((c) => c.sourceRequestId === current);
-  return `<div class="toolbar case-selection"><label><input type="checkbox" id="select-all-cases" ${all.length && selected.size === all.length ? "checked" : ""} ${busy || !all.length ? "disabled" : ""}> 全选</label><span role="status">已选 ${selected.size} 项</span><button id="run-selected-cases" ${busy || !selected.size ? "disabled" : ""}>运行所选</button><button id="run-all-cases" ${busy || !all.length ? "disabled" : ""}>全部运行</button><button id="move-selected-cases" ${busy || !selected.size ? "disabled" : ""}>移动所选</button><button id="delete-selected-cases" class="danger" ${busy || !selected.size ? "disabled" : ""}>删除所选</button></div><p class="muted">单次最多100个、请求快照总量4MiB，按当前列表顺序串行运行；用例未通过会继续，调用错误会停止且不重试。取消会停止后续用例。</p>${caseBatch?.projectId === project.id && caseBatch?.sourceRequestId === current ? `<p id="case-batch-status" role="status">${caseBatch.running ? "运行中" : caseBatch.cancelled ? "已取消" : caseBatch.stoppedOnError ? "已停止（调用错误）" : "已完成"} ${caseBatch.completed} / ${caseBatch.total} · 通过 ${caseBatch.passed} · 未通过 ${caseBatch.failed}${caseBatch.currentName ? " · " + esc(caseBatch.currentName) : ""}</p>` : ""}`;
+  return `<div class="toolbar case-selection"><label><input type="checkbox" id="select-all-cases" ${all.length && selected.size === all.length ? "checked" : ""} ${busy || !all.length ? "disabled" : ""}> 全选</label><span role="status">已选 ${selected.size} 项</span><button id="run-selected-cases" ${busy || !selected.size ? "disabled" : ""}>运行所选</button><button id="run-all-cases" ${busy || !all.length ? "disabled" : ""}>全部运行</button>${canCancelCurrentCase() ? '<button type="button" id="cancel-case-run">取消运行</button>' : ""}<button id="move-selected-cases" ${busy || !selected.size ? "disabled" : ""}>移动所选</button><button id="delete-selected-cases" class="danger" ${busy || !selected.size ? "disabled" : ""}>删除所选</button></div><p class="muted">单次最多100个、请求快照总量4MiB，按当前列表顺序串行运行；用例未通过会继续，调用错误会停止且不重试。取消会停止后续用例。</p>${caseBatch?.projectId === project.id && caseBatch?.sourceRequestId === current ? `<p id="case-batch-status" role="status">${caseBatch.running ? "运行中" : caseBatch.cancelled ? "已取消" : caseBatch.stoppedOnError ? "已停止（调用错误）" : "已完成"} ${caseBatch.completed} / ${caseBatch.total} · 通过 ${caseBatch.passed} · 未通过 ${caseBatch.failed}${caseBatch.currentName ? " · " + esc(caseBatch.currentName) : ""}</p>` : ""}`;
 }
 const temporaryParameters = new Map();
 const collapsedFolders = new Set();
@@ -1498,7 +1510,7 @@ function editor(r) {
     )
     .join(
       "",
-    )}<select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button><button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div><button id="send" class="primary" ${busy ? "disabled" : ""}>${busy ? "请求中…" : "发 送"}</button><details class="button-menu"><summary aria-label="发送更多操作">▾</summary><div><button id="send-menu-curl">生成 cURL</button><button id="send-menu-plan">创建执行计划</button></div></details>${busy ? '<button id="cancel">取消</button>' : ""}<button id="save" class="${dirty ? "primary" : ""}">保存</button><details class="button-menu"><summary aria-label="保存更多操作">▾</summary><div><button id="save-menu-copy">创建接口副本</button><button id="save-menu-project">保存整个项目</button></div></details><button id="curl" title="生成 cURL">⌘</button></div>${
+    )}<select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button><button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div><button id="send" class="primary" ${busy ? "disabled" : ""}>${busy ? "请求中…" : "发 送"}</button><details class="button-menu"><summary aria-label="发送更多操作">▾</summary><div><button id="send-menu-curl">生成 cURL</button><button id="send-menu-plan">创建执行计划</button></div></details>${busy && mode !== "cases" && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}<button id="save" class="${dirty ? "primary" : ""}">保存</button><details class="button-menu"><summary aria-label="保存更多操作">▾</summary><div><button id="save-menu-copy">创建接口副本</button><button id="save-menu-project">保存整个项目</button></div></details><button id="curl" title="生成 cURL">⌘</button></div>${
     mode === "debug"
       ? `<div class="param-tabs">${[
           ["headers", "Header"],
@@ -3338,9 +3350,15 @@ function bind() {
     await save();
   });
   on("#send", "click", send);
+  const cancelForegroundRun = () =>
+    runId ? api("/cancel", "POST", { id: runId }) : undefined;
   on("#cancel", "click", () => {
+    if (!caseCancellationOwner()) return cancelForegroundRun();
+  });
+  on("#cancel-case-run", "click", () => {
+    if (!canCancelCurrentCase()) return;
     if (caseBatch?.running) caseBatch.cancelRequested = true;
-    return runId ? api("/cancel", "POST", { id: runId }) : undefined;
+    return cancelForegroundRun();
   });
   on("#download-response-binary", "click", () => {
     const bytes = Uint8Array.from(atob(response.rawBodyBase64), (character) =>
@@ -4664,6 +4682,7 @@ function bind() {
       const environmentId = env();
       busy = true;
       ownsBusy = true;
+      singleCaseRun = { projectId: write.projectId, sourceRequestId: source };
       runId = uid();
       render();
       posted = true;
@@ -4685,7 +4704,11 @@ function bind() {
       if (posted) throw write.uncertain(error);
       throw error;
     } finally {
-      if (ownsBusy) busy = false;
+      if (ownsBusy) {
+        busy = false;
+        runId = null;
+        singleCaseRun = null;
+      }
       write.operation.finish();
       render();
     }
