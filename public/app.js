@@ -1,3 +1,4 @@
+import { openMySQLConnectionDraft } from "./database-connection-dialog.js";
 import { emptyCasePanel } from "./case-empty-view.js";
 import {
   environmentDialogHTML,
@@ -1840,7 +1841,7 @@ function renderPage() {
         "",
       )}</select><label>URL / TCP Host</label><input id="protocol-url" placeholder="http://localhost:8080/events" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.url || "")}"><label>TCP 端口</label><input id="protocol-port" type="number" value="${project.protocols?.find((item) => item.id === selectedProtocolId)?.port || 8080}"><label>采集时长 ms</label><input id="protocol-duration" type="number" value="3000" min="100" max="30000"><label>发送消息</label><textarea id="protocol-message"></textarea></div><p><button id="protocol-run" class="primary" ${busy ? "disabled" : ""}>连接并采集</button> <button id="cancel">断开</button></p><pre id="protocol-result"></pre><div class="card"><div class="toolbar"><strong>当前全局会话</strong><button id="session-connect" class="primary" ${sessionState.canConnect ? "" : "disabled"}>建立交互会话</button><button id="session-send" ${sessionState.canSend ? "" : "disabled"}>发送消息</button><button id="session-stop" ${sessionState.canStop ? "" : "disabled"}>断开会话</button><button id="session-refresh">核对会话</button><button id="session-export">导出消息</button><span id="session-status">${esc(sessionLabel())}</span></div><pre id="session-events">${esc(activeSession?.events?.map((event) => `${event.at} ${event.direction} ${event.data}`).join("\n") || "")}</pre></div></div>`;
   if (page === "database")
-    return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite / PostgreSQL / MySQL / Redis / MongoDB / ClickHouse · 默认只读 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option><option value="clickhouse">ClickHouse（HTTP只读）</option><option value="redis">Redis（默认只读）</option><option value="mongodb">MongoDB（find只读）</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306 / 6379"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名 / Redis数据库索引</label><input id="db-name"><label>MongoDB认证库</label><input id="db-auth-source" value="admin"><label>TLS</label><input id="db-tls" type="checkbox"><label>自定义CA（PEM，可选）</label><textarea id="db-ca" placeholder="留空使用系统信任的证书"></textarea><label>达梦客户端证书链（PEM，双向 TLS）</label><textarea id="db-client-cert" spellcheck="false" autocomplete="off"></textarea><label>达梦客户端私钥（PEM，双向 TLS）</label><textarea id="db-client-key" spellcheck="false" autocomplete="off"></textarea><label>服务端证书 DN</label><input id="db-server-dn" placeholder="CN=db.example.com"><label>授权表（每行一个 SCHEMA.TABLE，有效期 15 分钟）</label><textarea id="db-relations" placeholder="APP.ITEMS"></textarea><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL / Redis命令JSON数组（如 ["GET","key"]）</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><label id="db-write-label"><input id="db-write" type="checkbox"><span id="db-write-description">仅本次允许SQLite写入（INSERT / UPDATE / DELETE）</span></label></p><p><button id="db-query" class="primary">执行只读查询</button> <button id="db-register">授权为本项目会话连接</button> <button id="db-connections">管理会话连接</button></p><p id="db-sqlserver-notice" class="notice" hidden>SQL Server 只读预览：必须验证TLS，目标数据库须为 READ_ONLY；仅显式 schema.table 列查询，参数使用 @p0。最多1000行，不支持写入/SSH。尚未完成真实服务与 Windows 验收。</p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
+    return `<div class="page"><h1>数据库连接</h1><p><button id="db-new-mysql" class="primary">新建 MySQL 连接草稿</button></p><p class="muted">SQLite / PostgreSQL / MySQL / Redis / MongoDB / ClickHouse · 默认只读 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option><option value="clickhouse">ClickHouse（HTTP只读）</option><option value="redis">Redis（默认只读）</option><option value="mongodb">MongoDB（find只读）</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306 / 6379"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名 / Redis数据库索引</label><input id="db-name"><label>MongoDB认证库</label><input id="db-auth-source" value="admin"><label>TLS</label><input id="db-tls" type="checkbox"><label>自定义CA（PEM，可选）</label><textarea id="db-ca" placeholder="留空使用系统信任的证书"></textarea><label>达梦客户端证书链（PEM，双向 TLS）</label><textarea id="db-client-cert" spellcheck="false" autocomplete="off"></textarea><label>达梦客户端私钥（PEM，双向 TLS）</label><textarea id="db-client-key" spellcheck="false" autocomplete="off"></textarea><label>服务端证书 DN</label><input id="db-server-dn" placeholder="CN=db.example.com"><label>授权表（每行一个 SCHEMA.TABLE，有效期 15 分钟）</label><textarea id="db-relations" placeholder="APP.ITEMS"></textarea><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL / Redis命令JSON数组（如 ["GET","key"]）</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><label id="db-write-label"><input id="db-write" type="checkbox"><span id="db-write-description">仅本次允许SQLite写入（INSERT / UPDATE / DELETE）</span></label></p><p><button id="db-query" class="primary">执行只读查询</button> <button id="db-register">授权为本项目会话连接</button> <button id="db-connections">管理会话连接</button></p><p id="db-sqlserver-notice" class="notice" hidden>SQL Server 只读预览：必须验证TLS，目标数据库须为 READ_ONLY；仅显式 schema.table 列查询，参数使用 @p0。最多1000行，不支持写入/SSH。尚未完成真实服务与 Windows 验收。</p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
   if (page === "git")
     return `<div class="page"><h1>Git 协同</h1><p><button id="git-terminal" class="primary">在项目位置打开终端</button></p><p class="muted">本地项目是格式化 JSON 文件，可以纳入你自己的 Git 仓库。</p><div class="card"><h3>推荐流程</h3><ol class="markdown"><li>导出项目，检查并移除环境密钥与历史中的敏感信息。</li><li>把接口定义文件放入项目仓库。</li><li>通过 Git diff 审查变更，通过 PR 协作。</li><li>其他成员导入同一文件，继续本地编辑。</li></ol><button id="export">导出项目文件</button></div><div class="notice">打开终端后由你执行 Git 命令；本应用不会自动提交凭据或推送代码。执行记录与历史可能含敏感数据，请勿公开提交。</div></div>`;
   return `<div class="page"><div class="page-head"><div><h1>接口文档</h1><span class="muted">从当前项目定义生成，离线阅读与导出</span></div><div class="toolbar"><button id="new-document">＋ 新建文档</button><button id="export-docs" class="primary">导出文档</button></div></div>${
@@ -3627,6 +3628,7 @@ function bind() {
       if ($("#protocol-run")) $("#protocol-run").disabled = false;
     }
   });
+  on("#db-new-mysql", "click", () => openMySQLConnectionDraft());
   on("#db-register", "click", () => {
     const projectId = project.id;
     const type = $("#db-type").value;
@@ -3675,22 +3677,28 @@ function bind() {
     if (project.id !== projectId) return;
     modal(
       "本项目数据库会话连接",
-      connections.length
-        ? connections
-            .map(
-              (item) =>
-                "<p>" +
-                esc(item.name) +
-                " · " +
-                esc(item.type) +
-                ' <button type="button" data-revoke-db="' +
-                esc(item.id) +
-                '">撤销</button></p>',
-            )
-            .join("")
-        : "<p>没有已授权连接。重启后需要重新配置。</p>",
+      '<section class="database-manager"><div class="toolbar"><button type="button" id="db-manager-new" class="primary">新建 MySQL 连接草稿</button></div><table><thead><tr><th>名称</th><th>数据库类型</th><th>操作</th></tr></thead><tbody>' +
+        (connections.length
+          ? connections
+              .map(
+                (item) =>
+                  "<tr><td>" +
+                  esc(item.name) +
+                  "</td><td>" +
+                  esc(item.type) +
+                  '</td><td><button type="button" data-revoke-db="' +
+                  esc(item.id) +
+                  '">撤销</button></td></tr>',
+              )
+              .join("")
+          : '<tr><td colspan="3" class="database-manager-empty">没有已授权连接。重启后需要重新配置。</td></tr>') +
+        '</tbody></table><p class="muted">列表仅包含本项目已授权的会话连接。新建草稿不会自动加入列表，也不会连接数据库。</p></section>',
       () => {},
     );
+    $("#db-manager-new").onclick = () => {
+      $("#dialog").close();
+      openMySQLConnectionDraft();
+    };
     for (const button of $("#dialog-content").querySelectorAll(
       "[data-revoke-db]",
     ))
@@ -3702,7 +3710,7 @@ function bind() {
             "DELETE",
             { id: button.dataset.revokeDb },
           );
-          button.closest("p").textContent =
+          button.closest("tr").querySelector("td:last-child").textContent =
             "已撤销；运行中的结果不会再应用，后续操作会明确失败。";
         } catch (error) {
           toast(error.message, true);
