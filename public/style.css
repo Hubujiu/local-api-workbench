@@ -3446,3 +3446,93 @@ body:not(.dark) .plans-heading {
     border-bottom: 1px solid var(--line);
   }
 }
+
+.design-parameter-tabs {
+  display: flex;
+  gap: 8px;
+  min-height: 46px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+}
+.design-parameter-tabs > button {
+  flex: 0 0 auto;
+  margin-bottom: -1px;
+  padding: 0 8px;
+  min-height: 39px;
+  color: var(--text);
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  font-weight: 400;
+}
+.design-parameter-tabs > [aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.design-parameter-tabs > button:focus-visible {
+  outline-offset: -4px;
+}
+.design-parameter-panel {
+  padding-top: 12px;
+  min-width: 0;
+}
+.design-parameter-panel > .body-types {
+  min-height: 30px;
+  margin-bottom: 10px;
+  padding-inline: 8px;
+}
+.design-parameter-panel > .request-pairs-table {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  table-layout: fixed;
+}
+.design-parameter-panel > .request-pairs-table th {
+  background: transparent;
+  font-weight: 400;
+  color: var(--muted);
+}
+.design-parameter-panel .pair-description-heading {
+  width: 28%;
+}
+.design-parameter-panel
+  .request-pairs-table:not(:has(.pair-actions-heading))
+  .pair-name-heading {
+  width: calc(33.333% - 30px);
+}
+.design-parameter-panel
+  .request-pairs-table:not(:has(.pair-actions-heading))
+  .pair-description-heading {
+  width: 33.333%;
+}
+.design-parameter-panel .header-common-parameters button {
+  padding-inline: 10px;
+}
+.design-query-equality {
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  margin-inline: 0 6px;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  border-radius: 3px;
+  color: var(--muted);
+}
+.design-query-equality > input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.design-query-equality:has(input:checked) {
+  background: var(--hover);
+  color: var(--accent);
+}
+.design-query-equality:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+}
+.design-empty-pair {
+  min-height: 30px;
+  padding-block: 3px;
+  color: var(--accent);
+}
