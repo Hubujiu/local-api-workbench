@@ -3621,3 +3621,42 @@ body:not(.dark) .plans-heading {
   padding: 12px;
   color: var(--muted);
 }
+
+.design-response-views {
+  display: inline-flex;
+  margin-bottom: 12px;
+  padding: 2px;
+  border-radius: 4px;
+  background: var(--panel);
+}
+.design-response-views > button {
+  min-height: 28px;
+  padding: 3px 11px;
+  color: var(--muted);
+}
+.design-response-views > [aria-pressed="true"] {
+  background: var(--top);
+  color: var(--text);
+}
+.design-response-header-table {
+  table-layout: fixed;
+  border: 1px solid var(--line);
+}
+.design-response-header-table th {
+  background: var(--bg);
+  font-weight: 400;
+}
+.design-response-header-table :is(th, td) {
+  height: 36px;
+  padding: 3px 10px;
+  overflow-wrap: anywhere;
+}
+.design-response-header-fields {
+  display: grid;
+  gap: 12px;
+}
+.design-response-header-fields :is(input, textarea) {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+}

@@ -1,4 +1,9 @@
-import { designResponsePanel, responseSelection } from "./design-response.js";
+import {
+  designResponsePanel,
+  responseSelection,
+  editDesignResponseHeader,
+  headerEditorFields,
+} from "./design-response.js";
 import { markdownEdit, markdownTools } from "./design-markdown.js";
 import { emptyCasePanel } from "./case-empty-view.js";
 import {
@@ -2335,8 +2340,11 @@ function bind() {
     const status = before ? String(before.status) : undefined;
     const top = $(".http-design-canvas").scrollTop;
     collect();
+    const key = designResponseKey(r);
+    const current = designResponseSelections.get(key);
     const selection = responseSelection(r.responses, { status, media });
-    designResponseSelections.set(designResponseKey(r), {
+    designResponseSelections.set(key, {
+      view: current?.view,
       status: selection.definition
         ? String(selection.definition.status)
         : undefined,
@@ -2379,6 +2387,62 @@ function bind() {
       throw error;
     }
   });
+  on("[data-response-view]", "click", (_, e) => {
+    const r = request();
+    collect();
+    const key = designResponseKey(r);
+    const top = $(".http-design-canvas").scrollTop;
+    designResponseSelections.set(key, {
+      ...designResponseSelections.get(key),
+      view: e.dataset.responseView,
+    });
+    render();
+    $(".http-design-canvas").scrollTop = top;
+    $("#design-response-view-" + e.dataset.responseView)?.focus();
+  });
+  const editResponseHeader = (name = null) => {
+    const r = request();
+    collect();
+    const { definition, index } = responseSelection(
+      r.responses,
+      designResponseSelections.get(designResponseKey(r)),
+    );
+    if (!definition) throw Error("请先选择响应");
+    const header =
+      name === null
+        ? { schema: { type: "string" } }
+        : definition.headers?.[name];
+    if (header === undefined) throw Error("响应头已不存在，请重新打开");
+    modal(
+      name === null ? "新增响应头" : "编辑响应头",
+      '<div class="design-response-header-fields">' +
+        headerEditorFields(name ?? "", header) +
+        "</div>",
+      () => {
+        if (request() !== r || r.responses[index] !== definition)
+          throw Error("响应草稿已变化，请重新打开");
+        let next;
+        try {
+          next = JSON.parse($("#design-header-json").value);
+        } catch {
+          throw Error("响应头定义必须是有效的 JSON 对象");
+        }
+        r.responses[index] = editDesignResponseHeader(
+          definition,
+          name,
+          $("#design-header-name").value,
+          next,
+        );
+        mark();
+        render();
+        $("#design-response-view-headers")?.focus();
+      },
+    );
+  };
+  on("#new-response-header", "click", () => editResponseHeader());
+  on("[data-response-header]", "click", (_, e) =>
+    editResponseHeader(e.dataset.responseHeader),
+  );
   on("#new-response-schema", "click", () => editResponseSchema());
   on("[data-response-schema]", "click", (_, element) =>
     editResponseSchema(...JSON.parse(element.dataset.responseSchema)),
