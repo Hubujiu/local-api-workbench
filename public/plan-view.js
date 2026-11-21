@@ -247,40 +247,12 @@ export function renderRuns(runs, lastRun) {
                 ? "失败"
                 : "结果待核对") +
           '</span></summary><div class="plan-run-body">' +
-          run.results
-            .map(
-              (step, index) =>
-                '<details class="card run-step" data-run-step="' +
-                index +
-                '" ' +
-                (step.status === "failed" ? "open" : "") +
-                "><summary>" +
-                (index + 1) +
-                '. <span class="' +
-                (step.status === "passed" ? "success" : "failed") +
-                '">' +
-                esc(step.status) +
-                "</span> " +
-                "<strong>" +
-                esc(step.name) +
-                '</strong> <span class="subtle">' +
-                esc(step.response?.request?.method || step.request?.method) +
-                " " +
-                esc(step.response?.request?.url || step.request?.url) +
-                "</span> · " +
-                (step.response?.status || "") +
-                " " +
-                (step.response?.duration || 0) +
-                "ms</summary>" +
-                renderStepEvidence(step) +
-                "</details>",
-            )
-            .join("") +
-          '<p class="subtle plan-run-hash">快照 SHA256: ' +
+          run.results.map(renderRunStep).join("") +
+          '<div class="plan-run-evidence-footer"><p class="subtle plan-run-hash">快照 SHA256: ' +
           esc(run.planHash) +
           '</p><button data-export-run="' +
           esc(run.id) +
-          '">导出证据 JSON</button></div></details>',
+          '">导出证据 JSON</button></div></div></details>',
       )
       .join("")
   );
@@ -301,25 +273,60 @@ function evidenceBlock(label, value) {
     "</pre></details>"
   );
 }
+function renderRunStep(step, index) {
+  const failures = (step.assertions || []).filter(
+    (assertion) => assertionState(assertion) === "failed",
+  );
+  const failure = failures[0];
+  const compactMismatch =
+    step.status === "failed" &&
+    !!step.response &&
+    !step.error &&
+    failures.length === 1 &&
+    failure.target === "status" &&
+    failure.op === "eq" &&
+    Number.isInteger(failure.actual) &&
+    Number.isInteger(failure.value) &&
+    failure.actual === step.response.status &&
+    failure.actual !== failure.value;
+  return (
+    '<details class="card run-step" data-run-step="' +
+    index +
+    '" ' +
+    (step.status === "failed" && !compactMismatch ? "open" : "") +
+    "><summary>" +
+    (index + 1) +
+    '. <span class="' +
+    (step.status === "passed" ? "success" : "failed") +
+    '">' +
+    esc(step.status) +
+    "</span> <strong>" +
+    esc(step.name) +
+    '</strong> <span class="subtle">' +
+    esc(step.response?.request?.method || step.request?.method) +
+    " " +
+    esc(step.response?.request?.url || step.request?.url) +
+    "</span> · " +
+    (step.response?.status || "") +
+    " " +
+    (step.response?.duration || 0) +
+    "ms" +
+    (compactMismatch
+      ? '<span class="plan-step-status-mismatch failed">接口返回状态码 ' +
+        failure.actual +
+        "，期望 " +
+        failure.value +
+        "</span>"
+      : "") +
+    "</summary>" +
+    renderStepEvidence(step) +
+    "</details>"
+  );
+}
 function renderStepEvidence(step) {
   const assertions = step.assertions || [];
-  const statusMismatch = assertions.find(
-    (assertion) =>
-      assertionState(assertion) === "failed" &&
-      assertion.target === "status" &&
-      assertion.op === "eq" &&
-      Number.isInteger(assertion.actual) &&
-      Number.isInteger(assertion.value),
-  );
   return (
     (step.error ? '<p class="notice failed">' + esc(step.error) + "</p>" : "") +
-    (statusMismatch
-      ? '<p class="plan-step-status-mismatch failed">接口返回状态码 ' +
-        statusMismatch.actual +
-        "，期望 " +
-        statusMismatch.value +
-        "</p>"
-      : "") +
     '<section class="step-assertions"><h4>断言结果</h4>' +
     (assertions.length
       ? assertions

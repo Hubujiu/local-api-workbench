@@ -86,3 +86,43 @@ test("run evidence opens failed steps and safely groups untrusted request respon
   assert.match(html, /完整步骤证据 JSON/);
   assert.doesNotMatch(html, /<script>|<img|<svg/);
 });
+
+test("single HTTP status mismatch is visible without expanding raw evidence", () => {
+  const mismatch = {
+    target: "status",
+    op: "eq",
+    value: 200,
+    actual: 403,
+    passed: false,
+  };
+  const response = { status: 403 };
+  const project = {
+    plans: [],
+    runs: [
+      {
+        id: "failure",
+        status: "failed",
+        results: [
+          {
+            name: "mismatch",
+            status: "failed",
+            response,
+            assertions: [mismatch],
+          },
+          {
+            name: "mixed",
+            status: "failed",
+            response,
+            assertions: [mismatch, { name: "other failure", passed: false }],
+          },
+        ],
+      },
+    ],
+  };
+  const html = renderPlans({ project, tab: "runs" });
+  assert.doesNotMatch(html, /data-run-step="0" open/);
+  assert.match(html, /接口返回状态码 403，期望 200<\/span><\/summary>/);
+  assert.match(html, /data-run-step="1" open/);
+  assert.match(html, /data-evidence="响应"/);
+  assert.match(html, /data-export-run="failure"/);
+});

@@ -1379,11 +1379,30 @@ body:not(.dark) .plans-page .plan-history-layout {
   background: var(--hover);
   overflow-wrap: anywhere;
 }
+.plan-run-evidence-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
 .plan-run-hash {
+  margin: 0;
   overflow-wrap: anywhere;
 }
+.plan-run-body .run-step:has(.plan-step-status-mismatch) {
+  min-height: 77px;
+}
+.plan-run-body .run-step > summary {
+  cursor: pointer;
+}
+.plan-run-body .run-step > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .plan-step-status-mismatch {
-  margin: 8px 0;
+  display: block;
+  margin-top: 8px;
 }
 
 .step-editor details {
