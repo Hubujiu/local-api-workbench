@@ -3,6 +3,9 @@ import {
   responseSelection,
   editDesignResponseHeader,
   headerEditorFields,
+  exampleMedia,
+  scopedResponseExamples,
+  supportsDesignExamples,
 } from "./design-response.js";
 import { markdownEdit, markdownTools } from "./design-markdown.js";
 import { emptyCasePanel } from "./case-empty-view.js";
@@ -1777,7 +1780,7 @@ function modePanel(r) {
     return `<div class="page http-design-canvas">${r.importNotes?.length ? `<div class="notice import-notes" role="region" aria-label="导入兼容性提示" tabindex="0">导入提示：${r.importNotes.map(esc).join("<br>")}</div>` : ""}${importedScriptTasksHTML(r.importedScriptTasks)}<div class="design-meta"><label for="folder">目录<input id="folder" value="${esc(r.folder)}" placeholder="根目录"></label><label for="request-service">绑定服务<select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select></label></div>
     <section class="request-description-section" aria-label="详细说明"><h2><span>${lineIcon("▧")}</span>详细说明</h2><details id="design-description" ${descriptionOpen ? "open" : ""}><summary><span class="design-description-closed">＋ 添加详细说明</span><span class="design-description-open">收起</span></summary><div class="design-description-toolbar" role="group" aria-label="说明格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-design-markdown="${key}" aria-label="${label}" title="${label}">${esc(glyph)}</button>`).join("")}</div><div class="design-description-editor"><textarea id="description" aria-label="接口详细说明" spellcheck="false">${esc(r.description)}</textarea><div id="design-description-preview" class="markdown-content" role="region" aria-label="说明预览">${descriptionOpen ? renderMarkdown(r.description) : ""}</div></div><small id="design-description-count">字数: ${Array.from(r.description || "").length}　行数: ${(r.description || "").split("\n").length}</small></details></section>
     <section class="design-request-parameters" aria-label="设计请求参数"><h2><span>${lineIcon("☷")}</span>设计请求参数</h2>${designParameterPanel(r)}</section>
-    <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2>${designResponsePanel(r.responses || [], designResponseSelections.get(designResponseKey(r)), r.openapiExampleBindingsVersion === 1)}</section>
+    <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2>${designResponsePanel(r.responses || [], designResponseSelections.get(designResponseKey(r)), r.openapiExampleBindingsVersion === 1, r.examples)}</section>
     <section class="design-request-structure" aria-label="请求数据结构"><h2><span>${lineIcon("☷")}</span>请求数据结构</h2><div><button id="visual-schema" type="button">可视化编辑结构</button>${designParameter === "body" && r.bodyType !== "none" ? "" : '<button id="generate-body" type="button" class="ghost">基于数据结构生成</button>'}<textarea id="schema" aria-label="请求 JSON Schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div></section>
     <section class="design-advanced" aria-label="请求选项"><h2><span>${lineIcon("⚙")}</span>请求选项</h2><div class="form-grid"><label>全局请求参数</label><label><input id="inherit-global-parameters" type="checkbox" ${r.inheritGlobalParameters !== false ? "checked" : ""}>继承项目及目录 Header / Query / Cookie / 表单参数</label><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>HTTPS代理 CA（PEM，与目标站点CA分开）</label><textarea data-tls="proxyCa">${esc(r.tls?.proxyCa || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}">${attributeFields(project.settings?.attributes || [], r.attributes)}</div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div></section></div>`;
   }
@@ -2345,6 +2348,7 @@ function bind() {
     const selection = responseSelection(r.responses, { status, media });
     designResponseSelections.set(key, {
       view: current?.view,
+      bodyView: current?.bodyView,
       status: selection.definition
         ? String(selection.definition.status)
         : undefined,
@@ -2400,6 +2404,48 @@ function bind() {
     $(".http-design-canvas").scrollTop = top;
     $("#design-response-view-" + e.dataset.responseView)?.focus();
   });
+  on("[data-response-body-view]", "click", (_, e) => {
+    const r = request();
+    collect();
+    const key = designResponseKey(r);
+    const top = $(".http-design-canvas").scrollTop;
+    designResponseSelections.set(key, {
+      ...designResponseSelections.get(key),
+      bodyView: e.dataset.responseBodyView,
+    });
+    render();
+    $(".http-design-canvas").scrollTop = top;
+    $("#design-body-view-" + e.dataset.responseBodyView)?.focus();
+  });
+  const openDesignExample = (index) => {
+    const r = request();
+    collect();
+    const selected = responseSelection(
+      r.responses,
+      designResponseSelections.get(designResponseKey(r)),
+    );
+    const { definition, media } = selected;
+    if (
+      !supportsDesignExamples(
+        definition,
+        media,
+        r.openapiExampleBindingsVersion === 1,
+      )
+    )
+      throw Error("当前状态或媒体类型不支持在此编辑示例");
+    if (
+      index !== undefined &&
+      !scopedResponseExamples(r.examples, definition.status, media).some(
+        (row) => row.index === index,
+      )
+    )
+      throw Error("示例不属于当前状态或媒体类型");
+    editExample(index, { definition, media });
+  };
+  on("#new-design-example", "click", () => openDesignExample());
+  on("[data-edit-design-example]", "click", (_, e) =>
+    openDesignExample(Number(e.dataset.editDesignExample)),
+  );
   const editResponseHeader = (name = null) => {
     const r = request();
     collect();
@@ -5620,16 +5666,19 @@ function bindTree() {
     render();
   });
 }
-function editExample(index) {
+function editExample(index, designScope) {
   const r = request(),
     ex = r.examples[index] || {
-      name: "成功响应",
-      status: 200,
-      body: '{\n  "success": true\n}',
+      name: designScope ? "响应示例" : "成功响应",
+      status: designScope ? Number(designScope.definition.status) : 200,
+      body: designScope ? "{}" : '{\n  "success": true\n}',
+      ...(designScope
+        ? { headers: { "content-type": designScope.media } }
+        : {}),
     };
   modal(
     "响应示例",
-    `<div class="example-settings"><label>名称<input id="ex-name" value="${esc(ex.name)}"></label><label>状态码<input id="ex-status" type="number" value="${esc(ex.status)}"></label><label>延迟（ms）<input id="ex-delay" type="number" min="0" max="5000" value="${esc(ex.delayMs ?? 0)}"></label></div><p class="muted">100–199 仅作为文档示例；204/205/304 不发送正文。延迟范围 0–5000ms。</p><label>响应内容（允许为空）</label><textarea id="ex-body">${esc(ex.body)}</textarea><label>响应头（JSON对象，禁止传输/隔离控制头）</label><textarea id="ex-headers">${esc(JSON.stringify(ex.headers ?? {}, null, 2))}</textarea>`,
+    `<div class="example-settings"><label>名称<input id="ex-name" value="${esc(ex.name)}"></label><label>状态码<input id="ex-status" type="number" value="${esc(ex.status)}" ${designScope ? "readonly" : ""}></label><label>延迟（ms）<input id="ex-delay" type="number" min="0" max="5000" value="${esc(ex.delayMs ?? 0)}"></label></div><p class="muted">100–199 仅作为文档示例；204/205/304 不发送正文。延迟范围 0–5000ms。</p><label>响应内容（允许为空）</label><textarea id="ex-body">${esc(ex.body)}</textarea><label>响应头（JSON对象，禁止传输/隔离控制头）</label><textarea id="ex-headers">${esc(JSON.stringify(ex.headers ?? {}, null, 2))}</textarea>`,
     () => {
       const val = editResponseExample(ex, {
         name: $("#ex-name").value,
@@ -5638,6 +5687,24 @@ function editExample(index) {
         headers: JSON.parse($("#ex-headers").value.trim() || "{}"),
         delayMs: Number($("#ex-delay").value),
       });
+      if (designScope) {
+        if (
+          request() !== r ||
+          !r.responses.includes(designScope.definition) ||
+          (index !== undefined && r.examples[index] !== ex)
+        )
+          throw Error("响应示例草稿已变化，请重新打开");
+        if (
+          String(val.status) !== String(designScope.definition.status) ||
+          exampleMedia(val.headers) !== designScope.media
+        )
+          throw Error("请在所属响应状态和 Content-Type 下编辑示例");
+        try {
+          JSON.parse(val.body);
+        } catch {
+          throw Error("JSON 响应示例正文无效");
+        }
+      }
       if (index === undefined) r.examples.push(val);
       else r.examples[index] = val;
       mark();

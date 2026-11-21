@@ -104,7 +104,57 @@ function headerPreview(definition) {
   return `<table class="design-response-header-table"><thead><tr><th scope="col">参数名</th><th scope="col">示例值</th><th scope="col">描述</th></tr></thead><tbody>${rows || `<tr><td colspan="3">${add}</td></tr>`}</tbody></table>${rows ? add : ""}`;
 }
 
-export function designResponsePanel(definitions, selection, bindingNotice) {
+export function exampleMedia(headers) {
+  const types = Object.entries(headers || {}).filter(
+    ([name]) => name.toLowerCase() === "content-type",
+  );
+  return types.length > 1 ? null : (types[0]?.[1] ?? "application/json");
+}
+
+export function scopedResponseExamples(examples, status, media) {
+  return examples.flatMap((example, index) =>
+    String(example?.status) === String(status) &&
+    exampleMedia(example.headers) === media
+      ? [{ example, index }]
+      : [],
+  );
+}
+
+export function supportsDesignExamples(definition, media, managed) {
+  const status = String(definition?.status);
+  const content = definition?.content?.[media];
+  return (
+    /^[1-5][0-9]{2}$/.test(status) &&
+    /^application\/(?:json|[a-z0-9!#$&^_.+*-]+\+json)$/i.test(media || "") &&
+    Boolean(content) &&
+    (managed ||
+      (!Object.hasOwn(content, "example") &&
+        !Object.hasOwn(content, "examples")))
+  );
+}
+
+function examplesPreview(definition, media, examples, managed) {
+  if (!supportsDesignExamples(definition, media, managed))
+    return '<p class="design-response-empty">此处只编辑具体状态及 JSON 媒体的工作台示例。其他示例请用 Mock 示例编辑器或响应定义 JSON。</p>';
+  const rows = scopedResponseExamples(examples, definition.status, media);
+  return `<div class="design-example-pane"><div class="design-example-bar"><button type="button" id="new-design-example" class="ghost">＋ 新建示例</button></div>${
+    rows.length
+      ? rows
+          .map(
+            ({ example, index }) =>
+              `<div class="design-example-row"><button type="button" class="ghost" data-edit-design-example="${index}">${esc(example.name || "未命名示例")}</button><pre>${esc(example.body)}</pre></div>`,
+          )
+          .join("")
+      : '<div class="design-example-empty"><span aria-hidden="true">1</span><p>当前状态和媒体类型还没有示例</p></div>'
+  }</div>`;
+}
+
+export function designResponsePanel(
+  definitions,
+  selection,
+  bindingNotice,
+  examples = [],
+) {
   const { index, definition, media, mediaTypes } = responseSelection(
     definitions,
     selection,
@@ -133,8 +183,20 @@ export function designResponsePanel(definitions, selection, bindingNotice) {
             ([key, label]) =>
               `<button type="button" class="ghost" id="design-response-view-${key}" data-response-view="${key}" aria-pressed="${(selection?.view || "body") === key}">${label}</button>`,
           )
-          .join(
-            "",
-          )}</div>${selection?.view === "headers" ? headerPreview(definition) : `<div class="design-response-tools"><span>数据结构</span>${mediaTypes.length > 1 ? `<label>Content-Type <select id="design-response-media" aria-label="响应 Content-Type">${mediaTypes.map((key) => `<option value="${esc(key)}" ${key === media ? "selected" : ""}>${esc(key)}</option>`).join("")}</select></label>` : media ? `<small>${esc(media)}</small>` : ""}${edit}</div>${schemaPreview(definition?.content?.[media]?.schema)}`}`
+          .join("")}</div>${
+          selection?.view === "headers"
+            ? headerPreview(definition)
+            : `<div class="design-response-tools"><div class="design-response-body-views" role="group" aria-label="Body 视图">${[
+                ["schema", "数据结构"],
+                ["examples", "示例"],
+              ]
+                .map(
+                  ([key, label]) =>
+                    `<button type="button" class="ghost" id="design-body-view-${key}" data-response-body-view="${key}" aria-pressed="${(selection?.bodyView || "schema") === key}">${label}</button>`,
+                )
+                .join(
+                  "",
+                )}</div>${mediaTypes.length > 1 ? `<label>Content-Type <select id="design-response-media" aria-label="响应 Content-Type">${mediaTypes.map((key) => `<option value="${esc(key)}" ${key === media ? "selected" : ""}>${esc(key)}</option>`).join("")}</select></label>` : media ? `<small>${esc(media)}</small>` : ""}${selection?.bodyView === "examples" ? "" : edit}</div>${selection?.bodyView === "examples" ? examplesPreview(definition, media, examples, bindingNotice) : schemaPreview(definition?.content?.[media]?.schema)}`
+        }`
   }</div>${raw}</div>`;
 }

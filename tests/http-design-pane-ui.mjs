@@ -115,6 +115,14 @@ try {
     name: "Body",
     exact: true,
   });
+  const examplesView = responseRegion.getByRole("button", {
+    name: "示例",
+    exact: true,
+  });
+  const schemaView = responseRegion.getByRole("button", {
+    name: "数据结构",
+    exact: true,
+  });
   const responseScreenshots = process.env.DESIGN_RESPONSE_SCREENSHOTS;
   if (responseScreenshots) {
     await tab("Query").click();
@@ -132,6 +140,17 @@ try {
         animations: "disabled",
       });
     }
+    await responseTab(/200/).click();
+    await responseTab(/404/).click();
+    await examplesView.click();
+    await page.mouse.move(1000, 282);
+    await page.screenshot({
+      path: responseScreenshots + "/candidate-design-response-404-example.png",
+      clip: { x: 0, y: 0, width: 1363, height: 980 },
+      caret: "hide",
+      animations: "disabled",
+    });
+    await schemaView.click();
     await responseTab(/200/).click();
     await headerView.click();
     await page.mouse.move(1000, 282);
@@ -379,6 +398,45 @@ try {
     .getByRole("button", { name: "编辑响应头 X-Reason" })
     .waitFor();
   await bodyView.click();
+  await examplesView.click();
+  const addExample = responseRegion.getByRole("button", {
+    name: "＋ 新建示例",
+  });
+  const exampleButton = responseRegion.getByRole("button", {
+    name: "Missing JSON",
+    exact: true,
+  });
+  await addExample.click();
+  assert.equal(await page.locator("#ex-status").inputValue(), "404");
+  assert.equal(await page.locator("#ex-status").getAttribute("readonly"), "");
+  await page.locator("#ex-name").fill("Discarded");
+  await page.locator("#dialog").press("Escape");
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert.equal(
+    await responseRegion.getByRole("button", { name: "Discarded" }).count(),
+    0,
+  );
+  await addExample.click();
+  await page.locator("#ex-name").fill("Missing JSON");
+  await page.locator("#ex-body").fill("{");
+  await page.locator("#dialog-save").click();
+  await page.getByText("JSON 响应示例正文无效", { exact: true }).waitFor();
+  await page.locator("#ex-body").fill('{"reason":"not-found"}');
+  await page.locator("#dialog-save").click();
+  await exampleButton.waitFor();
+  await responseTab(/200/).click();
+  assert.equal(await exampleButton.count(), 0);
+  await responseTab(/404/).click();
+  await exampleButton.waitFor();
+  const sameMedia = responseRegion.getByRole("combobox", {
+    name: "响应 Content-Type",
+  });
+  await sameMedia.selectOption("text/plain");
+  assert.equal(await exampleButton.count(), 0);
+  assert.equal(await addExample.count(), 0);
+  await sameMedia.selectOption("application/json");
+  await exampleButton.waitFor();
+  await schemaView.click();
   const responseAfterHeader = await rawResponses.inputValue();
   assert.deepEqual(put, []);
   const media = responseRegion.getByRole("combobox", {
@@ -469,6 +527,15 @@ try {
   );
   assert.deepEqual(put, ["PUT"]);
   await responseTab(/未找到.*404/).click();
+  await responseRegion
+    .getByRole("combobox", { name: "响应 Content-Type" })
+    .selectOption("application/json");
+  await examplesView.click();
+  await exampleButton.waitFor();
+  assert.equal(
+    await responseRegion.locator(".design-example-row pre").innerText(),
+    '{"reason":"not-found"}',
+  );
   await headerView.click();
   await responseRegion
     .getByRole("button", { name: "编辑响应头 X-Reason" })

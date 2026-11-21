@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   designResponsePanel,
   editDesignResponseHeader,
+  scopedResponseExamples,
+  supportsDesignExamples,
   responseSelection,
 } from "../public/design-response.js";
 
@@ -105,5 +107,55 @@ test("response Header edits preserve other header identities, media and raw cont
       editDesignResponseHeader(original, null, "__proto__", trace).headers,
     ),
     Object.prototype,
+  );
+});
+
+test("Design examples respect status, media, and managed versus raw inline definitions", () => {
+  const list = [
+    { status: 200 },
+    { status: 404, headers: { "Content-Type": "text/plain" } },
+    { status: 404 },
+    {
+      status: 404,
+      headers: {
+        "Content-Type": "application/json",
+        "content-type": "text/plain",
+      },
+    },
+  ];
+  assert.deepEqual(
+    scopedResponseExamples(list, "404", "application/json").map(
+      (row) => row.index,
+    ),
+    [2],
+  );
+  const response = {
+    status: "404",
+    content: {
+      "application/json": { example: null },
+      "text/plain": {},
+      "application/problem+json": {},
+    },
+  };
+  assert.equal(
+    supportsDesignExamples(response, "application/json", false),
+    false,
+  );
+  assert.equal(
+    supportsDesignExamples(response, "application/json", true),
+    true,
+  );
+  assert.equal(supportsDesignExamples(response, "text/plain", true), false);
+  assert.equal(
+    supportsDesignExamples(response, "application/problem+json", false),
+    true,
+  );
+  assert.equal(
+    supportsDesignExamples(
+      { ...response, status: "4XX" },
+      "application/json",
+      true,
+    ),
+    false,
   );
 });

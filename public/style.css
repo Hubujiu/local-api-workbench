@@ -3660,3 +3660,49 @@ body:not(.dark) .plans-heading {
   width: 100%;
   margin-top: 6px;
 }
+
+.design-response-body-views {
+  display: flex;
+  gap: 2px;
+}
+.design-response-body-views > button {
+  margin: 0;
+  color: var(--muted);
+}
+.design-response-body-views > [aria-pressed="true"] {
+  background: var(--panel);
+  color: var(--text);
+}
+.design-example-pane {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.design-example-bar {
+  display: flex;
+  justify-content: flex-end;
+  border-bottom: 1px solid var(--line);
+  padding: 3px 8px;
+}
+.design-example-row {
+  padding: 6px 10px;
+}
+.design-example-row pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.design-example-empty {
+  min-height: 112px;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+.design-example-empty > span {
+  padding: 8px;
+  text-align: center;
+  border-right: 1px solid var(--line);
+}
+.design-example-empty > p {
+  padding-inline: 12px;
+  color: var(--muted);
+}
