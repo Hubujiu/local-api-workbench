@@ -78,3 +78,32 @@ test("ASAP editor exposes asymmetric algorithms and explicit lifetime without sy
   assert.equal(html.includes("<private>"), false);
   assert.equal(html.includes("<script>"), false);
 });
+
+test("standalone HTTP uses titled controls while preserving every method and the separate inheritance preference", async () => {
+  const { httpAuthPane } = await import("../public/auth-view.js");
+  for (const type of authTypes) {
+    const html = httpAuthPane({ type }, false);
+    assert.match(html, new RegExp(`<option value="${type}" selected>`));
+    assert.equal(
+      (html.match(/<option value=/g) || []).length,
+      authTypes.length,
+    );
+    assert.match(html, /for="auth-type">类型/);
+    assert.doesNotMatch(html, /id="inherit-auth"[^>]*checked/);
+  }
+  const bearer = httpAuthPane({ type: "bearer", token: '"><script>' });
+  assert.match(bearer, /for="http-auth-bearer-token">Token/);
+  assert.match(bearer, /data-auth="token"[^>]*type="password"/);
+  assert.match(bearer, /placeholder="Token（支持变量）"/);
+  assert.match(bearer, /id="inherit-auth"[^>]*checked/);
+  assert(!bearer.includes("<script>"));
+  assert.match(httpAuthPane({ type: "jwt" }), /明文写入项目/);
+  for (const options of [
+    { acquire: false },
+    { acquire: false, shared: true },
+  ]) {
+    const html = authPanel({ type: "bearer" }, options);
+    assert.match(html, /<option selected>bearer<\/option>/);
+    assert.doesNotMatch(html, /http-auth|继承项目\/目录/);
+  }
+});

@@ -2308,3 +2308,51 @@ input[data-select-case] {
     padding-right: 24px;
   }
 }
+
+.request-panel:has(> .http-auth-pane) {
+  padding-top: 12px;
+}
+.http-auth-pane {
+  width: min(100%, 700px);
+  margin-inline: auto;
+}
+.http-auth-pane > .form-grid {
+  grid-template-columns: minmax(0, 26.3%) minmax(0, 1fr);
+  gap: 20px;
+}
+.http-auth-pane > .form-grid > label {
+  overflow-wrap: anywhere;
+}
+.http-auth-pane > .form-grid > input,
+.http-auth-pane > .form-grid > select,
+.http-auth-pane > .form-grid > textarea {
+  width: 100%;
+  min-width: 0;
+}
+.http-auth-pane > .form-grid > input,
+.http-auth-pane > .form-grid > select {
+  height: 32px;
+  padding-block: 4px;
+}
+.http-auth-pane > .form-grid > :is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.http-auth-inheritance {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-block: 16px 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.http-auth-inheritance input {
+  flex: 0 0 auto;
+  margin: 3px 0 0;
+}
+@media (max-width: 650px) {
+  .http-auth-pane > .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+}
