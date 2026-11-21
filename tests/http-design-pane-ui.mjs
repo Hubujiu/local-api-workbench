@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createApp } from "../src/server.mjs";
-import { normalizeRequest } from "../src/core.mjs";
+import {
+  exportOpenAPI,
+  importDocument,
+  normalizeRequest,
+} from "../src/core.mjs";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_PACKAGE || "playwright");
@@ -35,7 +39,45 @@ try {
     ],
     url: "http://127.0.0.1:38982/verification",
   });
-  project.requests.push(request);
+  const generic = "application/problem+json";
+  const profiled =
+    'application/problem+json; profile="https://example.invalid/errors"';
+  const [profileRequest] = importDocument({
+    openapi: "3.1.0",
+    info: { title: "Profiles", version: "1" },
+    paths: {
+      "/profiles": {
+        get: {
+          summary: "Profile verification",
+          responses: {
+            404: {
+              description: "Profiled",
+              content: {
+                [generic]: {
+                  examples: {
+                    generic: {
+                      summary: "Generic example",
+                      value: { profile: false },
+                    },
+                  },
+                },
+                [profiled]: {
+                  examples: {
+                    profiled: {
+                      summary: "Profiled example",
+                      value: { profile: true },
+                      "x-keep": true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  project.requests.push(request, profileRequest);
   await app.store.save(project);
 
   browser = await chromium.launch({
@@ -115,6 +157,14 @@ try {
     name: "Body",
     exact: true,
   });
+  const examplesView = responseRegion.getByRole("button", {
+    name: "示例",
+    exact: true,
+  });
+  const schemaView = responseRegion.getByRole("button", {
+    name: "数据结构",
+    exact: true,
+  });
   const responseScreenshots = process.env.DESIGN_RESPONSE_SCREENSHOTS;
   if (responseScreenshots) {
     await tab("Query").click();
@@ -132,6 +182,17 @@ try {
         animations: "disabled",
       });
     }
+    await responseTab(/200/).click();
+    await responseTab(/404/).click();
+    await examplesView.click();
+    await page.mouse.move(1000, 282);
+    await page.screenshot({
+      path: responseScreenshots + "/candidate-design-response-404-example.png",
+      clip: { x: 0, y: 0, width: 1363, height: 980 },
+      caret: "hide",
+      animations: "disabled",
+    });
+    await schemaView.click();
     await responseTab(/200/).click();
     await headerView.click();
     await page.mouse.move(1000, 282);
@@ -379,6 +440,45 @@ try {
     .getByRole("button", { name: "编辑响应头 X-Reason" })
     .waitFor();
   await bodyView.click();
+  await examplesView.click();
+  const addExample = responseRegion.getByRole("button", {
+    name: "＋ 新建示例",
+  });
+  const exampleButton = responseRegion.getByRole("button", {
+    name: "Missing JSON",
+    exact: true,
+  });
+  await addExample.click();
+  assert.equal(await page.locator("#ex-status").inputValue(), "404");
+  assert.equal(await page.locator("#ex-status").getAttribute("readonly"), "");
+  await page.locator("#ex-name").fill("Discarded");
+  await page.locator("#dialog").press("Escape");
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert.equal(
+    await responseRegion.getByRole("button", { name: "Discarded" }).count(),
+    0,
+  );
+  await addExample.click();
+  await page.locator("#ex-name").fill("Missing JSON");
+  await page.locator("#ex-body").fill("{");
+  await page.locator("#dialog-save").click();
+  await page.getByText("JSON 响应示例正文无效", { exact: true }).waitFor();
+  await page.locator("#ex-body").fill('{"reason":"not-found"}');
+  await page.locator("#dialog-save").click();
+  await exampleButton.waitFor();
+  await responseTab(/200/).click();
+  assert.equal(await exampleButton.count(), 0);
+  await responseTab(/404/).click();
+  await exampleButton.waitFor();
+  const sameMedia = responseRegion.getByRole("combobox", {
+    name: "响应 Content-Type",
+  });
+  await sameMedia.selectOption("text/plain");
+  assert.equal(await exampleButton.count(), 0);
+  assert.equal(await addExample.count(), 0);
+  await sameMedia.selectOption("application/json");
+  await exampleButton.waitFor();
+  await schemaView.click();
   const responseAfterHeader = await rawResponses.inputValue();
   assert.deepEqual(put, []);
   const media = responseRegion.getByRole("combobox", {
@@ -469,12 +569,86 @@ try {
   );
   assert.deepEqual(put, ["PUT"]);
   await responseTab(/未找到.*404/).click();
+  await responseRegion
+    .getByRole("combobox", { name: "响应 Content-Type" })
+    .selectOption("application/json");
+  await examplesView.click();
+  await exampleButton.waitFor();
+  assert.equal(
+    await responseRegion.locator(".design-example-row pre").innerText(),
+    '{"reason":"not-found"}',
+  );
   await headerView.click();
   await responseRegion
     .getByRole("button", { name: "编辑响应头 X-Reason" })
     .waitFor();
   const reloadedResponses = JSON.parse(await rawResponses.inputValue());
   assert.deepEqual(reloadedResponses[1], retained);
+  assert.deepEqual(forbidden, []);
+  assert.deepEqual(errors, []);
+  const openProfile = async () => {
+    await page.locator(`[data-request="${profileRequest.id}"]`).click();
+    await design.click();
+    await bodyView.click();
+    const media = responseRegion.getByRole("combobox", {
+      name: "响应 Content-Type",
+    });
+    await media.selectOption(profiled);
+    await examplesView.click();
+    return media;
+  };
+  const profileMedia = await openProfile();
+  const genericButton = responseRegion.getByRole("button", {
+    name: "Generic example",
+    exact: true,
+  });
+  const profiledButton = responseRegion.getByRole("button", {
+    name: "Profiled example",
+    exact: true,
+  });
+  await profiledButton.waitFor();
+  assert.equal(await genericButton.count(), 0);
+  await profiledButton.click();
+  await page.locator("#ex-body").fill('{"profile":"edited"}');
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await profileMedia.selectOption(generic);
+  await genericButton.waitFor();
+  assert.deepEqual(
+    JSON.parse(
+      await responseRegion.locator(".design-example-row pre").innerText(),
+    ),
+    { profile: false },
+  );
+  assert.equal(await profiledButton.count(), 0);
+  assert.deepEqual(put, ["PUT"]);
+  await page.locator("#save").click();
+  await page
+    .locator("#saved-state")
+    .getByText("✓ 已保存", { exact: true })
+    .waitFor();
+  await page.reload();
+  await openProfile();
+  await profiledButton.waitFor();
+  assert.equal(
+    await responseRegion.locator(".design-example-row pre").innerText(),
+    '{"profile":"edited"}',
+  );
+  const stored = await app.store.get(project.id);
+  const exported = exportOpenAPI({
+    ...stored,
+    requests: stored.requests.filter((item) => item.id === profileRequest.id),
+  });
+  const representations =
+    exported.paths["/profiles"].get.responses["404"].content;
+  assert.deepEqual(representations[generic].examples.generic.value, {
+    profile: false,
+  });
+  assert.deepEqual(representations[profiled].examples.profiled.value, {
+    profile: "edited",
+  });
+  assert.equal(representations[profiled].examples.profiled["x-keep"], true);
+  assert.deepEqual(put, ["PUT", "PUT"]);
   assert.deepEqual(forbidden, []);
   assert.deepEqual(errors, []);
   console.log(
