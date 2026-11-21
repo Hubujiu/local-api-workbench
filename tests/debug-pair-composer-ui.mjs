@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../src/server.mjs";
-import { normalizeRequest } from "../src/core.mjs";
+import { normalizeRequest, toCurl } from "../src/core.mjs";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_PACKAGE || "playwright");
@@ -90,6 +90,7 @@ try {
         return { x, y, width, height };
       }),
     );
+    for (const column of boxes) assert.equal(column.height, 36);
     const primary = boxes.map((column) => column.width);
     assert.ok(
       Math.max(...primary) - Math.min(...primary) <= 4,
@@ -128,6 +129,57 @@ try {
     1,
   );
 
+  await tab("query").click();
+  const equality = page.getByRole("checkbox", {
+    name: "空值 Query 参数添加等号",
+  });
+  assert.equal(
+    await page.locator(".debug-pairs-table thead #query-add-equal").count(),
+    1,
+  );
+  assert.equal(await equality.isChecked(), true);
+  assert.equal(
+    await equality.getAttribute("title"),
+    "当参数值为空时，自动添加等号",
+  );
+  assert.equal(
+    await equality.evaluate(
+      (el) =>
+        document.getElementById(el.getAttribute("aria-describedby"))
+          .textContent,
+    ),
+    "仅影响参数表中的空值；URL 内已有查询保持原样。",
+  );
+  await page.keyboard.press("Tab");
+  await equality.focus();
+  assert.equal(
+    await equality.evaluate(
+      (el) => getComputedStyle(el.nextElementSibling).outlineStyle,
+    ),
+    "solid",
+  );
+  await page.keyboard.press("Space");
+  assert.equal(await equality.isChecked(), false);
+  assert.equal(
+    await equality.getAttribute("title"),
+    "当参数值为空时，不添加等号",
+  );
+  assert.equal(await page.locator("#url").inputValue(), url);
+  if (process.env.DEBUG_PAIRS_CAPTURE_PREFIX) {
+    await equality.blur();
+    await page.mouse.move(800, 87);
+    await page.screenshot({
+      path: `${process.env.DEBUG_PAIRS_CAPTURE_PREFIX}-query-off.png`,
+      clip: { x: 0, y: 0, width: 1363, height: 980 },
+      caret: "hide",
+      animations: "disabled",
+    });
+  }
+  await equality.press("Space");
+  assert.equal(await equality.isChecked(), true);
+  assert.deepEqual(writes, []);
+
+  await tab("headers").click();
   await added("headers").click();
   await page.keyboard.type("X-Verification");
   assert.equal(await real("headers", 0, "key").inputValue(), "X-Verification");
@@ -173,6 +225,14 @@ try {
   assert.equal(request.headers[0].value, "local-only");
   assert.deepEqual(request.query, [{ key: "flag", value: "", enabled: true }]);
   assert.equal(request.queryAddEqual, false);
+  const exportFixture = { ...request, url: url + "?rawFlag&raw=a%2Bb" };
+  assert.ok(toCurl(exportFixture).includes("?rawFlag&raw=a%2Bb&flag'"));
+  assert.ok(
+    toCurl({ ...exportFixture, queryAddEqual: true }).includes(
+      "?rawFlag&raw=a%2Bb&flag='",
+    ),
+  );
+
   const retained = stored.requests.find((item) => item.id === other.id);
   assert.deepEqual(retained.headers, [disabled]);
   assert.deepEqual(retained.query, [disabled]);
@@ -206,12 +266,24 @@ try {
     await touch.evaluate(() => document.documentElement.scrollWidth),
     680,
   );
+  await touch.setViewportSize({ width: 360, height: 760 });
+  await touch.locator('[data-param="query"]').tap();
+  const touchEquality = touch.getByRole("checkbox", {
+    name: "空值 Query 参数添加等号",
+  });
+  assert.equal(await touchEquality.isChecked(), false);
+  await touchEquality.tap();
+  assert.equal(await touchEquality.isChecked(), true);
+  assert.equal(
+    await touch.evaluate(() => document.documentElement.scrollWidth),
+    360,
+  );
   assert.equal(writes.length, 1);
   assert.deepEqual(errors, []);
   assert.deepEqual(unexpected, []);
   console.log(JSON.stringify({ header, query }));
   console.log(
-    "DEBUG_PAIR_COMPOSER_UI_PASS empty/keyboard/touch/ownership/save-reload/no-dispatch",
+    "DEBUG_PAIR_COMPOSER_UI_PASS empty/keyboard/touch/ownership/save-reload/query-equals/curl/no-dispatch",
   );
 } finally {
   await browser?.close();

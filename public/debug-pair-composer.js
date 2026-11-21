@@ -21,3 +21,14 @@ export function debugPairComposer(kind, empty) {
     : `<td>${add}</td><td>${input}</td>`;
   return `<tr class="debug-pair-composer">${name}<td></td><td${empty ? "" : ' colspan="2"'}><button type="button" class="ghost debug-pair-dictionary" data-debug-pair-dictionary="${kind}" title="从字典添加参数">字典</button></td></tr>`;
 }
+
+export function debugQueryEqualityLabel(checked) {
+  return checked
+    ? "当参数值为空时，自动添加等号"
+    : "当参数值为空时，不添加等号";
+}
+
+export function debugQueryEquality(value) {
+  const checked = value !== false;
+  return `<label class="debug-query-equality"><input id="query-add-equal" type="checkbox" ${checked ? "checked" : ""} title="${debugQueryEqualityLabel(checked)}" aria-label="空值 Query 参数添加等号" aria-describedby="debug-query-equality-scope"><span class="debug-query-equality-icon" aria-hidden="true">=</span><span id="debug-query-equality-scope" hidden>仅影响参数表中的空值；URL 内已有查询保持原样。</span></label>`;
+}

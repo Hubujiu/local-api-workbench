@@ -3238,6 +3238,52 @@ body:not(.dark) .plans-heading {
   margin-bottom: 8px;
   border: 1px solid var(--line);
 }
+.debug-pairs-table th:has(.debug-query-value-heading) {
+  padding-block: 3px;
+}
+.debug-query-value-heading {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.debug-query-equality {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  position: relative;
+  margin-inline-start: -22px;
+  margin-inline-end: 1px;
+  width: 28px;
+  height: 28px;
+}
+.debug-query-equality > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.debug-query-equality-icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.debug-query-equality > input:checked + span {
+  border-color: transparent;
+  background: var(--hover);
+  color: var(--accent);
+}
+.debug-query-equality > input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .debug-pairs-empty col {
   width: 33.333%;
 }
