@@ -51,13 +51,31 @@ try {
   await page.goto(app.launchUrl);
   const design = page.locator('[data-mode="design"]');
   const debug = page.locator('[data-mode="debug"]');
-  const disclosure = page.locator("#design-description > summary");
+  const descriptionSection = page.getByRole("region", {
+    name: "详细说明",
+    exact: true,
+  });
+  const disclosure = descriptionSection.locator(
+    "#design-description > summary",
+  );
   const description = page.getByRole("textbox", { name: "接口详细说明" });
   const draft = "**说明草稿**\n\n<script>window.unexpected = true;</script>";
   await design.click();
   assert.equal(await description.count(), 0, "empty details start closed");
   assert.equal(await page.locator("#send").count(), 0, "design is not Debug");
-  assert.equal((await disclosure.boundingBox()).y, 305);
+  const heading = descriptionSection.getByRole("heading", {
+    name: "详细说明",
+    exact: true,
+  });
+  await disclosure.waitFor({ state: "visible" });
+  const headingBox = await heading.boundingBox();
+  const disclosureBox = await disclosure.boundingBox();
+  assert(
+    headingBox &&
+      disclosureBox &&
+      disclosureBox.y >= headingBox.y + headingBox.height,
+    "the disclosure must be visible below the Design details heading",
+  );
   await disclosure.press("Enter");
   await description.fill(draft);
   assert.equal(
