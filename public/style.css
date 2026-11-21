@@ -4076,6 +4076,57 @@ body:not(.dark) .plans-heading {
 .editor[data-editor-mode="debug"] > .response .metrics:empty {
   display: none;
 }
+.unsent-response-data {
+  min-width: 0;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.unsent-response-message {
+  display: flex;
+  min-height: 178px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 18px;
+  color: var(--muted);
+}
+.unsent-response-message p {
+  margin: 0;
+  line-height: 20px;
+}
+.unsent-response-message svg {
+  display: block;
+  width: 50px;
+  height: 50px;
+  opacity: 0.5;
+}
+.unsent-response-cookie-scroll {
+  overflow-x: auto;
+}
+.unsent-response-cookie-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.unsent-response-cookie-scroll table {
+  min-width: 560px;
+  table-layout: fixed;
+}
+.unsent-response-cookie-scroll th {
+  height: 37px;
+  padding: 0 8px;
+  background: transparent;
+  white-space: nowrap;
+  font-weight: 400;
+}
+.unsent-response-cookie-scroll th:not(:last-child) {
+  width: 15%;
+}
+.unsent-response-cookie-scroll td {
+  border-bottom: 0;
+  padding: 0;
+}
 .editor[data-editor-mode="debug"]:not(.split-layout)
   > .response:has(.metrics:empty) {
   box-shadow: 0 -1px var(--line);

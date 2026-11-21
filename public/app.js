@@ -1,3 +1,4 @@
+import { unsentResponseData } from "./http-response-empty.js";
 import {
   httpResponseTabs,
   readResponseTabsPosition,
@@ -1764,8 +1765,13 @@ function responseContent() {
         )
         .join("") || '<div class="empty"><p>在 Mock 页添加响应示例</p></div>'
     );
-  if (!response)
-    return `<div class="empty http-response-empty"><div class="empty-symbol">${lineIcon("rocket")}</div><p>输入 URL 后点击发送获取响应结果</p><small>Ctrl + Enter 发送请求 · Ctrl + S 保存接口</small></div>`;
+  if (!response) {
+    const data = !busy && unsentResponseData(responseTab);
+    return (
+      data ||
+      `<div class="empty http-response-empty"><div class="empty-symbol">${lineIcon("rocket")}</div><p>输入 URL 后点击发送获取响应结果</p><small>Ctrl + Enter 发送请求 · Ctrl + S 保存接口</small></div>`
+    );
+  }
   if (responseTab === "scriptResponse") {
     if (!response.scriptResponse)
       return '<div class="notice">后置脚本可用 pm.response.setBody(value) / setCode(code) 创建处理视图；不改写原始网络证据。</div>';
