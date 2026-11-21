@@ -1191,7 +1191,7 @@ body:not(.dark) .plans-page {
   padding: 24px 32px;
 }
 @media (min-width: 1000px) {
-  body:not(.dark) .shell:has(.plans-page .plan-list-empty) > .sidebar {
+  body:not(.dark) .shell:has(.plans-page .plan-list) > .sidebar {
     display: none;
   }
 }
@@ -1258,6 +1258,201 @@ body:not(.dark) .plans-page .plan-main {
   }
   body:not(.dark) .plans-page .plan-main {
     padding-top: 16px;
+  }
+}
+
+.plan-editor-heading {
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 32px;
+}
+.plan-editor-heading .grow {
+  flex-wrap: wrap;
+}
+.plan-editor-heading h2 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 24px;
+}
+.plan-editor-heading time {
+  font-size: 12px;
+}
+.plan-editor-heading button {
+  min-height: 32px;
+  padding: 4px 15px;
+}
+.plan-editor-heading #run-plan {
+  min-width: 112px;
+}
+.plan-editor-heading #delete-plan {
+  min-width: 90px;
+}
+.plan-editor-fields {
+  display: grid;
+  max-width: 760px;
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 16px;
+}
+.plan-editor-fields label {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  margin: 0 0 13px;
+}
+.plan-editor-fields :is(input, textarea, select) {
+  width: 100%;
+  height: 31px;
+  min-height: 0;
+  padding: 4px 11px;
+  border-radius: 4px;
+  background: transparent;
+  font-family: inherit;
+}
+.plan-editor-fields textarea {
+  height: 43px;
+  resize: vertical;
+}
+.plan-editor-fields :is(input, textarea) {
+  margin-bottom: 11px;
+}
+.plan-editor-fields textarea {
+  margin-bottom: 12px;
+}
+.plan-editor-fields select {
+  width: min(100%, 718px);
+}
+.plan-editor-fields :is(input, textarea)::placeholder {
+  color: var(--muted);
+}
+
+.plan-editor-workflow {
+  max-width: 760px;
+  margin-top: 10px;
+}
+.plan-editor-workflow h3 {
+  margin: 0 0 13px;
+  font-size: 15px;
+  line-height: 20px;
+}
+.plan-editor-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+#plan-step-picker {
+  position: relative;
+}
+#plan-step-picker > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 11px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  list-style: none;
+  cursor: pointer;
+}
+#plan-step-picker > summary::-webkit-details-marker {
+  display: none;
+}
+#plan-step-picker > summary::after {
+  content: "⌄";
+}
+.plan-editor-picker button {
+  width: 90px;
+  min-height: 32px;
+  padding: 4px 10px;
+}
+.plan-picker-popover {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 4px);
+  inset-inline: 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  box-shadow: 0 8px 20px #0002;
+}
+#plan-step-search {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  width: 100%;
+  height: 32px;
+  padding: 4px 11px;
+  border-radius: 4px;
+  background: var(--panel);
+}
+.plan-editor-picker button:disabled {
+  opacity: 0.75;
+  background: transparent;
+  cursor: default;
+}
+.plan-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  overflow-wrap: anywhere;
+}
+.plan-picker-option input {
+  flex: none;
+}
+.plan-picker-folder {
+  display: block;
+  padding: 4px 0;
+  color: var(--muted);
+}
+.plan-picker-popover [hidden] {
+  display: none;
+}
+.plan-editor-workflow .plan-step {
+  gap: 6px;
+  min-height: 46px;
+  padding: 4px 10px;
+  margin: 0 0 8px;
+}
+.plan-editor-workflow .plan-step .grow {
+  min-width: 0;
+}
+.plan-editor-workflow .plan-step .subtle {
+  overflow-wrap: anywhere;
+}
+.plan-editor-workflow .plan-step button {
+  padding: 3px 7px;
+}
+.plan-editor-workflow .plan-save {
+  margin-top: 12px;
+}
+.plan-editor-workflow .plan-save button {
+  width: 90px;
+  min-height: 32px;
+  padding: 4px 8px;
+}
+.plan-editor-advanced {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-width: 760px;
+  margin-top: 14px;
+}
+.plan-editor-advanced select {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 900px) {
+  .shell:has(.plans-page .plan-editor) > .sidebar {
+    display: none;
   }
 }
 

@@ -55,41 +55,42 @@ export function renderPlans({ project, planId, lastRun, busy, tab = "plans" }) {
           ? ""
           : '<p class="plan-list-empty">暂无执行计划</p>') +
         "</aside>") +
-    '<section class="plan-main">' +
+    '<section class="plan-main' +
+    (tab === "plans" && plan ? " plan-editor" : "") +
+    '">' +
     (tab === "runs"
       ? '<div id="plan-run-records">' + renderRuns(runs, lastRun) + "</div>"
       : plan
-        ? renderEditor(plan, busy, project.environments)
+        ? renderEditor(plan, busy, project.environments, project.requests || [])
         : '<div class="plan-selection-empty"><p>请选择或新建一个执行计划</p></div>') +
     "</section></div></div>"
   );
 }
-function renderEditor(plan, busy, environments) {
+function renderEditor(plan, busy, environments, requests) {
   return (
-    '<div class="row"><h2 class="grow">执行计划编辑器</h2><button id="run-plan" class="primary" ' +
+    '<div class="row plan-editor-heading"><div class="row grow"><h2>执行计划编辑器</h2><time class="subtle">最近修改：' +
+    esc(historyDate(plan.updatedAt || plan.createdAt)) +
+    '</time></div><button id="run-plan" class="primary" ' +
     (busy ? "disabled" : "") +
     ">" +
     (busy ? "执行中…" : "执行计划") +
     "</button>" +
     (busy ? '<button id="cancel">停止</button>' : "") +
     '<button id="delete-plan" class="danger">删除计划</button></div>' +
-    '<p class="subtle">最近修改：' +
-    esc(plan.updatedAt || plan.createdAt) +
-    "</p>" +
     (Object.values(plan.provenance?.fields || {}).includes("ai") ||
     Object.values(plan.provenance?.steps || {}).includes("ai")
       ? '<div class="notice ai-value">橙色内容由 AI 创建或修改；你可以检查并直接修改。</div>'
       : "") +
-    '<label>计划名称</label><input id="plan-name" class="' +
+    '<div class="plan-editor-fields"><label for="plan-name">计划名称</label><input id="plan-name" placeholder="例如：用户下单验证" class="' +
     ai(plan, "name") +
     '" value="' +
     esc(plan.name) +
-    '"><label>计划说明</label><textarea id="plan-description" class="' +
+    '"><label for="plan-description">计划说明</label><textarea id="plan-description" placeholder="说明该执行计划的验证目标" class="' +
     ai(plan, "description") +
     '">' +
     esc(plan.description || "") +
     "</textarea>" +
-    '<label>执行环境</label><select id="plan-env" class="' +
+    '<label for="plan-env">执行环境</label><select id="plan-env" class="' +
     ai(plan, "environmentId") +
     '">' +
     environments
@@ -104,22 +105,65 @@ function renderEditor(plan, busy, environments) {
           "</option>",
       )
       .join("") +
-    "</select>" +
-    '<label>成功状态规则</label><select id="plan-status-policy" class="' +
-    ai(plan, "statusPolicy") +
-    '"><option value="assertions" ' +
-    (plan.statusPolicy !== "strict200" ? "selected" : "") +
-    '>默认 2xx，可用状态断言指定预期错误</option><option value="strict200" ' +
-    (plan.statusPolicy === "strict200" ? "selected" : "") +
-    ">原版兼容：仅 200，断言不能豁免非 200</option></select>" +
-    '<div class="page-head"><h3>执行步骤</h3><div class="row"><button id="edit-plan">编辑 JSON</button><button id="edit-plan-structure">编辑步骤结构</button><button id="add-step">＋ 添加步骤</button></div></div>' +
+    "</select></div>" +
+    '<section class="plan-editor-workflow"><h3>执行步骤</h3>' +
+    renderStepPicker(requests) +
     plan.steps
       .map((step, index) => renderPlanStep(step, index, plan))
       .join("") +
     (!plan.steps.length
       ? '<div class="notice">计划为空，请添加已有接口的独立快照。</div>'
       : "") +
-    '<div class="plan-save"><button id="save-plan-details" class="primary">保存计划</button></div>'
+    '<div class="plan-save"><button id="save-plan-details" class="primary">保存计划</button></div></section>' +
+    '<section class="plan-editor-advanced">' +
+    '<label for="plan-status-policy">成功状态规则</label><select id="plan-status-policy" class="' +
+    ai(plan, "statusPolicy") +
+    '"><option value="assertions" ' +
+    (plan.statusPolicy !== "strict200" ? "selected" : "") +
+    '>默认 2xx，可用状态断言指定预期错误</option><option value="strict200" ' +
+    (plan.statusPolicy === "strict200" ? "selected" : "") +
+    ">原版兼容：仅 200，断言不能豁免非 200</option></select>" +
+    '<div class="row"><button id="edit-plan">编辑 JSON</button><button id="edit-plan-structure">编辑步骤结构</button></div></section>'
+  );
+}
+function renderStepPicker(requests) {
+  const groups = new Map();
+  for (const item of requests) {
+    if (item.deletedAt) continue;
+    const group = item.folder || "";
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(item);
+  }
+  const options = [...groups]
+    .map(
+      ([folder, items]) =>
+        '<div class="plan-picker-group">' +
+        (folder
+          ? '<span class="plan-picker-folder">' + esc(folder) + "</span>"
+          : "") +
+        items
+          .map(
+            (item) =>
+              '<label class="plan-picker-option"><input type="checkbox" name="plan-picker-api" value="' +
+              esc(item.id) +
+              '"><span>' +
+              esc(item.method) +
+              " " +
+              esc(item.name) +
+              "</span></label>",
+          )
+          .join("") +
+        "</div>",
+    )
+    .join("");
+  return (
+    '<div class="plan-editor-picker"><details id="plan-step-picker"><summary>选择要执行的接口</summary>' +
+    '<input type="search" id="plan-step-search" aria-label="搜索接口" placeholder="选择要执行的接口"><div class="plan-picker-popover">' +
+    options +
+    '<p id="plan-step-picker-empty" class="muted" ' +
+    (options ? "hidden" : "") +
+    ">没有匹配接口</p></div></details>" +
+    '<button id="add-step" type="button" disabled>添加接口</button></div>'
   );
 }
 function stepOverview(step, position, inheritedDisabled = false) {

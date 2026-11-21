@@ -4927,25 +4927,76 @@ function bind() {
       },
     });
   });
-  on("#add-step", "click", () =>
-    modal(
-      "添加步骤",
-      `<label>选择接口</label><select id="step-api">${project.requests
-        .filter((r) => !r.deletedAt)
-        .map(
-          (r) => `<option value="${r.id}">${r.method} ${esc(r.name)}</option>`,
-        )
-        .join("")}</select>`,
-      async () => {
-        assertExecutionReady();
-        const p = project.plans.find((p) => p.id === planId);
-        const r = project.requests.find((r) => r.id === $("#step-api").value);
-        if (!r) throw Error("请先创建接口");
-        p.steps.push({ request: snapshotInterfaceForPlan(r) });
-        await savePlan(p);
-      },
-    ),
-  );
+  on("#add-step", "click", async () => {
+    assertExecutionReady();
+    const plan = project.plans.find((item) => item.id === planId);
+    const selected = [
+      ...document.querySelectorAll(
+        '#plan-step-picker input[name="plan-picker-api"]:checked',
+      ),
+    ];
+    if (!plan || !selected.length) return;
+    const requests = new Map(
+      project.requests
+        .filter((item) => !item.deletedAt)
+        .map((item) => [item.id, item]),
+    );
+    const steps = selected.map(({ value }) => {
+      const request = requests.get(value);
+      if (!request) throw Error("所选接口已变化，请重新选择");
+      return { request: snapshotInterfaceForPlan(request) };
+    });
+    await savePlan({ ...plan, steps: [...plan.steps, ...steps] });
+  });
+  on("#plan-step-search", "input", (_, input) => {
+    const query = input.value.trim().toLocaleLowerCase();
+    let matches = 0;
+    for (const group of $("#plan-step-picker").querySelectorAll(
+      ".plan-picker-group",
+    )) {
+      const folder =
+        group.querySelector(".plan-picker-folder")?.textContent || "";
+      let groupMatches = 0;
+      for (const option of group.querySelectorAll(".plan-picker-option")) {
+        option.hidden = !(folder + " " + option.textContent)
+          .toLocaleLowerCase()
+          .includes(query);
+        if (!option.hidden) groupMatches++;
+      }
+      group.hidden = !groupMatches;
+      matches += groupMatches;
+    }
+    $("#plan-step-picker-empty").hidden = !!matches;
+  });
+  on('#plan-step-picker input[name="plan-picker-api"]', "change", () => {
+    const count =
+      $("#plan-step-picker").querySelectorAll("input:checked").length;
+    $("#add-step").disabled = !count;
+    $("#plan-step-picker summary").textContent = count
+      ? "已选 " + count + " 个接口"
+      : "选择要执行的接口";
+  });
+  on("#plan-step-picker", "keydown", (event, picker) => {
+    if (event.key !== "Escape" || !picker.open) return;
+    event.preventDefault();
+    picker.open = false;
+    picker.querySelector("summary").focus();
+  });
+  on("#plan-step-picker", "focusout", (event, picker) => {
+    if (
+      picker.open &&
+      event.relatedTarget &&
+      !picker.contains(event.relatedTarget)
+    )
+      picker.open = false;
+  });
+  on(".plans-page", "click", (event) => {
+    const picker = $("#plan-step-picker");
+    if (picker?.open && !picker.contains(event.target)) picker.open = false;
+  });
+  on("#plan-step-picker", "toggle", (_, picker) => {
+    if (picker.open) picker.querySelector("input[type=search]").focus();
+  });
   on("#plan-status-policy", "change", async (_, e) => {
     assertExecutionReady();
     const plan = project.plans.find((item) => item.id === planId);
