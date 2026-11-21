@@ -2087,13 +2087,16 @@ function bind() {
     localStorage.setItem("response-layout", responseLayout);
     render();
   });
-  on("[data-page]", "click", (_, e) => {
+  on("[data-page]", "click", (event, e) => {
+    const fromRailKeyboard =
+      event.detail === 0 && e === document.activeElement && e.closest(".rail");
     collect();
     bodyExpanded = false;
     page = e.dataset.page;
     if (e.dataset.settingsTarget) settingsSection = e.dataset.settingsTarget;
     if (page === "plans") planTab = "plans";
     render();
+    if (fromRailKeyboard) $(".rail [aria-current='page']")?.focus();
   });
   on("[data-open-tab]", "click", (_, e) => {
     collect();
