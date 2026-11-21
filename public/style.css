@@ -3278,3 +3278,135 @@ body:not(.dark) .plans-heading {
     scrollbar-width: thin;
   }
 }
+
+.http-design-canvas {
+  min-height: 0;
+  padding: 12px 8px 32px 0;
+}
+.design-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.design-meta > label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+}
+.design-meta :is(input, select) {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+}
+.http-design-canvas > section {
+  margin-top: 24px;
+}
+.http-design-canvas > section > h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  min-height: 22px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.http-design-canvas > section > h2 > span {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--accent);
+}
+.http-design-canvas h2 svg {
+  width: 14px;
+  height: 14px;
+}
+#design-description {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+#design-description > summary {
+  display: grid;
+  place-items: center;
+  min-height: 30px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--accent);
+}
+#design-description > summary::-webkit-details-marker {
+  display: none;
+}
+#design-description:not([open]) .design-description-open,
+#design-description[open] .design-description-closed {
+  display: none;
+}
+#design-description[open] > summary {
+  justify-content: start;
+  padding-inline: 10px;
+  background: var(--top);
+  border-bottom: 1px solid var(--line);
+}
+.design-description-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 100px;
+}
+.design-description-editor > textarea,
+.design-description-editor > .markdown-content {
+  width: 100%;
+  min-width: 0;
+  min-height: 100px;
+  max-height: 320px;
+  padding: 8px;
+}
+.design-description-editor > textarea {
+  border: 0;
+  border-radius: 0;
+  border-right: 1px solid var(--line);
+}
+.design-description-editor > .markdown-content {
+  overflow: auto;
+}
+#design-description-count {
+  display: block;
+  padding: 4px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+.design-request-structure > div,
+.design-response-structure > div {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.design-request-structure textarea,
+.design-response-structure textarea {
+  display: block;
+  width: 100%;
+  min-height: 110px;
+  margin-top: 8px;
+}
+.editor[data-editor-mode="design"]
+  > .urlbar
+  > :is(#request-design-preview, #save) {
+  min-width: 76px;
+}
+@media (min-width: 1240px) {
+  .shell:has(.editor[data-editor-mode="design"]) > .sidebar {
+    width: 305px;
+  }
+}
+@media (max-width: 760px) {
+  .http-design-canvas > .design-meta,
+  .http-design-canvas .form-grid,
+  .design-description-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .design-description-editor > textarea {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
