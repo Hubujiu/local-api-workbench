@@ -1,3 +1,4 @@
+import { fillHTTPDesignSchema } from "./helpers/http-design-source-ui.mjs";
 import { captureHTTPWorkbenchBaseline } from "./helpers/http-workbench-visual-baseline.mjs";
 import { exerciseMCPDatabaseUI } from "./helpers/mcp-database-ui.mjs";
 import { exercisePlanHistoryRefreshUI } from "./helpers/plan-history-refresh-ui.mjs";
@@ -2491,7 +2492,15 @@ try {
     customerId: "",
   });
   await page.locator('[data-mode="design"]').click();
-  await page.locator("#schema").fill(
+  assert.equal(
+    await page
+      .locator(".http-design-page .design-schema-source")
+      .evaluate((details) => details.open),
+    false,
+  );
+  assert.equal(await page.locator("#schema").isVisible(), false);
+  await fillHTTPDesignSchema(
+    page,
     JSON.stringify({
       type: "object",
       properties: {
@@ -2503,6 +2512,15 @@ try {
       $defs: { SharedLabel: { type: "string", minLength: 3 } },
     }),
   );
+  const schemaDialog = page.locator("#dialog");
+  const schemaFields = schemaDialog.locator(".schema-fields");
+  const schemaRow = (name) =>
+    schemaDialog
+      .locator(".schema-tree")
+      .getByRole("row")
+      .filter({ has: page.getByRole("cell", { name, exact: true }) });
+  const schemaAction = (name, action) =>
+    schemaRow(name).getByRole("button", { name: action, exact: true });
   const schemaBeforeVisual = await page.locator("#schema").inputValue();
   await page.locator("#visual-schema").click();
   const idleSchemaLayout = await page
@@ -2514,7 +2532,7 @@ try {
     }));
   assert(idleSchemaLayout.tree >= idleSchemaLayout.width - 1);
   assert.equal(idleSchemaLayout.fields, "none");
-  await page.locator('[data-schema-add="0"]').click();
+  await schemaAction("根结构", "加字段").click();
   const activeSchemaLayout = await page
     .locator(".schema-layout")
     .evaluate((element) => {
@@ -2534,47 +2552,51 @@ try {
     activeSchemaLayout.treeWidth > 200 && activeSchemaLayout.fieldsWidth > 200,
   );
   assert(activeSchemaLayout.gap >= 0);
-  await page.locator("[data-schema-name]").fill("discarded");
-  await page.locator("[data-schema-apply]").click();
+  await schemaFields.locator("[data-schema-name]").fill("discarded");
+  await schemaFields.locator("[data-schema-apply]").click();
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   assert.equal(await page.locator("#schema").inputValue(), schemaBeforeVisual);
   await page.locator("#visual-schema").click();
   assert(
     !(await page.locator(".schema-tree").innerText()).includes("discarded"),
   );
-  await page.locator('[data-schema-edit="2"]').click();
-  await page.locator("[data-schema-name]").fill("label-renamed");
-  await page.locator("[data-schema-apply]").click();
+  await schemaAction("label", "编辑").click();
+  await schemaFields.locator("[data-schema-name]").fill("label-renamed");
+  await schemaFields.locator("[data-schema-apply]").click();
   assert(
     (await page.locator(".schema-tree").innerText()).includes("label-renamed"),
   );
-  await page.locator('[data-schema-edit="2"]').click();
-  await page.locator("[data-schema-name]").fill("label");
-  await page.locator("[data-schema-apply]").click();
-  await page.locator('[data-schema-reference-edit="2"]').click();
-  await page.locator("[data-schema-reference]").fill("#/$defs/Missing");
-  await page.locator("[data-schema-apply]").click();
+  await schemaAction("label-renamed", "编辑").click();
+  await schemaFields.locator("[data-schema-name]").fill("label");
+  await schemaFields.locator("[data-schema-apply]").click();
+  await schemaAction("label", "引用").click();
+  await schemaFields.locator("[data-schema-reference]").fill("#/$defs/Missing");
+  await schemaFields.locator("[data-schema-apply]").click();
   await page
     .locator(".schema-error")
     .getByText("引用目标不存在", { exact: true })
     .waitFor();
   assert.equal(await page.locator("#schema").inputValue(), schemaBeforeVisual);
-  await page.locator("[data-schema-reference]").fill("#/$defs/SharedLabel");
+  await schemaFields
+    .locator("[data-schema-reference]")
+    .fill("#/$defs/SharedLabel");
   await page.screenshot({ path: "/tmp/local-api-schema-reference.png" });
-  await page.locator("[data-schema-apply]").click();
-  await page.locator('[data-schema-edit="1"]').click();
-  await page.locator("[data-schema-description]").fill("数量范围保留");
-  await page.locator(".schema-constraints > summary").click();
-  await page.locator('[data-schema-constraint="minimum"]').fill("5");
-  await page.locator("[data-schema-apply]").click();
+  await schemaFields.locator("[data-schema-apply]").click();
+  await schemaAction("n", "编辑").click();
+  await schemaFields.locator("[data-schema-description]").fill("数量范围保留");
+  await schemaFields.locator(".schema-constraints > summary").click();
+  await schemaFields.locator('[data-schema-constraint="minimum"]').fill("5");
+  await schemaFields.locator("[data-schema-apply]").click();
   await page
     .locator(".schema-error")
     .getByText("约束下限不能大于上限", { exact: true })
     .waitFor();
   assert.equal(await page.locator("#schema").inputValue(), schemaBeforeVisual);
-  await page.locator('[data-schema-constraint="minimum"]').fill("1");
-  await page.locator('[data-schema-constraint="enum"]').fill("[1,2,3,4]");
-  const constraintBox = await page
+  await schemaFields.locator('[data-schema-constraint="minimum"]').fill("1");
+  await schemaFields
+    .locator('[data-schema-constraint="enum"]')
+    .fill("[1,2,3,4]");
+  const constraintBox = await schemaFields
     .locator(".schema-constraint-grid")
     .boundingBox();
   assert(
@@ -2582,7 +2604,7 @@ try {
     "constraint inputs must use a bounded inner viewport",
   );
   const constraintFooter = await page.locator("#dialog-save").boundingBox();
-  const constraintEnum = await page
+  const constraintEnum = await schemaFields
     .locator('[data-schema-constraint="enum"]')
     .boundingBox();
   assert(
@@ -2590,22 +2612,22 @@ try {
     "enum field must not overlap the save footer",
   );
   await page.screenshot({ path: "/tmp/local-api-schema-constraints.png" });
-  await page.locator(".schema-constraints > summary").click();
-  await page.locator("[data-schema-required]").check();
-  await page.locator("[data-schema-example]").fill("2");
-  await page.locator("[data-schema-apply]").click();
-  await page.locator('[data-schema-add="0"]').click();
-  await page.locator("[data-schema-name]").fill("flag");
-  await page.locator("[data-schema-apply]").click();
-  await page.locator('[data-schema-edit="4"]').click();
-  await page.locator("[data-schema-type]").selectOption("boolean");
-  await page.locator("[data-schema-example]").fill("{");
+  await schemaFields.locator(".schema-constraints > summary").click();
+  await schemaFields.locator("[data-schema-required]").check();
+  await schemaFields.locator("[data-schema-example]").fill("2");
+  await schemaFields.locator("[data-schema-apply]").click();
+  await schemaAction("根结构", "加字段").click();
+  await schemaFields.locator("[data-schema-name]").fill("flag");
+  await schemaFields.locator("[data-schema-apply]").click();
+  await schemaAction("flag", "编辑").click();
+  await schemaFields.locator("[data-schema-type]").selectOption("boolean");
+  await schemaFields.locator("[data-schema-example]").fill("{");
   await page.locator("#dialog-save").click();
   await page
     .getByText("示例必须为有效JSON，字符串请加双引号", { exact: true })
     .waitFor();
   assert.equal(await page.locator("#dialog").isVisible(), true);
-  await page.locator("[data-schema-example]").fill("false");
+  await schemaFields.locator("[data-schema-example]").fill("false");
   await page.screenshot({ path: "/tmp/local-api-schema-editor.png" });
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -2645,13 +2667,9 @@ try {
     type: "string",
     $anchor: "real-anchor",
   };
-  await page.locator("#schema").fill(JSON.stringify(identifierSchema));
+  await fillHTTPDesignSchema(page, JSON.stringify(identifierSchema));
   await page.locator("#visual-schema").click();
-  await page
-    .locator(".schema-tree tbody tr")
-    .filter({ has: page.getByText("metadata-protected", { exact: true }) })
-    .locator("[data-schema-remove]")
-    .click();
+  await schemaRow("metadata-protected").locator("[data-schema-remove]").click();
   await page
     .locator(".schema-error")
     .getByText("包含结构标识或锚点，请用JSON编辑删除", { exact: true })
@@ -2669,11 +2687,7 @@ try {
   assert(stickySchemaHeader.scroll > 0);
   assert(Math.abs(stickySchemaHeader.top - stickySchemaHeader.header) <= 2);
   await page.screenshot({ path: "/tmp/local-api-schema-identifier-guard.png" });
-  await page
-    .locator(".schema-tree tbody tr")
-    .filter({ has: page.getByText("metadata-remove", { exact: true }) })
-    .locator("[data-schema-remove]")
-    .click();
+  await schemaRow("metadata-remove").locator("[data-schema-remove]").click();
   assert.equal(await page.locator(".schema-error").innerText(), "");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -2691,7 +2705,7 @@ try {
   );
   delete identifierSaved.properties["metadata-protected"];
   assert.deepEqual(identifierSaved, visualSchema);
-  await page.locator("#schema").fill(JSON.stringify(visualSchema));
+  await fillHTTPDesignSchema(page, JSON.stringify(visualSchema));
   await saveAndWait("#save");
   const compositionSchema = {
     type: "integer",
@@ -2700,17 +2714,18 @@ try {
     example: 3,
     "x-data": { $ref: "#/allOf/0" },
   };
-  await page.locator("#schema").fill(JSON.stringify(compositionSchema));
+  await fillHTTPDesignSchema(page, JSON.stringify(compositionSchema));
   const appendNumberBranch = async () => {
-    await page.locator('[data-schema-branch-add="0"]').click();
-    await page.locator("[data-schema-combination]").selectOption("allOf");
-    await page.locator("[data-schema-branch-type]").selectOption("number");
-    await page.locator("[data-schema-apply]").click();
+    await schemaAction("根结构", "组合").click();
+    await schemaFields
+      .locator("[data-schema-combination]")
+      .selectOption("allOf");
+    await schemaFields
+      .locator("[data-schema-branch-type]")
+      .selectOption("number");
+    await schemaFields.locator("[data-schema-apply]").click();
   };
-  const compositionRow = (index) =>
-    page
-      .locator(".schema-tree tbody tr")
-      .filter({ has: page.getByText("allOf 分支 " + index, { exact: true }) });
+  const compositionRow = (index) => schemaRow("allOf 分支 " + index);
   await page.locator("#visual-schema").click();
   await appendNumberBranch();
   await compositionRow(2).waitFor();
@@ -2722,9 +2737,9 @@ try {
   await page.locator("#visual-schema").click();
   await appendNumberBranch();
   await compositionRow(1).locator("[data-schema-edit]").click();
-  await page.locator(".schema-constraints summary").click();
-  await page.locator('[data-schema-constraint="maximum"]').fill("10");
-  await page.locator("[data-schema-apply]").click();
+  await schemaFields.locator(".schema-constraints summary").click();
+  await schemaFields.locator('[data-schema-constraint="maximum"]').fill("10");
+  await schemaFields.locator("[data-schema-apply]").click();
   await compositionRow(2).locator("[data-schema-branch-remove]").click();
   await compositionRow(1).locator("[data-schema-branch-remove]").click();
   await page
@@ -2749,7 +2764,7 @@ try {
     allOf: [...compositionSaved.allOf, { type: "number" }],
     $defs: { Keep: { $ref: "#/allOf/1" } },
   };
-  await page.locator("#schema").fill(JSON.stringify(guardedComposition));
+  await fillHTTPDesignSchema(page, JSON.stringify(guardedComposition));
   await page.locator("#visual-schema").click();
   await compositionRow(1).locator("[data-schema-branch-remove]").click();
   await page
@@ -2758,7 +2773,7 @@ try {
     .waitFor();
   await page.screenshot({ path: "/tmp/local-api-schema-compositions.png" });
   await page.getByRole("button", { name: "关闭", exact: true }).click();
-  await page.locator("#schema").fill(JSON.stringify(visualSchema));
+  await fillHTTPDesignSchema(page, JSON.stringify(visualSchema));
   await saveAndWait("#save");
   const originalResponse = {
     status: "200",
@@ -2772,21 +2787,21 @@ try {
   await page.locator("#new-response-schema").click();
   await page.locator("#schema-response-status").fill("201");
   await page.locator("#schema-response-description").fill("Created schema");
-  await page.locator('[data-schema-add="0"]').click();
-  await page.locator("[data-schema-name]").fill("ok");
-  await page.locator("[data-schema-apply]").click();
-  await page.locator('[data-schema-edit="1"]').click();
-  await page.locator("[data-schema-type]").selectOption("boolean");
-  await page.locator("[data-schema-example]").fill("false");
+  await schemaAction("根结构", "加字段").click();
+  await schemaFields.locator("[data-schema-name]").fill("ok");
+  await schemaFields.locator("[data-schema-apply]").click();
+  await schemaAction("ok", "编辑").click();
+  await schemaFields.locator("[data-schema-type]").selectOption("boolean");
+  await schemaFields.locator("[data-schema-example]").fill("false");
   await page.locator("#schema-response-status").fill("200");
   await page.locator("#dialog-save").click();
   await page
     .getByText("此响应状态已存在，请编辑已有响应", { exact: true })
     .waitFor();
   assert.equal(await page.locator("#dialog").isVisible(), true);
-  await page.locator("[data-schema-example]").fill("true");
+  await schemaFields.locator("[data-schema-example]").fill("true");
   await page.locator("#schema-response-status").fill("201");
-  const responseApplyBox = await page
+  const responseApplyBox = await schemaFields
     .locator("[data-schema-apply]")
     .boundingBox();
   const responseContentBox = await page
@@ -2918,7 +2933,7 @@ try {
       },
     ],
   };
-  await page.locator("#schema").fill(JSON.stringify(tupleSchema));
+  await fillHTTPDesignSchema(page, JSON.stringify(tupleSchema));
   await page.locator('[data-mode="debug"]').click();
   await page.locator('[data-param="body"]').click();
   await page.locator("#generate-body").click();
