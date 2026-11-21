@@ -77,6 +77,37 @@ try {
     "the disclosure must be visible below the Design details heading",
   );
   await disclosure.press("Enter");
+  const toolbar = descriptionSection.getByRole("group", {
+    name: "说明格式工具",
+  });
+  await description.fill("Verification");
+  await description.selectText();
+  await toolbar.getByRole("button", { name: "加粗" }).click();
+  assert.equal(await description.inputValue(), "**Verification**");
+  assert.equal(
+    await page.locator("#design-description-preview strong").innerText(),
+    "Verification",
+  );
+  assert.equal(
+    await description.evaluate((field) =>
+      field.value.slice(field.selectionStart, field.selectionEnd),
+    ),
+    "Verification",
+  );
+  if (process.env.DESIGN_TOOLBAR_SCREENSHOT) {
+    await page.mouse.move(1000, 282);
+    await page.screenshot({
+      path: process.env.DESIGN_TOOLBAR_SCREENSHOT,
+      clip: { x: 0, y: 0, width: 1363, height: 980 },
+      caret: "hide",
+      animations: "disabled",
+    });
+  }
+  await description.fill("keyboard");
+  await description.selectText();
+  await description.press("Control+i");
+  assert.equal(await description.inputValue(), "*keyboard*");
+  assert.deepEqual(put, []);
   await description.fill(draft);
   assert.equal(
     await page.locator("#design-description-preview strong").innerText(),
