@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { parse } from "yaml";
 import { httpWorkbenchImplementationCommit } from "./helpers/http-workbench-visual-baseline.mjs";
 
 const checkoutCommit = "5208b72aaeba977b6f29c062f779159c0188f795";
@@ -68,20 +69,66 @@ test("local evidence resolves the checked-out source rather than a CI override",
   );
 });
 
-test("only browser smoke receives the browser checkout's commit output", () => {
-  const workflow = readFileSync(
-    new URL("../.github/workflows/ci.yml", import.meta.url),
-    "utf8",
+const checkoutEnv = "HTTP_WORKBENCH_CHECKOUT_COMMIT";
+const checkoutOutput = "${{ steps.browser_checkout.outputs.commit }}";
+const workflowText = readFileSync(
+  new URL("../.github/workflows/ci.yml", import.meta.url),
+  "utf8",
+);
+function assertBrowserCheckoutWiring(workflow) {
+  const { jobs } = workflow;
+  const steps = jobs.browser.steps;
+  const checkout = steps.findIndex((step) => step.id === "browser_checkout");
+  const smoke = steps.findIndex(
+    (step) => step.run === "node tests/ui-smoke.mjs",
   );
-  const browser = workflow.match(/^  browser:\n([\s\S]*?)^  desktop:/m)?.[1];
-  assert.ok(browser);
-  assert.match(
-    browser,
-    /uses: actions\/checkout@v4\n        id: browser_checkout/,
+  assert.ok(
+    checkout >= 0 && checkout < smoke,
+    "Checkout must precede browser smoke",
   );
-  assert.match(
-    browser,
-    /- run: node tests\/ui-smoke\.mjs\n        env:\n          HTTP_WORKBENCH_CHECKOUT_COMMIT: \$\{\{ steps\.browser_checkout\.outputs\.commit \}\}/,
+  assert.equal(steps[checkout].uses, "actions/checkout@v4");
+  assert.equal(steps[smoke].env?.[checkoutEnv], checkoutOutput);
+  const scopes = [
+    workflow,
+    ...Object.values(jobs).flatMap((job) => [job, ...(job.steps || [])]),
+  ];
+  assert.deepEqual(
+    scopes.filter((scope) => Object.hasOwn(scope.env ?? {}, checkoutEnv)),
+    [steps[smoke]],
+    "Only browser smoke may receive this provenance environment variable",
   );
-  assert.equal(workflow.match(/HTTP_WORKBENCH_CHECKOUT_COMMIT/g)?.length, 1);
+}
+
+test("only browser smoke receives its checkout output on LF or CRLF checkouts", () => {
+  const lf = workflowText.replaceAll("\r\n", "\n");
+  for (const source of [lf, lf.replaceAll("\n", "\r\n")]) {
+    assertBrowserCheckoutWiring(parse(source));
+  }
+});
+
+test("workflow provenance rejects a wrong source, ordering or broader scope", () => {
+  for (const mutate of [
+    (workflow, steps, smoke) => {
+      smoke.env[checkoutEnv] = "${{ github.event.pull_request.head.sha }}";
+    },
+    (workflow, steps, smoke) => {
+      steps.splice(steps.indexOf(smoke), 1);
+      steps.unshift(smoke);
+    },
+    (workflow) => {
+      workflow.env = { ...workflow.env, [checkoutEnv]: checkoutOutput };
+    },
+  ]) {
+    const workflow = parse(workflowText);
+    const steps = workflow.jobs.browser.steps;
+    mutate(
+      workflow,
+      steps,
+      steps.find((step) => step.run === "node tests/ui-smoke.mjs"),
+    );
+    assert.throws(
+      () => assertBrowserCheckoutWiring(workflow),
+      assert.AssertionError,
+    );
+  }
 });
