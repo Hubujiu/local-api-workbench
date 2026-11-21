@@ -15,6 +15,24 @@ try {
     name: "Verification",
     method: "GET",
     bodyType: "none",
+    responses: [
+      {
+        status: "200",
+        description: "成功",
+        content: {
+          "application/json": { schema: { type: "object", properties: {} } },
+        },
+      },
+      {
+        status: "404",
+        description: "失败",
+        headers: { "X-Trace": { schema: { type: "string" } } },
+        content: {
+          "application/json": { schema: { type: "object", properties: {} } },
+          "text/plain": { schema: { type: "string" }, example: "retain-me" },
+        },
+      },
+    ],
     url: "http://127.0.0.1:38982/verification",
   });
   project.requests.push(request);
@@ -61,7 +79,15 @@ try {
   const description = page.getByRole("textbox", { name: "接口详细说明" });
   const tabs = page.getByRole("tablist", { name: "设计请求参数标签" });
   const tab = (name) => tabs.getByRole("tab", { name, exact: true });
-  const panel = page.getByRole("tabpanel");
+  const panel = page.locator("#design-parameter-panel");
+  const responseRegion = page.getByRole("region", {
+    name: "设计响应参数",
+    exact: true,
+  });
+  const responseTab = (name) => responseRegion.getByRole("tab", { name });
+  const rawResponses = responseRegion.getByRole("textbox", {
+    name: "响应定义 JSON",
+  });
   const pair = (key, field) => panel.locator(`[data-pair="${key}:0:${field}"]`);
   const draft = "**说明草稿**\n\n<script>window.unexpected = true;</script>";
   await design.click();
@@ -81,6 +107,26 @@ try {
     "the disclosure must be visible below the Design details heading",
   );
   await disclosure.press("Enter");
+  const responseScreenshots = process.env.DESIGN_RESPONSE_SCREENSHOTS;
+  if (responseScreenshots) {
+    await tab("Query").click();
+    for (const [name, key] of [
+      [/200/, "200-body"],
+      [/404/, "404-body"],
+    ]) {
+      await responseTab(name).click();
+      await page.mouse.move(1000, 282);
+      await page.screenshot({
+        path:
+          responseScreenshots + "/candidate-design-response-" + key + ".png",
+        clip: { x: 0, y: 0, width: 1363, height: 980 },
+        caret: "hide",
+        animations: "disabled",
+      });
+    }
+    await responseTab(/200/).click();
+    await tab("Header").click();
+  }
   const screenshotDirectory = process.env.DESIGN_PARAMETER_SCREENSHOTS;
   if (screenshotDirectory) {
     for (const [name, key] of [
@@ -260,6 +306,37 @@ try {
     680,
   );
   assert.equal(await page.locator("#new-response-schema").count(), 1);
+  const responseDraft = await rawResponses.inputValue();
+  await rawResponses.fill("[{");
+  await responseTab(/404/).click();
+  assert.equal(await responseTab(/200/).getAttribute("aria-selected"), "true");
+  assert.equal(await rawResponses.inputValue(), "[{");
+  await rawResponses.fill(responseDraft);
+  await responseTab(/200/).press("ArrowRight");
+  assert.equal(await responseTab(/404/).getAttribute("aria-selected"), "true");
+  assert.equal(
+    await responseTab(/404/).evaluate((e) => e === document.activeElement),
+    true,
+  );
+  const media = responseRegion.getByRole("combobox", {
+    name: "响应 Content-Type",
+  });
+  await media.selectOption("text/plain");
+  await responseRegion
+    .locator(".design-response-kind")
+    .getByText("string", { exact: true })
+    .waitFor();
+  await responseRegion.getByRole("button", { name: "编辑结构" }).click();
+  await page.locator("#schema-response-description").fill("未找到");
+  await page.locator("#dialog-save").click();
+  await responseTab(/未找到.*404/).waitFor();
+  assert.equal(await media.inputValue(), "text/plain");
+  const retained = JSON.parse(await rawResponses.inputValue())[1];
+  assert.equal(retained.content["text/plain"].example, "retain-me");
+  assert.equal(retained.headers["X-Trace"].schema.type, "string");
+  assert.equal(retained.content["application/json"].schema.type, "object");
+  assert.deepEqual(put, []);
+
   await page.locator("#save").click();
   await page
     .locator("#saved-state")
@@ -300,6 +377,9 @@ try {
     "synthetic-only",
   );
   assert.deepEqual(put, ["PUT"]);
+  await responseTab(/未找到.*404/).click();
+  const reloadedResponses = JSON.parse(await rawResponses.inputValue());
+  assert.deepEqual(reloadedResponses[1], retained);
   assert.deepEqual(forbidden, []);
   assert.deepEqual(errors, []);
   console.log(
