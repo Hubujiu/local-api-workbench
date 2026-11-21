@@ -15,8 +15,8 @@ export function renderPlans({ project, planId, lastRun, busy, tab = "plans" }) {
   const runs = lastRun
     ? [lastRun, ...project.runs.filter((run) => run.id !== lastRun.id)]
     : project.runs;
-  return (
-    '<div class="page plans-page"><header class="plans-heading"><h1>AI执行计划</h1><p>手动编排接口步骤，执行后查看报告；AI 可通过已授权的 MCP 连接协助操作。</p></header><div class="plan-tabs" aria-label="计划与记录"><button data-plan-tab="plans" aria-pressed="' +
+  const tabs =
+    '<div class="plan-tabs" aria-label="计划与记录"><button data-plan-tab="plans" aria-pressed="' +
     (tab === "plans") +
     '" class="' +
     (tab === "plans" ? "primary" : "") +
@@ -24,28 +24,40 @@ export function renderPlans({ project, planId, lastRun, busy, tab = "plans" }) {
     (tab === "runs") +
     '" class="' +
     (tab === "runs" ? "primary" : "") +
-    '">执行记录</button></div><p id="mcp-plan-status" class="subtle"></p>' +
-    '<div class="plan-layout"><aside class="plan-list"><div class="row"><strong class="grow">执行计划</strong><button id="new-plan" class="primary">新建计划</button></div>' +
-    project.plans
-      .map(
-        (item) =>
-          '<button data-plan="' +
-          item.id +
-          '" class="' +
-          (item.id === planId ? "active" : "") +
-          '">' +
-          esc(item.name) +
-          "</button>",
-      )
-      .join("") +
-    (project.plans.length
-      ? ""
-      : '<p class="plan-list-empty">暂无执行计划</p>') +
-    '</aside><section class="plan-main">' +
+    '">执行记录</button></div>';
+  return (
+    '<div class="page plans-page"><header class="plans-heading"><h1>AI执行计划</h1><p>手动编排接口步骤，执行后查看报告；AI 可通过已授权的 MCP 连接协助操作。</p></header>' +
     (tab === "runs"
-      ? '<div class="row"><button id="refresh-plan-history">刷新执行记录</button><span id="plan-history-refresh-status" role="status" class="subtle">只读刷新已保存记录，不运行计划或保存草稿。</span></div><div id="plan-run-records">' +
-        renderRuns(runs, lastRun) +
-        "</div>"
+      ? '<div class="plan-history-controls">' +
+        tabs +
+        '<div class="plan-history-actions"><button type="button" class="ghost" id="refresh-plan-history" title="只读刷新已保存记录，不运行计划或保存草稿。">刷新执行记录</button><span id="plan-history-refresh-status" role="status" class="subtle"></span></div></div>'
+      : tabs) +
+    '<p id="mcp-plan-status" class="subtle"></p>' +
+    '<div class="plan-layout' +
+    (tab === "runs" ? " plan-history-layout" : "") +
+    '">' +
+    (tab === "runs"
+      ? ""
+      : '<aside class="plan-list"><div class="row"><strong class="grow">执行计划</strong><button id="new-plan" class="primary">新建计划</button></div>' +
+        project.plans
+          .map(
+            (item) =>
+              '<button data-plan="' +
+              item.id +
+              '" class="' +
+              (item.id === planId ? "active" : "") +
+              '">' +
+              esc(item.name) +
+              "</button>",
+          )
+          .join("") +
+        (project.plans.length
+          ? ""
+          : '<p class="plan-list-empty">暂无执行计划</p>') +
+        "</aside>") +
+    '<section class="plan-main">' +
+    (tab === "runs"
+      ? '<div id="plan-run-records">' + renderRuns(runs, lastRun) + "</div>"
       : plan
         ? renderEditor(plan, busy, project.environments)
         : '<div class="plan-selection-empty"><p>请选择或新建一个执行计划</p></div>') +
@@ -192,74 +204,65 @@ function renderPlanStep(step, index, plan) {
     "</section>"
   );
 }
+function historyDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("en-US");
+}
 export function renderRuns(runs, lastRun) {
+  if (!runs.length) return '<p class="plan-history-empty">暂无执行记录</p>';
   return (
-    '<h2>执行记录 <span class="subtle">最近 50 条</span></h2>' +
-    (runs
+    '<p class="plan-history-limit">为避免本地文件过大，执行记录仅保留最近 50 条</p>' +
+    runs
       .map(
         (run) =>
           '<details class="card" data-plan-run-id="' +
           esc(run.id) +
           '" ' +
           (run.id === lastRun?.id ? "open" : "") +
-          '><summary><span class="' +
-          (run.status === "passed" ? "success" : "failed") +
+          '><summary><span class="plan-run-source">' +
+          (run.source === "manual" || (!run.source && run === lastRun)
+            ? "人工"
+            : run.source === "mcp"
+              ? "AI"
+              : run.source === "cli"
+                ? "CLI"
+                : "来源未知") +
+          '</span><span class="plan-run-title">业务流程执行 · ' +
+          esc(run.planName) +
+          '</span><time class="plan-run-time subtle">' +
+          esc(historyDate(run.createdAt)) +
+          '</time><span class="plan-run-verdict ' +
+          (run.status === "passed"
+            ? "success"
+            : run.status === "failed"
+              ? "failed"
+              : "subtle") +
           '">' +
           (run.status === "passed"
-            ? "✓ 通过"
+            ? "通过"
             : run.status === "cancelled"
-              ? "■ 已取消"
+              ? "已取消"
               : run.status === "failed"
-                ? "× 失败"
-                : "? 结果待核对") +
-          "</span> " +
-          esc(run.planName) +
-          ' <span class="subtle">' +
-          esc(run.createdAt) +
-          " · " +
-          run.results.length +
-          ' 步</span></summary><p class="subtle">快照 SHA256: ' +
+                ? "失败"
+                : "结果待核对") +
+          '</span></summary><div class="plan-run-body">' +
+          run.results.map(renderRunStep).join("") +
+          '<div class="plan-run-evidence-footer"><p class="subtle plan-run-hash">快照 SHA256: ' +
           esc(run.planHash) +
-          "</p>" +
-          run.results
-            .map(
-              (step, index) =>
-                '<details class="card run-step" data-run-step="' +
-                index +
-                '" ' +
-                (step.status === "failed" ? "open" : "") +
-                "><summary>" +
-                (index + 1) +
-                '. <span class="' +
-                (step.status === "passed" ? "success" : "failed") +
-                '">' +
-                esc(step.status) +
-                "</span> " +
-                esc(step.name) +
-                " · " +
-                (step.response?.status || "") +
-                " " +
-                (step.response?.duration || 0) +
-                "ms</summary>" +
-                renderStepEvidence(step) +
-                "</details>",
-            )
-            .join("") +
-          '<button data-export-run="' +
+          '</p><button data-export-run="' +
           esc(run.id) +
-          '">导出证据 JSON</button></details>',
+          '">导出证据 JSON</button></div></div></details>',
       )
-      .join("") || '<div class="empty"><p>计划运行后会保留逐步证据。</p></div>')
+      .join("")
   );
 }
 
-function evidenceBlock(label, value, open = false) {
+function evidenceBlock(label, value) {
   return (
     '<details class="step-evidence" data-evidence="' +
     esc(label) +
-    '" ' +
-    (open ? "open" : "") +
-    "><summary>" +
+    '"><summary>' +
     esc(label) +
     "</summary><pre>" +
     esc(
@@ -268,6 +271,56 @@ function evidenceBlock(label, value, open = false) {
         : JSON.stringify(value ?? null, null, 2),
     ) +
     "</pre></details>"
+  );
+}
+function renderRunStep(step, index) {
+  const failures = (step.assertions || []).filter(
+    (assertion) => assertionState(assertion) === "failed",
+  );
+  const failure = failures[0];
+  const compactMismatch =
+    step.status === "failed" &&
+    !!step.response &&
+    !step.error &&
+    failures.length === 1 &&
+    failure.target === "status" &&
+    failure.op === "eq" &&
+    Number.isInteger(failure.actual) &&
+    Number.isInteger(failure.value) &&
+    failure.actual === step.response.status &&
+    failure.actual !== failure.value;
+  return (
+    '<details class="card run-step" data-run-step="' +
+    index +
+    '" ' +
+    (step.status === "failed" && !compactMismatch ? "open" : "") +
+    "><summary>" +
+    (index + 1) +
+    '. <span class="' +
+    (step.status === "passed" ? "success" : "failed") +
+    '">' +
+    esc(step.status) +
+    "</span> <strong>" +
+    esc(step.name) +
+    '</strong> <span class="subtle">' +
+    esc(step.response?.request?.method || step.request?.method) +
+    " " +
+    esc(step.response?.request?.url || step.request?.url) +
+    "</span> · " +
+    (step.response?.status || "") +
+    " " +
+    (step.response?.duration || 0) +
+    "ms" +
+    (compactMismatch
+      ? '<span class="plan-step-status-mismatch failed">接口返回状态码 ' +
+        failure.actual +
+        "，期望 " +
+        failure.value +
+        "</span>"
+      : "") +
+    "</summary>" +
+    renderStepEvidence(step) +
+    "</details>"
   );
 }
 function renderStepEvidence(step) {
@@ -316,11 +369,7 @@ function renderStepEvidence(step) {
       step.requestUnresolved ? "请求配置（未发送）" : "请求",
       step.request,
     ) +
-    evidenceBlock(
-      "响应",
-      step.response || "未收到响应",
-      step.status === "failed" && !!step.response,
-    ) +
+    evidenceBlock("响应", step.response || "未收到响应") +
     evidenceBlock("脚本与操作日志", step.logs || []) +
     (step.subrequests?.length
       ? evidenceBlock("脚本HTTP子请求", step.subrequests)

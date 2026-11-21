@@ -125,9 +125,9 @@ export async function exercisePlanHistoryRefreshUI(browserContext) {
       await refresh();
       const exportButton = page.locator(`[data-export-run="${run.id}"]`);
       const card = page.locator("details.card").filter({ has: exportButton });
-      assert.match(
-        await card.locator(":scope > summary").innerText(),
-        failed ? /× 失败/ : /✓ 通过/,
+      assert.equal(
+        await card.locator(":scope > summary .plan-run-verdict").innerText(),
+        failed ? "失败" : "通过",
       );
       await card.locator(":scope > summary").click();
       await card

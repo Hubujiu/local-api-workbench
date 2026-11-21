@@ -877,7 +877,7 @@ try {
   await page.locator('[data-plan="' + conflictPlanId + '"]').click();
   await page.locator('[data-step-edit="0"]').waitFor();
   uploadedMultipart = null;
-  await Promise.all([
+  const [uploadPlanResponse] = await Promise.all([
     page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname ===
@@ -887,7 +887,14 @@ try {
     ),
     page.getByRole("button", { name: "执行计划", exact: true }).last().click(),
   ]);
-  await page.getByText("✓ 通过", { exact: false }).waitFor();
+  const uploadRun = await uploadPlanResponse.json();
+  assert.equal(uploadRun.status, "passed");
+  await page
+    .locator(
+      `[data-plan-run-id="${uploadRun.id}"] > summary .plan-run-verdict.success`,
+    )
+    .getByText("通过", { exact: true })
+    .waitFor();
   assert(
     uploadedMultipart,
     "the explicit post-reconciliation run must reach the real upload fixture",
@@ -956,9 +963,10 @@ try {
   const stepBodyDynamicResult = await (await bodyDynamicRun).json();
   assert.equal(stepBodyDynamicResult.status, "passed");
   await page
-    .locator("details.card[open] > summary")
-    .filter({ hasText: stepBodyDynamicResult.createdAt })
-    .getByText("✓ 通过", { exact: true })
+    .locator(
+      `[data-plan-run-id="${stepBodyDynamicResult.id}"][open] > summary .plan-run-verdict.success`,
+    )
+    .getByText("通过", { exact: true })
     .waitFor();
   assert.deepEqual(JSON.parse(uploadedMultipart.body.toString()), {
     value: rawDynamicValue,
