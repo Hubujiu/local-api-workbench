@@ -2688,6 +2688,7 @@ input[data-select-case] {
   }
 }
 
+/* HTTP design scope: begin */
 .http-design-page {
   padding: 16px;
 }
@@ -2891,6 +2892,7 @@ input[data-select-case] {
 .http-design-page .design-schema-depth-16 {
   padding-left: 332px;
 }
+/* HTTP design scope: end */
 
 .editor[data-editor-mode="cases"] > .urlbar {
   display: none;
