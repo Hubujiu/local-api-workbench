@@ -1,3 +1,4 @@
+import { exerciseHTTPResponseTabs } from "./helpers/http-response-tabs-ui.mjs";
 import { exerciseRequestParameterTabs } from "./helpers/http-request-parameter-tabs-ui.mjs";
 import { exerciseHTTPRequestActions } from "./helpers/http-request-actions-ui.mjs";
 import { captureHTTPWorkbenchBaseline } from "./helpers/http-workbench-visual-baseline.mjs";
@@ -437,6 +438,7 @@ try {
   await page.getByRole("button", { name: "发 送", exact: true }).waitFor();
   await exerciseHTTPRequestActions(page);
   await exerciseRequestParameterTabs(page);
+  await exerciseHTTPResponseTabs(page);
   await page.screenshot({ path: "/tmp/local-api-initial.png" });
   const commonHeaderParameters = page.getByRole("button", {
     name: "公共参数（Header）",

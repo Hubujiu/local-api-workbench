@@ -1,4 +1,9 @@
 import {
+  httpResponseTabs,
+  readResponseTabsPosition,
+  restoreResponseTabsPosition,
+} from "./http-response-tabs.js";
+import {
   requestParameterTabs,
   revealParameterTab,
 } from "./http-request-parameter-tabs.js";
@@ -1437,6 +1442,10 @@ function render(preserveEditingFocus = false) {
   syncSocketIOWorkbench();
   syncGrpcStreamWorkbench();
   const active = document.activeElement;
+  const responseTabsPosition = readResponseTabsPosition(
+    $(".response-tabs"),
+    active,
+  );
   const parameterStrip = $(".param-tabs");
   const oldParameterScroll = parameterStrip?.scrollLeft || 0;
   const oldParameterFocus =
@@ -1528,6 +1537,7 @@ function render(preserveEditingFocus = false) {
         inline: "nearest",
       });
   }
+  restoreResponseTabsPosition($(".response-tabs"), responseTabsPosition);
   const nextParameterStrip = $(".param-tabs");
   if (nextParameterStrip) {
     nextParameterStrip.scrollLeft = oldParameterScroll;
@@ -1585,28 +1595,7 @@ function editor(r) {
       "",
     )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button>${requestCurlAction(mode === "debug")}<button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : httpRequestActions({ debug: mode === "debug", busy, cancel: busy && mode !== "cases" && !caseCancellationOwner(), dirty })}</div>${
     mode === "debug"
-      ? `${requestParameterTabs(r, param)}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
-          ["body", "实时响应"],
-          ["headers", "响应头"],
-          ["cookies", "Cookie"],
-          ["examples", "响应示例"],
-          ["request", "实际请求"],
-          ["logs", "控制台"],
-          ["visualization", "可视化"],
-          ["scriptResponse", "脚本视图"],
-          ["assertions", "断言结果"],
-          ["extracted", "提取变量"],
-          ...(response?.subrequests?.length
-            ? [["subrequests", "脚本子请求"]]
-            : []),
-        ]
-          .map(
-            ([key, label]) =>
-              `<button data-response="${key}" class="${responseTab === key ? "active" : ""}">${label}</button>`,
-          )
-          .join(
-            "",
-          )}</div><div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div></div>`
+      ? `${requestParameterTabs(r, param)}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length)}<div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div></div>`
       : modePanel(r)
   }</section>`;
 }

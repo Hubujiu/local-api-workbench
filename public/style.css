@@ -4040,3 +4040,66 @@ body:not(.dark) .plans-heading {
 .param-tabs :is([data-param="before"], [data-param="after"]) {
   --param-tab-width: 87px;
 }
+
+.editor[data-editor-mode="debug"] > .response .response-tabs {
+  gap: 10px;
+  align-items: stretch;
+  overflow: auto hidden;
+  scrollbar-width: thin;
+}
+.editor[data-editor-mode="debug"] > .response .response-tabs button {
+  min-width: var(--response-tab-width, 56px);
+  padding: 0 5px 0 8px;
+  text-align: left;
+}
+.editor[data-editor-mode="debug"] > .response .response-tabs button.active {
+  border-bottom: 0;
+  box-shadow: inset 0 -2px var(--accent);
+}
+.editor[data-editor-mode="debug"]
+  > .response
+  .response-tabs
+  button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+}
+.response-tabs [data-response="body"],
+.response-tabs :is([data-response="examples"], [data-response="request"]) {
+  --response-tab-width: 70px;
+}
+.response-tabs [data-response="headers"] {
+  --response-tab-width: 58px;
+}
+.response-tabs [data-response="cookies"] {
+  --response-tab-width: 57px;
+}
+.editor[data-editor-mode="debug"] > .response .metrics:empty {
+  display: none;
+}
+.editor[data-editor-mode="debug"]:not(.split-layout)
+  > .response:has(.metrics:empty) {
+  box-shadow: 0 -1px var(--line);
+}
+.editor[data-editor-mode="debug"]:not(.split-layout)
+  > .response
+  > .response-top:has(> .metrics:empty) {
+  min-height: 43px;
+  border-bottom: 0;
+  background: linear-gradient(to top, var(--line) 1px, transparent 1px);
+}
+.editor[data-editor-mode="debug"]
+  > .response
+  .response-top:has(> .metrics:empty)
+  .response-tabs {
+  min-height: 43px;
+}
+.editor[data-editor-mode="debug"].split-layout > .response .response-tabs {
+  min-height: 40px;
+}
+@media (max-width: 999px) {
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    > .response
+    .response-tabs {
+    min-height: 40px;
+  }
+}
