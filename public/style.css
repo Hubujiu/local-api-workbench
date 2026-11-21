@@ -2219,3 +2219,92 @@ input[data-select-case] {
 #mcp-db-list code {
   overflow-wrap: anywhere;
 }
+
+@media (min-width: 1000px) {
+  .shell:has(.editor) > .sidebar {
+    width: 263px;
+  }
+  .workspace:has(.editor) > .tabs {
+    height: 38px;
+  }
+  .editor:not(.split-layout) > .subnav {
+    height: 44px;
+    flex: 0 0 44px;
+    padding: 12px 0 0;
+    border-bottom: 0;
+    overflow-x: auto;
+  }
+  .editor:not(.split-layout) > .subnav > button {
+    flex-shrink: 0;
+  }
+  .editor:not(.split-layout) > .urlbar {
+    height: 40px;
+    flex: 0 0 40px;
+    margin: 12px 0 0;
+  }
+  .editor:not(.split-layout) > .param-tabs {
+    height: 43px;
+    align-items: stretch;
+    gap: 24px;
+  }
+  .editor:not(.split-layout) > .body-panel:not(.body-expanded) {
+    height: 274px;
+    min-height: 274px;
+    flex: 0 0 274px;
+    padding: 14px 0 12px;
+  }
+  .editor:not(.split-layout) > .body-panel:not(.body-expanded) .body-types {
+    height: 30px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 16px;
+  }
+  .editor:not(.split-layout) > .body-panel:not(.body-expanded) .body-actions {
+    height: 42px;
+    border-radius: 4px 4px 0 0;
+  }
+  .editor:not(.split-layout) > .body-panel:not(.body-expanded) .code-editor {
+    border-radius: 0 0 0 4px;
+  }
+  .editor:not(.split-layout) > .body-panel:not(.body-expanded) #code-gutter {
+    width: 62px;
+    background: var(--bg);
+  }
+  .editor:not(.split-layout) > .body-panel:not(.body-expanded) #code-highlight {
+    left: 62px;
+  }
+  .editor:not(.split-layout) > .body-panel:not(.body-expanded) .code {
+    left: 62px;
+    width: calc(100% - 62px);
+  }
+  .editor:not(.split-layout) > .response > .response-top {
+    min-height: 45px;
+  }
+  .editor:not(.split-layout) > .response .response-tabs {
+    min-height: 44px;
+  }
+  .editor:not(.split-layout) > .urlbar > #send,
+  .editor:not(.split-layout) > .urlbar > #save {
+    min-width: 70px;
+  }
+  .editor:not(.split-layout) > .urlbar > .button-menu {
+    margin-left: -8px;
+  }
+  .editor:not(.split-layout)
+    > .body-panel:not(.body-expanded)
+    .body-actions
+    .grow {
+    flex: 1;
+  }
+  .editor:not(.split-layout) > .body-panel:not(.body-expanded) #code-gutter,
+  .editor:not(.split-layout) > .body-panel:not(.body-expanded) #code-highlight,
+  .editor:not(.split-layout) > .body-panel:not(.body-expanded) .code {
+    font:
+      12px/16px Consolas,
+      monospace;
+    padding: 0;
+  }
+  .editor:not(.split-layout) > .body-panel:not(.body-expanded) #code-gutter {
+    padding-right: 24px;
+  }
+}

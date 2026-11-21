@@ -1,3 +1,4 @@
+import { captureHTTPWorkbenchBaseline } from "./helpers/http-workbench-visual-baseline.mjs";
 import { exerciseMCPDatabaseUI } from "./helpers/mcp-database-ui.mjs";
 import { exercisePlanHistoryRefreshUI } from "./helpers/plan-history-refresh-ui.mjs";
 import { exerciseAgentRegisterLoginUI } from "./helpers/agent-register-login-ui.mjs";
@@ -533,11 +534,14 @@ try {
     responseTabsBox.y >= 490 && responseTabsBox.y <= 525,
     "response separator stays near official reference",
   );
-  assert.equal(
+  assert.deepEqual(
     await page
-      .locator("#body-code")
-      .evaluate((el) => getComputedStyle(el).lineHeight),
-    "18px",
+      .locator("#body-code, #code-highlight, #code-gutter")
+      .evaluateAll((nodes) =>
+        nodes.map((el) => getComputedStyle(el).lineHeight),
+      ),
+    ["16px", "16px", "16px"],
+    "request text, syntax highlight and gutter share the native 16px row pitch",
   );
   assert(await page.locator(".empty-symbol svg").isVisible());
   const searchFieldBox = await page.locator("#search").boundingBox();
@@ -596,6 +600,7 @@ try {
   await page.locator('[data-param="body"]').click();
 
   await page.screenshot({ path: "/tmp/local-api-reference-light.png" });
+  await captureHTTPWorkbenchBaseline(page);
   await page.locator("#compact-ui").click();
   assert.equal(await page.locator(".sidebar").isVisible(), false);
   await page.locator("#response-layout").click();
