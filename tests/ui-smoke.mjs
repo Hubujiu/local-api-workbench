@@ -1597,9 +1597,7 @@ try {
     .count();
   for (const [offset, value] of [" first  value ", " second "].entries()) {
     await page.locator('[data-add-pair="headers"]').click();
-    await page
-      .locator(`[data-pair="headers:${awsHeaderStart + offset}:key"]`)
-      .fill("X-AWS-Repeat");
+    await page.locator('[data-debug-pair-name="headers"]').fill("X-AWS-Repeat");
     await page
       .locator(`[data-pair="headers:${awsHeaderStart + offset}:value"]`)
       .fill(value);
@@ -1744,7 +1742,7 @@ try {
   for (const [offset, value] of ["first", "second"].entries()) {
     await page.locator('[data-add-pair="headers"]').click();
     await page
-      .locator(`[data-pair="headers:${hawkHeaderStart + offset}:key"]`)
+      .locator('[data-debug-pair-name="headers"]')
       .fill("X-Hawk-Repeat");
     await page
       .locator(`[data-pair="headers:${hawkHeaderStart + offset}:value"]`)
@@ -2518,8 +2516,7 @@ try {
 
   await page.locator('[data-page="apis"]').click();
   await page.locator('[data-param="query"]').click();
-  await page.locator('[data-add-pair="query"]').click();
-  await page.locator('[data-dictionary-pair="query:0"]').click();
+  await page.locator('[data-debug-pair-dictionary="query"]').click();
   await page.locator("#dialog-save").click();
   assert.equal(
     await page.locator('[data-pair="query:0:key"]').inputValue(),
@@ -5754,7 +5751,7 @@ try {
   await page.locator("#url").fill(fixtureURL + "/script-form-body");
   await page.locator('[data-param="query"]').click();
   await page.locator('[data-add-pair="query"]').click();
-  await page.locator('[data-pair="query:0:key"]').fill("flag");
+  await page.locator('[data-debug-pair-name="query"]').fill("flag");
   await page.locator("#query-add-equal").uncheck();
   await saveAndWait();
   const flagRequestId = await page
@@ -5990,7 +5987,7 @@ try {
     .fill(fixtureURL + "/sdk-url/{id}?raw=%2f+&x=1&x=2");
   await page.locator('[data-param="query"]').click();
   await page.locator('[data-add-pair="query"]').click();
-  await page.locator('[data-pair="query:0:key"]').fill("table");
+  await page.locator('[data-debug-pair-name="query"]').fill("table");
   await page.locator('[data-pair="query:0:value"]').fill("a+b");
   await page.locator('[data-param="before"]').click();
   page.once("dialog", (dialog) => dialog.dismiss());
@@ -6164,7 +6161,7 @@ try {
   await page.locator("#url").fill(fixtureURL + "/items?q=one+two&empty=");
   await page.locator('[data-param="query"]').click();
   await page.locator('[data-add-pair="query"]').click();
-  await page.locator('[data-pair="query:0:key"]').fill("table");
+  await page.locator('[data-debug-pair-name="query"]').fill("table");
   await page.locator('[data-pair="query:0:value"]').fill("a+b");
   await saveAndWait();
   await page.locator("#export").click();
