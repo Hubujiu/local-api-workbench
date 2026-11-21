@@ -150,6 +150,14 @@ function examplesPreview(definition, media, examples, managed) {
   }</div>`;
 }
 
+function responseSettings(definition, mediaTypes, examples) {
+  const delays = examples.filter(
+    (ex) => String(ex?.status) === String(definition?.status),
+  );
+  const format = mediaTypes.length ? mediaTypes.join(" · ") : "未定义";
+  return `<div class="design-response-settings"><div><span>响应说明</span><output>${esc(definition?.description || "未填写")}</output></div><div><span>HTTP 状态</span><output>${esc(definition?.status || "未定义")}</output></div><div><span>内容格式</span><output>${esc(format)}</output></div><div><span>示例延迟</span><output>${delays.length ? esc(delays.map((ex) => (ex.name || "未命名") + "：" + (ex.delayMs == null ? "未单独设置" : ex.delayMs + " ms")).join(" · ")) : "尚无响应示例"}</output></div></div><div class="design-response-settings-actions"><button type="button" id="edit-design-response-settings">编辑响应定义</button><span class="muted">格式在 Body 中编辑；延迟属于各个 Mock 示例，不是 OpenAPI 响应定义。</span></div>`;
+}
+
 export function designResponsePanel(
   definitions,
   selection,
@@ -179,6 +187,7 @@ export function designResponsePanel(
       : `<div class="design-response-views" role="group" aria-label="响应定义视图">${[
           ["body", "Body"],
           ["headers", "Header"],
+          ["settings", "期望设置"],
         ]
           .map(
             ([key, label]) =>
@@ -187,17 +196,19 @@ export function designResponsePanel(
           .join("")}</div>${
           selection?.view === "headers"
             ? headerPreview(definition)
-            : `<div class="design-response-tools"><div class="design-response-body-views" role="group" aria-label="Body 视图">${[
-                ["schema", "数据结构"],
-                ["examples", "示例"],
-              ]
-                .map(
-                  ([key, label]) =>
-                    `<button type="button" class="ghost" id="design-body-view-${key}" data-response-body-view="${key}" aria-pressed="${(selection?.bodyView || "schema") === key}">${label}</button>`,
-                )
-                .join(
-                  "",
-                )}</div>${mediaTypes.length > 1 ? `<label>Content-Type <select id="design-response-media" aria-label="响应 Content-Type">${mediaTypes.map((key) => `<option value="${esc(key)}" ${key === media ? "selected" : ""}>${esc(key)}</option>`).join("")}</select></label>` : media ? `<small>${esc(media)}</small>` : ""}${selection?.bodyView === "examples" ? "" : edit}</div>${selection?.bodyView === "examples" ? examplesPreview(definition, media, examples, bindingNotice) : schemaPreview(definition?.content?.[media]?.schema)}`
+            : selection?.view === "settings"
+              ? responseSettings(definition, mediaTypes, examples)
+              : `<div class="design-response-tools"><div class="design-response-body-views" role="group" aria-label="Body 视图">${[
+                  ["schema", "数据结构"],
+                  ["examples", "示例"],
+                ]
+                  .map(
+                    ([key, label]) =>
+                      `<button type="button" class="ghost" id="design-body-view-${key}" data-response-body-view="${key}" aria-pressed="${(selection?.bodyView || "schema") === key}">${label}</button>`,
+                  )
+                  .join(
+                    "",
+                  )}</div>${mediaTypes.length > 1 ? `<label>Content-Type <select id="design-response-media" aria-label="响应 Content-Type">${mediaTypes.map((key) => `<option value="${esc(key)}" ${key === media ? "selected" : ""}>${esc(key)}</option>`).join("")}</select></label>` : media ? `<small>${esc(media)}</small>` : ""}${selection?.bodyView === "examples" ? "" : edit}</div>${selection?.bodyView === "examples" ? examplesPreview(definition, media, examples, bindingNotice) : schemaPreview(definition?.content?.[media]?.schema)}`
         }`
   }</div>${raw}</div>`;
 }

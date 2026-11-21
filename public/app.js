@@ -126,6 +126,7 @@ import {
   schemaEditor,
   bindSchemaEditor,
   editRequestResponseDefinition,
+  editRequestResponseSettings,
 } from "./schema-editor.js";
 import { httpAuthPane } from "./auth-view.js";
 import { renderMarkdown } from "./vendor/markdown-renderer.js";
@@ -2489,6 +2490,38 @@ function bind() {
   on("[data-response-header]", "click", (_, e) =>
     editResponseHeader(e.dataset.responseHeader),
   );
+  on("#edit-design-response-settings", "click", () => {
+    const r = request();
+    collect();
+    const key = designResponseKey(r);
+    const selection = designResponseSelections.get(key);
+    const { definition, index } = responseSelection(r.responses, selection);
+    if (!definition) throw Error("请先选择响应");
+    const top = $(".http-design-canvas").scrollTop;
+    modal(
+      "编辑响应定义设置",
+      `<div class="design-response-header-fields"><label>HTTP 状态<input id="design-settings-status" value="${esc(definition.status)}" placeholder="200 / 4XX / default"></label><label>响应说明<textarea id="design-settings-description" maxlength="8192" rows="4">${esc(definition.description || "")}</textarea></label><p class="muted">更改状态会更新绑定的 OpenAPI 示例。独立 Mock 示例保留原有状态，可在原示例编辑器中调整。</p></div>`,
+      () => {
+        if (request() !== r || r.responses[index] !== definition)
+          throw Error("响应草稿已变化，请重新打开");
+        Object.assign(
+          r,
+          editRequestResponseSettings(r, index, {
+            status: $("#design-settings-status").value,
+            description: $("#design-settings-description").value,
+          }),
+        );
+        designResponseSelections.set(key, {
+          ...selection,
+          status: String(r.responses[index].status),
+        });
+        mark();
+        render();
+        $(".http-design-canvas").scrollTop = top;
+        $("#edit-design-response-settings")?.focus();
+      },
+    );
+  });
   on("#new-response-schema", "click", () => editResponseSchema());
   on("[data-response-schema]", "click", (_, element) =>
     editResponseSchema(...JSON.parse(element.dataset.responseSchema)),

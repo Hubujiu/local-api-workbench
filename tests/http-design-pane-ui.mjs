@@ -165,6 +165,16 @@ try {
     name: "数据结构",
     exact: true,
   });
+  const settingsView = responseRegion.getByRole("button", {
+    name: "期望设置",
+    exact: true,
+  });
+  const editSettings = responseRegion.getByRole("button", {
+    name: "编辑响应定义",
+    exact: true,
+  });
+  const settingsStatus = page.locator("#design-settings-status");
+  const settingsDescription = page.locator("#design-settings-description");
   const responseScreenshots = process.env.DESIGN_RESPONSE_SCREENSHOTS;
   if (responseScreenshots) {
     await tab("Query").click();
@@ -193,6 +203,22 @@ try {
       animations: "disabled",
     });
     await schemaView.click();
+    await responseTab(/200/).click();
+    await settingsView.click();
+    for (const [status, key] of [
+      [/200/, "200-settings"],
+      [/404/, "404-settings"],
+    ]) {
+      await responseTab(status).click();
+      await page.mouse.move(1000, 282);
+      await page.screenshot({
+        path:
+          responseScreenshots + "/candidate-design-response-" + key + ".png",
+        clip: { x: 0, y: 0, width: 1363, height: 980 },
+        caret: "hide",
+        animations: "disabled",
+      });
+    }
     await responseTab(/200/).click();
     await headerView.click();
     await page.mouse.move(1000, 282);
@@ -479,6 +505,32 @@ try {
   await sameMedia.selectOption("application/json");
   await exampleButton.waitFor();
   await schemaView.click();
+  await settingsView.click();
+  await responseRegion
+    .getByText("Missing JSON：0 ms", { exact: true })
+    .waitFor();
+  const settingsBefore = JSON.parse(await rawResponses.inputValue());
+  await editSettings.click();
+  await settingsDescription.fill("未提交");
+  await page.locator("#dialog").press("Escape");
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert.deepEqual(JSON.parse(await rawResponses.inputValue()), settingsBefore);
+  await editSettings.click();
+  await settingsStatus.fill("200");
+  await page.locator("#dialog-save").click();
+  await page
+    .getByText("此响应状态已存在，请编辑已有响应", { exact: true })
+    .waitFor();
+  assert.deepEqual(JSON.parse(await rawResponses.inputValue()), settingsBefore);
+  await settingsStatus.fill("404");
+  await settingsDescription.fill("保留响应结构");
+  await page.locator("#dialog-save").click();
+  await responseTab(/保留响应结构.*404/).waitFor();
+  assert.deepEqual(JSON.parse(await rawResponses.inputValue())[1], {
+    ...settingsBefore[1],
+    description: "保留响应结构",
+  });
+  await bodyView.click();
   const responseAfterHeader = await rawResponses.inputValue();
   assert.deepEqual(put, []);
   const media = responseRegion.getByRole("combobox", {
@@ -622,6 +674,13 @@ try {
   );
   assert.equal(await profiledButton.count(), 0);
   assert.deepEqual(put, ["PUT"]);
+  await settingsView.click();
+  await editSettings.click();
+  await settingsStatus.fill("410");
+  await settingsDescription.fill("Profiled migrated");
+  await page.locator("#dialog-save").click();
+  await responseTab(/Profiled migrated.*410/).waitFor();
+  assert.deepEqual(put, ["PUT"]);
   await page.locator("#save").click();
   await page
     .locator("#saved-state")
@@ -639,8 +698,9 @@ try {
     ...stored,
     requests: stored.requests.filter((item) => item.id === profileRequest.id),
   });
-  const representations =
-    exported.paths["/profiles"].get.responses["404"].content;
+  const exportedStatuses = exported.paths["/profiles"].get.responses;
+  assert.equal(Object.hasOwn(exportedStatuses, "404"), false);
+  const representations = exportedStatuses["410"].content;
   assert.deepEqual(representations[generic].examples.generic.value, {
     profile: false,
   });
