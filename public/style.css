@@ -2309,6 +2309,25 @@ input[data-select-case] {
   }
 }
 
+.header-common-parameters {
+  display: flex;
+  align-items: flex-start;
+  min-height: 32px;
+}
+.header-common-parameters button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+  min-height: 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.header-common-parameters svg {
+  width: 13px;
+  height: 13px;
+}
+
 .request-pairs-panel .pair-actions {
   margin-bottom: 12px;
 }

@@ -1560,6 +1560,9 @@ function pairs(rows, key) {
 function paramPanel(r) {
   if (["headers", "query", "path", "cookies"].includes(param))
     return (
+      (param === "headers"
+        ? `<div class="header-common-parameters"><button type="button" class="ghost" data-page="settings" data-settings-target="settings-global-parameters" title="管理项目及目录公共请求参数">${lineIcon("⚙")}公共参数（Header）</button></div>`
+        : "") +
       pairs(r[param], param) +
       (param === "cookies"
         ? `<div class="cookie-toolbar"><div class="cookie-manager-row"><button id="cookie-manager">Cookie管理器</button><span class="muted">按项目与环境隔离，默认关闭</span></div><label class="cookie-encoding-field">参数表 Cookie 编码<select id="cookie-encoding">${[
