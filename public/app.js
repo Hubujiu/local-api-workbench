@@ -5,6 +5,8 @@ import {
 import {
   debugPairComposer,
   debugPairFromKey,
+  debugQueryEquality,
+  debugQueryEqualityLabel,
   ownsDebugPairComposer,
 } from "./debug-pair-composer.js";
 import {
@@ -1608,18 +1610,27 @@ function editor(r) {
       : modePanel(r)
   }</section>`;
 }
-function pairs(rows, key, designOptions, debugComposer = false) {
-  if (debugComposer && !rows.length)
-    return `<table class="pairs-table request-pairs-table debug-pairs-table debug-pairs-empty"><colgroup><col span="3"></colgroup><thead><tr><th scope="col" class="debug-pair-name-heading">参数名</th><th scope="col">参数值</th><th scope="col">描述</th></tr></thead><tbody>${debugPairComposer(key, true)}</tbody></table>`;
+function pairs(rows, key, designOptions, debugOptions) {
+  const debugComposer = Boolean(debugOptions);
   const design = Boolean(designOptions);
   const metadataColumn = ["headers", "query", "path", "cookies"].includes(key);
   const queryEquality =
-    design && key === "query"
-      ? `<label class="design-query-equality" title="空值 Query 参数添加等号（仅参数表）"><input id="query-add-equal" type="checkbox" ${designOptions.queryAddEqual !== false ? "checked" : ""} aria-label="空值 Query 参数添加等号"><span aria-hidden="true">=</span></label>`
-      : "";
+    key !== "query"
+      ? ""
+      : debugComposer
+        ? debugQueryEquality(debugOptions.queryAddEqual)
+        : design
+          ? `<label class="design-query-equality" title="空值 Query 参数添加等号（仅参数表）"><input id="query-add-equal" type="checkbox" ${designOptions.queryAddEqual !== false ? "checked" : ""} aria-label="空值 Query 参数添加等号"><span aria-hidden="true">=</span></label>`
+          : "";
+  const valueHeading =
+    debugComposer && key === "query"
+      ? `<span class="debug-query-value-heading">${queryEquality}参数值</span>`
+      : queryEquality + "参数值";
+  if (debugComposer && !rows.length)
+    return `<table class="pairs-table request-pairs-table debug-pairs-table debug-pairs-empty"><colgroup><col span="3"></colgroup><thead><tr><th scope="col" class="debug-pair-name-heading">参数名</th><th scope="col">${valueHeading}</th><th scope="col">描述</th></tr></thead><tbody>${debugPairComposer(key, true)}</tbody></table>`;
   const compactEmpty =
     design && (key === "headers" || key === "query") && !rows.length;
-  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}"><thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${queryEquality}参数值</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${compactEmpty ? `<tr><td colspan="4"><button type="button" class="ghost design-empty-pair" data-add-pair="${key}">＋ 添加参数</button></td></tr>` : ""}${rows
+  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}"><thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${compactEmpty ? `<tr><td colspan="4"><button type="button" class="ghost design-empty-pair" data-add-pair="${key}">＋ 添加参数</button></td></tr>` : ""}${rows
     .map((p, i) => {
       const selector =
         key === "form"
@@ -1645,7 +1656,9 @@ function paramPanel(r, param, design = false) {
         r[param],
         param,
         design ? { queryAddEqual: r.queryAddEqual } : null,
-        !design && ownsDebugPairComposer(param, page, mode, param),
+        !design && ownsDebugPairComposer(param, page, mode, param)
+          ? { queryAddEqual: r.queryAddEqual }
+          : null,
       ) +
       (param === "cookies"
         ? `<div class="cookie-toolbar"><div class="cookie-manager-row"><button id="cookie-manager">Cookie管理器</button><span class="muted">按项目与环境隔离，默认关闭</span></div><label class="cookie-encoding-field">参数表 Cookie 编码<select id="cookie-encoding">${[
@@ -1660,9 +1673,7 @@ function paramPanel(r, param, design = false) {
             .join(
               "",
             )}</select></label></div><p class="muted">只作用于参数表，不重写显式 Cookie 请求头或 Cookie 管理器内容。</p>`
-        : param === "query" && !design
-          ? `<label><input id="query-add-equal" type="checkbox" ${r.queryAddEqual !== false ? "checked" : ""}>空值 Query 参数添加等号</label><p class="muted">只控制参数表的空值；URL 内已有查询保持原样。</p>`
-          : "")
+        : "")
     );
   if (param === "body")
     return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" ? "" : `<div class="body-actions"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${bodyExpanded ? "收起编辑器" : "展开编辑器"}</button>`}</div>`}${
@@ -3294,6 +3305,8 @@ function bind() {
   });
   on("#query-add-equal", "change", (_, element) => {
     request().queryAddEqual = element.checked;
+    if (element.closest(".debug-query-equality"))
+      element.title = debugQueryEqualityLabel(element.checked);
     mark();
   });
   on("#inherit-global-parameters", "change", (_, element) => {
