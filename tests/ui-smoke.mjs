@@ -6777,6 +6777,7 @@ try {
     (e) => e.name === "Imported",
   );
   await page.locator("#env").selectOption(nativeEnv.id);
+  await page.locator('[data-mode="debug"]').click();
   const nativeResponse = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
   );
