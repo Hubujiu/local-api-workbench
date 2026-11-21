@@ -3234,6 +3234,72 @@ body:not(.dark) .plans-heading {
   }
 }
 
+.debug-pairs-table {
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+}
+.debug-pairs-empty col {
+  width: 33.333%;
+}
+.debug-pairs-empty .debug-pair-name-heading {
+  padding-inline-start: 43px;
+}
+.debug-pair-compose-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.debug-pair-compose-name button {
+  flex: none;
+}
+.debug-pairs-table th {
+  height: 36px;
+}
+.debug-pairs-table .debug-pair-composer td {
+  height: 36px;
+  padding-block: 2px;
+}
+.debug-pair-composer td:first-child {
+  padding-inline: 2px;
+  text-align: center;
+}
+.debug-pair-composer td:last-child {
+  text-align: end;
+}
+.debug-pair-composer button {
+  min-height: 28px;
+  padding: 2px 5px;
+  color: var(--muted);
+}
+.debug-pair-composer td:first-child button {
+  min-width: 28px;
+}
+.debug-pair-composer input {
+  width: 100%;
+  min-height: 30px;
+  border-color: transparent;
+  background: transparent;
+}
+.debug-pair-composer input:hover,
+.debug-pair-composer input:focus {
+  border-color: var(--line);
+}
+@media (max-width: 760px) {
+  .debug-pairs-table .pair-description-heading,
+  .debug-pairs-table .pair-description {
+    display: table-cell;
+  }
+  .debug-pairs-table .pair-actions-heading {
+    width: 122px;
+  }
+  .debug-pairs-table .pair-row-actions {
+    flex-wrap: wrap;
+  }
+  .debug-pairs-table .pair-row-actions button {
+    min-height: 28px;
+  }
+}
+
 .request-panel:has(> .http-auth-pane) {
   padding-top: 12px;
 }

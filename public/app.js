@@ -3,6 +3,11 @@ import {
   revealParameterTab,
 } from "./http-request-parameter-tabs.js";
 import {
+  debugPairComposer,
+  debugPairFromKey,
+  ownsDebugPairComposer,
+} from "./debug-pair-composer.js";
+import {
   httpRequestActions,
   requestCurlAction,
 } from "./http-request-actions.js";
@@ -1603,7 +1608,9 @@ function editor(r) {
       : modePanel(r)
   }</section>`;
 }
-function pairs(rows, key, designOptions) {
+function pairs(rows, key, designOptions, debugComposer = false) {
+  if (debugComposer && !rows.length)
+    return `<table class="pairs-table request-pairs-table debug-pairs-table debug-pairs-empty"><colgroup><col span="3"></colgroup><thead><tr><th scope="col" class="debug-pair-name-heading">参数名</th><th scope="col">参数值</th><th scope="col">描述</th></tr></thead><tbody>${debugPairComposer(key, true)}</tbody></table>`;
   const design = Boolean(designOptions);
   const metadataColumn = ["headers", "query", "path", "cookies"].includes(key);
   const queryEquality =
@@ -1612,7 +1619,7 @@ function pairs(rows, key, designOptions) {
       : "";
   const compactEmpty =
     design && (key === "headers" || key === "query") && !rows.length;
-  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}"><thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${queryEquality}参数值</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${compactEmpty ? `<tr><td colspan="4"><button type="button" class="ghost design-empty-pair" data-add-pair="${key}">＋ 添加参数</button></td></tr>` : ""}${rows
+  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}"><thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${queryEquality}参数值</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${compactEmpty ? `<tr><td colspan="4"><button type="button" class="ghost design-empty-pair" data-add-pair="${key}">＋ 添加参数</button></td></tr>` : ""}${rows
     .map((p, i) => {
       const selector =
         key === "form"
@@ -1626,7 +1633,7 @@ function pairs(rows, key, designOptions) {
     })
     .join(
       "",
-    )}</tbody></table>${compactEmpty ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
+    )}${debugComposer ? debugPairComposer(key, false) : ""}</tbody></table>${compactEmpty || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
 }
 function paramPanel(r, param, design = false) {
   if (["headers", "query", "path", "cookies"].includes(param))
@@ -1638,6 +1645,7 @@ function paramPanel(r, param, design = false) {
         r[param],
         param,
         design ? { queryAddEqual: r.queryAddEqual } : null,
+        !design && ownsDebugPairComposer(param, page, mode, param),
       ) +
       (param === "cookies"
         ? `<div class="cookie-toolbar"><div class="cookie-manager-row"><button id="cookie-manager">Cookie管理器</button><span class="muted">按项目与环境隔离，默认关闭</span></div><label class="cookie-encoding-field">参数表 Cookie 编码<select id="cookie-encoding">${[
@@ -2751,40 +2759,63 @@ function bind() {
       ],
     ),
   );
-  on("[data-dictionary-pair]", "click", (_, element) => {
-    if (mode === "design") collect();
-    const [kind, index] = element.dataset.dictionaryPair.split(":");
-    modal(
-      "选择字典参数",
-      `<select id="parameter-choice">${effectiveParameterDictionary(project)
-        .map(
-          (entry) =>
-            `<option value="${esc(entry.id)}">${esc(entry.key)} · ${esc(entry.type)} · ${esc(entry.note || entry.description)}</option>`,
-        )
-        .join("")}</select>`,
-      () => {
-        const entry = effectiveParameterDictionary(project).find(
-          (item) => item.id === $("#parameter-choice").value,
-        );
-        if (!entry) throw Error("请先添加字典参数");
-        const value = dictionaryValue(entry);
-        Object.assign(request()[kind][Number(index)], {
-          key: entry.key,
-          value:
-            typeof value === "object" ? JSON.stringify(value) : String(value),
-          description: entry.description,
-          required: entry.required === true,
-          schema: {
-            type: entry.type,
-            ...(entry.enum ? { enum: entry.enum } : {}),
-          },
-        });
-        delete request()[kind][Number(index)].schemaDefined;
-        mark();
-        render();
-      },
-    );
-  });
+  on(
+    "[data-dictionary-pair], [data-debug-pair-dictionary]",
+    "click",
+    (_, element) => {
+      if (mode === "design") collect();
+      const composer = element.dataset.debugPairDictionary;
+      const [kind, index] = composer
+        ? [composer, undefined]
+        : element.dataset.dictionaryPair.split(":");
+      const ownerProject = project;
+      const ownerRequest = request();
+      const ownerRows = ownerRequest[kind];
+      modal(
+        "选择字典参数",
+        `<select id="parameter-choice">${effectiveParameterDictionary(project)
+          .map(
+            (entry) =>
+              `<option value="${esc(entry.id)}">${esc(entry.key)} · ${esc(entry.type)} · ${esc(entry.note || entry.description)}</option>`,
+          )
+          .join("")}</select>`,
+        () => {
+          if (
+            composer &&
+            (project !== ownerProject ||
+              request() !== ownerRequest ||
+              ownerRequest[kind] !== ownerRows ||
+              !ownsDebugPairComposer(kind, page, mode, param))
+          )
+            throw Error("参数草稿已变化，请重新打开字典");
+          const entry = effectiveParameterDictionary(project).find(
+            (item) => item.id === $("#parameter-choice").value,
+          );
+          if (!entry) throw Error("请先添加字典参数");
+          const value = dictionaryValue(entry);
+          const row = composer
+            ? debugPairFromKey(entry.key)
+            : request()[kind][Number(index)];
+          if (!row) throw Error("字典参数必须包含名称");
+          Object.assign(row, {
+            key: entry.key,
+            value:
+              typeof value === "object" ? JSON.stringify(value) : String(value),
+            description: entry.description,
+            required: entry.required === true,
+            schema: {
+              type: entry.type,
+              ...(entry.enum ? { enum: entry.enum } : {}),
+            },
+          });
+          delete row.schemaDefined;
+          if (composer) ownerRows.push(row);
+          mark();
+          render();
+        },
+      );
+    },
+  );
   on("#import-parameter-dictionary", "click", () => {
     const context = previewDraftOwner();
     modal(
@@ -3497,9 +3528,40 @@ function bind() {
     request()[k][i].enabled = e.checked;
     mark();
   });
+  const composerProject = project;
+  const composerRequest = request();
+  const commitDebugPair = (event, input) => {
+    const kind = input.dataset.debugPairName;
+    if (
+      event.isComposing ||
+      !input.isConnected ||
+      project !== composerProject ||
+      request() !== composerRequest ||
+      !ownsDebugPairComposer(kind, page, mode, param)
+    )
+      return;
+    const row = debugPairFromKey(input.value);
+    if (!row) return;
+    const rows = composerRequest[kind];
+    const index = rows.length;
+    const { selectionStart, selectionEnd, selectionDirection } = input;
+    rows.push(row);
+    mark();
+    render();
+    const next = $(`[data-pair="${kind}:${index}:key"]`);
+    next?.focus({ preventScroll: true });
+    if (selectionStart !== null && selectionEnd !== null)
+      next?.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+  };
+  on("[data-debug-pair-name]", "input", commitDebugPair);
+  on("[data-debug-pair-name]", "compositionend", commitDebugPair);
   on("[data-add-pair]", "click", (_, e) => {
     if (mode === "design") collect();
     const key = e.dataset.addPair;
+    if (ownsDebugPairComposer(key, page, mode, param)) {
+      $(`[data-debug-pair-name="${key}"]`)?.focus();
+      return;
+    }
     const index = request()[key].length;
     request()[key].push({ key: "", value: "", enabled: true });
     mark();
