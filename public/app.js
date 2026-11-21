@@ -1310,16 +1310,16 @@ function nav() {
   return [
     ["history", "◷", "最近"],
     ["apis", "▤", "APIs"],
-    ["grpc", "↗", "gRPC"],
-    ["socketio", "↗", "Socket.IO"],
     ["docs", "▧", "文档"],
     ["dictionary", "♧", "字典"],
     ["settings", "⚙", "配置"],
     ["git", "⑂", "Git"],
+    ["grpc", "↗", "gRPC"],
+    ["socketio", "↗", "Socket.IO"],
   ]
     .map(
       ([key, icon, title]) =>
-        `<button data-page="${key}" class="${page === key ? "active" : ""}" title="${title}"><span class="icon">${lineIcon(icon)}</span>${title}</button>`,
+        `<button data-page="${key}" class="${page === key ? "active" : ""}" ${page === key ? 'aria-current="page"' : ""} title="${title}"><span class="icon">${lineIcon(icon)}</span>${title}</button>`,
     )
     .join("");
 }
@@ -1435,7 +1435,7 @@ function render(preserveEditingFocus = false) {
       )
       .join(
         "",
-      )}</select><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button><button id="open-location" class="ghost">打开位置</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost ${page === "plans" ? "active" : ""}">执行计划</button><button id="mcp-status" data-page="settings" data-settings-target="settings-mcp" class="offline">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar">${
+      )}</select><button id="open-location" class="ghost">打开位置</button><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost top-plan ${page === "plans" ? "active" : ""}"><span class="icon">${lineIcon("plan-play")}</span>执行计划</button><button id="mcp-status" data-page="settings" data-settings-target="settings-mcp" class="offline" title="打开 MCP 连接设置">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail" aria-label="工作区导航">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}" ${page === "trash" ? 'aria-current="page"' : ""}><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar">${
       page === "settings"
         ? settingsSidebar(settingsSection)
         : `<div class="search"><div class="search-filter"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><select id="tree-type" aria-label="内容类型">${[

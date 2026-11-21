@@ -139,20 +139,39 @@ nav.rail {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 14px 3px;
-  gap: 12px;
+  padding: 8px 1px;
+  gap: 16px;
   flex-shrink: 0;
+  overflow: hidden auto;
+  scrollbar-width: none;
+}
+body:not(.dark) nav.rail {
+  background: #f3ebd8;
 }
 .rail button {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 2px;
   align-items: center;
+  justify-content: center;
+  flex: 0 0 48px;
   border: 0;
+  border-radius: 6px;
   background: none;
-  font-size: 11px;
-  padding: 8px 4px;
-  width: 44px;
+  font-size: 12px;
+  line-height: 16px;
+  padding: 2px;
+  width: 46px;
+}
+.rail button:is([data-page="grpc"], [data-page="socketio"]) {
+  font-size: 10px;
+}
+.rail button .icon svg {
+  width: 18px;
+  height: 18px;
+}
+.rail button:focus-visible {
+  outline-offset: -2px;
 }
 .rail button.active {
   background: var(--hover);
@@ -850,9 +869,6 @@ dialog footer {
   width: 20px;
   height: 20px;
   display: block;
-}
-.rail button {
-  min-height: 52px;
 }
 .empty-symbol {
   font-family: system-ui, sans-serif;
@@ -1624,11 +1640,44 @@ body:not(.dark) .plans-page .plan-history-layout {
 .project-group {
   justify-content: center;
 }
+body:not(.dark) .project-group #open-location {
+  background: var(--hover);
+}
 .top-actions {
   justify-content: flex-end;
 }
 .top-actions .active {
   background: var(--hover);
+}
+.top-actions .top-plan {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.top-actions .top-plan .icon svg {
+  width: 14px;
+  height: 14px;
+}
+@media (min-width: 901px) and (min-height: 700px) {
+  nav.rail {
+    height: calc(100% + 26px);
+  }
+  footer.statusbar {
+    margin-inline-start: 50px;
+  }
+}
+@media (min-width: 1101px) {
+  header.top {
+    padding-inline: 14px;
+  }
+  .top-group {
+    gap: 8px;
+  }
+  .top button,
+  .top select {
+    min-height: 30px;
+    padding-block: 4px;
+  }
 }
 @media (max-width: 1100px) {
   header.top {
