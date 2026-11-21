@@ -1,3 +1,4 @@
+import { isJsonResponseType } from "./response-media.js";
 import { schemaRows } from "./schema-editor.js";
 
 const esc = (value) =>
@@ -125,7 +126,7 @@ export function supportsDesignExamples(definition, media, managed) {
   const content = definition?.content?.[media];
   return (
     /^[1-5][0-9]{2}$/.test(status) &&
-    /^application\/(?:json|[a-z0-9!#$&^_.+*-]+\+json)$/i.test(media || "") &&
+    isJsonResponseType(media) &&
     Boolean(content) &&
     (managed ||
       (!Object.hasOwn(content, "example") &&

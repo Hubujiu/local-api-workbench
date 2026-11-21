@@ -159,3 +159,31 @@ test("Design examples respect status, media, and managed versus raw inline defin
     false,
   );
 });
+
+test("JSON recognition does not flatten parameterized profile identity", () => {
+  const plain = "application/problem+json";
+  const profile =
+    'application/problem+json; profile="https://example.invalid/errors"';
+  const response = { status: "404", content: { [plain]: {}, [profile]: {} } };
+  assert.equal(supportsDesignExamples(response, profile, false), true);
+  assert.equal(
+    supportsDesignExamples(
+      { status: "404", content: { "text/plain; note=json": {} } },
+      "text/plain; note=json",
+      false,
+    ),
+    false,
+  );
+  const examples = [
+    { status: 404, headers: { "content-type": plain } },
+    { status: 404, headers: { "Content-Type": profile } },
+  ];
+  assert.deepEqual(
+    scopedResponseExamples(examples, 404, plain).map((x) => x.index),
+    [0],
+  );
+  assert.deepEqual(
+    scopedResponseExamples(examples, 404, profile).map((x) => x.index),
+    [1],
+  );
+});
