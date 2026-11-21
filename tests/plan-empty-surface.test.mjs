@@ -56,3 +56,26 @@ test("refresh rendering can swap an empty canvas for real records and export", (
   assert.match(html, /data-export-run="one"/);
   assert.doesNotMatch(html, /plan-history-empty/);
 });
+
+test("history with saved plans renders only run records and truthful provenance", () => {
+  const plan = { id: "plan", name: "<plan>", steps: [] };
+  const runs = [
+    {
+      id: "manual",
+      source: "manual",
+      status: "failed",
+      planName: plan.name,
+      results: [],
+    },
+    { id: "legacy", status: "cancelled", planName: plan.name, results: [] },
+  ];
+  const html = renderPlans({
+    project: { ...project, plans: [plan], runs },
+    tab: "runs",
+  });
+  assert.doesNotMatch(html, /id="new-plan"|class="plan-list"/);
+  assert.match(html, /plan-run-source">人工<\/span>/);
+  assert.match(html, /plan-run-source">来源未知<\/span>/);
+  assert.match(html, /plan-run-verdict failed">失败<\/span>/);
+  assert.match(html, /plan-run-verdict subtle">已取消<\/span>/);
+});

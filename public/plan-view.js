@@ -35,23 +35,27 @@ export function renderPlans({ project, planId, lastRun, busy, tab = "plans" }) {
     '<p id="mcp-plan-status" class="subtle"></p>' +
     '<div class="plan-layout' +
     (tab === "runs" ? " plan-history-layout" : "") +
-    '"><aside class="plan-list"><div class="row"><strong class="grow">执行计划</strong><button id="new-plan" class="primary">新建计划</button></div>' +
-    project.plans
-      .map(
-        (item) =>
-          '<button data-plan="' +
-          item.id +
-          '" class="' +
-          (item.id === planId ? "active" : "") +
-          '">' +
-          esc(item.name) +
-          "</button>",
-      )
-      .join("") +
-    (project.plans.length
+    '">' +
+    (tab === "runs"
       ? ""
-      : '<p class="plan-list-empty">暂无执行计划</p>') +
-    '</aside><section class="plan-main">' +
+      : '<aside class="plan-list"><div class="row"><strong class="grow">执行计划</strong><button id="new-plan" class="primary">新建计划</button></div>' +
+        project.plans
+          .map(
+            (item) =>
+              '<button data-plan="' +
+              item.id +
+              '" class="' +
+              (item.id === planId ? "active" : "") +
+              '">' +
+              esc(item.name) +
+              "</button>",
+          )
+          .join("") +
+        (project.plans.length
+          ? ""
+          : '<p class="plan-list-empty">暂无执行计划</p>') +
+        "</aside>") +
+    '<section class="plan-main">' +
     (tab === "runs"
       ? '<div id="plan-run-records">' + renderRuns(runs, lastRun) + "</div>"
       : plan
@@ -200,10 +204,15 @@ function renderPlanStep(step, index, plan) {
     "</section>"
   );
 }
+function historyDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("en-US");
+}
 export function renderRuns(runs, lastRun) {
   if (!runs.length) return '<p class="plan-history-empty">暂无执行记录</p>';
   return (
-    '<h2>执行记录 <span class="subtle">最近 50 条</span></h2>' +
+    '<p class="plan-history-limit">为避免本地文件过大，执行记录仅保留最近 50 条</p>' +
     runs
       .map(
         (run) =>
@@ -211,25 +220,33 @@ export function renderRuns(runs, lastRun) {
           esc(run.id) +
           '" ' +
           (run.id === lastRun?.id ? "open" : "") +
-          '><summary><span class="' +
-          (run.status === "passed" ? "success" : "failed") +
+          '><summary><span class="plan-run-source">' +
+          (run.source === "manual" || (!run.source && run === lastRun)
+            ? "人工"
+            : run.source === "mcp"
+              ? "AI"
+              : run.source === "cli"
+                ? "CLI"
+                : "来源未知") +
+          '</span><span class="plan-run-title">业务流程执行 · ' +
+          esc(run.planName) +
+          '</span><time class="plan-run-time subtle">' +
+          esc(historyDate(run.createdAt)) +
+          '</time><span class="plan-run-verdict ' +
+          (run.status === "passed"
+            ? "success"
+            : run.status === "failed"
+              ? "failed"
+              : "subtle") +
           '">' +
           (run.status === "passed"
-            ? "✓ 通过"
+            ? "通过"
             : run.status === "cancelled"
-              ? "■ 已取消"
+              ? "已取消"
               : run.status === "failed"
-                ? "× 失败"
-                : "? 结果待核对") +
-          "</span> " +
-          esc(run.planName) +
-          ' <span class="subtle">' +
-          esc(run.createdAt) +
-          " · " +
-          run.results.length +
-          ' 步</span></summary><p class="subtle">快照 SHA256: ' +
-          esc(run.planHash) +
-          "</p>" +
+                ? "失败"
+                : "结果待核对") +
+          '</span></summary><div class="plan-run-body">' +
           run.results
             .map(
               (step, index) =>
@@ -244,8 +261,13 @@ export function renderRuns(runs, lastRun) {
                 '">' +
                 esc(step.status) +
                 "</span> " +
+                "<strong>" +
                 esc(step.name) +
-                " · " +
+                '</strong> <span class="subtle">' +
+                esc(step.response?.request?.method || step.request?.method) +
+                " " +
+                esc(step.response?.request?.url || step.request?.url) +
+                "</span> · " +
                 (step.response?.status || "") +
                 " " +
                 (step.response?.duration || 0) +
@@ -254,21 +276,21 @@ export function renderRuns(runs, lastRun) {
                 "</details>",
             )
             .join("") +
-          '<button data-export-run="' +
+          '<p class="subtle plan-run-hash">快照 SHA256: ' +
+          esc(run.planHash) +
+          '</p><button data-export-run="' +
           esc(run.id) +
-          '">导出证据 JSON</button></details>',
+          '">导出证据 JSON</button></div></details>',
       )
       .join("")
   );
 }
 
-function evidenceBlock(label, value, open = false) {
+function evidenceBlock(label, value) {
   return (
     '<details class="step-evidence" data-evidence="' +
     esc(label) +
-    '" ' +
-    (open ? "open" : "") +
-    "><summary>" +
+    '"><summary>' +
     esc(label) +
     "</summary><pre>" +
     esc(
@@ -281,8 +303,23 @@ function evidenceBlock(label, value, open = false) {
 }
 function renderStepEvidence(step) {
   const assertions = step.assertions || [];
+  const statusMismatch = assertions.find(
+    (assertion) =>
+      assertionState(assertion) === "failed" &&
+      assertion.target === "status" &&
+      assertion.op === "eq" &&
+      Number.isInteger(assertion.actual) &&
+      Number.isInteger(assertion.value),
+  );
   return (
     (step.error ? '<p class="notice failed">' + esc(step.error) + "</p>" : "") +
+    (statusMismatch
+      ? '<p class="plan-step-status-mismatch failed">接口返回状态码 ' +
+        statusMismatch.actual +
+        "，期望 " +
+        statusMismatch.value +
+        "</p>"
+      : "") +
     '<section class="step-assertions"><h4>断言结果</h4>' +
     (assertions.length
       ? assertions
@@ -325,11 +362,7 @@ function renderStepEvidence(step) {
       step.requestUnresolved ? "请求配置（未发送）" : "请求",
       step.request,
     ) +
-    evidenceBlock(
-      "响应",
-      step.response || "未收到响应",
-      step.status === "failed" && !!step.response,
-    ) +
+    evidenceBlock("响应", step.response || "未收到响应") +
     evidenceBlock("脚本与操作日志", step.logs || []) +
     (step.subrequests?.length
       ? evidenceBlock("脚本HTTP子请求", step.subrequests)

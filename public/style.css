@@ -1195,6 +1195,9 @@ body:not(.dark) .plans-page {
     display: none;
   }
 }
+.shell:has(.plans-page .plan-history-layout) > .sidebar {
+  display: none;
+}
 body:not(.dark) .plans-page .plan-tabs {
   display: inline-flex;
   gap: 0;
@@ -1285,15 +1288,12 @@ body .plans-page .plan-history-controls .plan-tabs {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.plans-page .plan-layout.plan-history-layout:has(.plan-history-empty) {
+body .plans-page .plan-layout.plan-history-layout {
   grid-template-columns: minmax(0, 1fr);
   min-height: min(420px, 55vh);
   padding: 0;
 }
-.plans-page .plan-history-layout:has(.plan-history-empty) .plan-list {
-  display: none;
-}
-.plans-page .plan-history-layout:has(.plan-history-empty) .plan-main {
+body .plans-page .plan-history-layout .plan-main {
   padding: 24px;
 }
 .plan-history-empty {
@@ -1301,8 +1301,89 @@ body .plans-page .plan-history-controls .plan-tabs {
   color: var(--muted);
   line-height: 20px;
 }
-body:not(.dark) .plans-page .plan-history-layout:has(.plan-history-empty) {
+body:not(.dark) .plans-page .plan-history-layout {
   background: #f9f5ea;
+}
+
+.plan-history-layout #plan-run-records {
+  max-width: 980px;
+}
+.plan-history-limit {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 20px;
+}
+.plan-history-layout [data-plan-run-id] {
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.plan-history-layout [data-plan-run-id] > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--hover);
+  cursor: pointer;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+.plan-history-layout [data-plan-run-id] > summary::-webkit-details-marker {
+  display: none;
+}
+.plan-history-layout [data-plan-run-id] > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  margin-inline-end: 6px;
+  border: solid currentColor;
+  border-width: 0 1px 1px 0;
+  transform: rotate(-45deg);
+}
+.plan-history-layout [data-plan-run-id][open] > summary::before {
+  transform: rotate(45deg);
+}
+.plan-history-layout [data-plan-run-id] > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.plan-run-source,
+.plan-run-verdict {
+  flex: none;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 16px;
+}
+.plan-run-source {
+  border-radius: 999px;
+  color: var(--muted);
+}
+.plan-run-verdict.failed,
+.plan-run-verdict.success {
+  border-color: currentColor;
+}
+.plan-run-body {
+  padding: 12px 0 0;
+}
+.plan-run-body .run-step {
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--hover);
+  overflow-wrap: anywhere;
+}
+.plan-run-hash {
+  overflow-wrap: anywhere;
+}
+.plan-step-status-mismatch {
+  margin: 8px 0;
 }
 
 .step-editor details {
