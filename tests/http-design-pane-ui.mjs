@@ -321,6 +321,23 @@ try {
   const media = responseRegion.getByRole("combobox", {
     name: "响应 Content-Type",
   });
+  await responseRegion.getByRole("button", { name: "编辑结构" }).click();
+  const targetMedia = page.locator("#schema-response-media");
+  await targetMedia.fill("Text/Plain");
+  await page.locator("#dialog-save").click();
+  await page
+    .getByText("Content-Type 已存在，请切换到该类型后直接编辑", { exact: true })
+    .waitFor();
+  assert.equal(await page.locator("#dialog").isVisible(), true);
+  assert.deepEqual(
+    JSON.parse(await rawResponses.inputValue()),
+    JSON.parse(responseDraft),
+  );
+  assert.deepEqual(put, []);
+  await targetMedia.fill("application/problem+json");
+  await page.locator("#dialog-save").click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert.equal(await media.inputValue(), "application/problem+json");
   await media.selectOption("text/plain");
   await responseRegion
     .locator(".design-response-kind")
@@ -335,6 +352,11 @@ try {
   assert.equal(retained.content["text/plain"].example, "retain-me");
   assert.equal(retained.headers["X-Trace"].schema.type, "string");
   assert.equal(retained.content["application/json"].schema.type, "object");
+  assert.equal(retained.content["text/plain"].schema.type, "string");
+  assert.equal(
+    retained.content["application/problem+json"].schema.type,
+    "object",
+  );
   assert.deepEqual(put, []);
 
   await page.locator("#save").click();

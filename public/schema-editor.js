@@ -705,6 +705,14 @@ export function editResponseDefinition(responses, index, fields) {
   if (item.content !== undefined && !object(item.content))
     throw Error("响应content格式无效，请先用JSON修正");
   if (
+    fields.sourceMediaType !== undefined &&
+    fields.sourceMediaType !== mediaType &&
+    Object.keys(item.content || {}).some(
+      (type) => type.toLowerCase() === mediaType.toLowerCase(),
+    )
+  )
+    throw Error("Content-Type 已存在，请切换到该类型后直接编辑");
+  if (
     item.content?.[mediaType] !== undefined &&
     !object(item.content[mediaType])
   )

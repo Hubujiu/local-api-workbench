@@ -2303,7 +2303,7 @@ function bind() {
         esc(media) +
         '"></label><label>说明<input id="schema-response-description" value="' +
         esc(definition.description || "") +
-        '"></label></div><p class="muted">更换Content-Type会新增该类型，不删除原有类型及示例。</p><div id="schema-editor">' +
+        '"></label></div><p class="muted">更换 Content-Type 会添加新类型。已有类型请切换后直接编辑，原有类型及示例不会被覆盖。</p><div id="schema-editor">' +
         schemaEditor(schema) +
         "</div>",
       () => {
@@ -2313,6 +2313,7 @@ function bind() {
             status: $("#schema-response-status").value,
             description: $("#schema-response-description").value,
             mediaType: $("#schema-response-media").value,
+            sourceMediaType: media,
             schema: readSchema(),
           }),
         );
