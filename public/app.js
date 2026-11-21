@@ -1,3 +1,4 @@
+import { designResponsePanel, responseSelection } from "./design-response.js";
 import { markdownEdit, markdownTools } from "./design-markdown.js";
 import { emptyCasePanel } from "./case-empty-view.js";
 import {
@@ -173,6 +174,8 @@ const designParameterTabs = [
   ["auth", "认证"],
 ];
 let designParameter = "headers";
+const designResponseSelections = new Map();
+const designResponseKey = (r) => JSON.stringify([project?.id, r.id]);
 const caseResults = createCaseResultStore();
 const caseSelections = new Map();
 let caseBatch = null;
@@ -1769,7 +1772,7 @@ function modePanel(r) {
     return `<div class="page http-design-canvas">${r.importNotes?.length ? `<div class="notice import-notes" role="region" aria-label="导入兼容性提示" tabindex="0">导入提示：${r.importNotes.map(esc).join("<br>")}</div>` : ""}${importedScriptTasksHTML(r.importedScriptTasks)}<div class="design-meta"><label for="folder">目录<input id="folder" value="${esc(r.folder)}" placeholder="根目录"></label><label for="request-service">绑定服务<select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select></label></div>
     <section class="request-description-section" aria-label="详细说明"><h2><span>${lineIcon("▧")}</span>详细说明</h2><details id="design-description" ${descriptionOpen ? "open" : ""}><summary><span class="design-description-closed">＋ 添加详细说明</span><span class="design-description-open">收起</span></summary><div class="design-description-toolbar" role="group" aria-label="说明格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-design-markdown="${key}" aria-label="${label}" title="${label}">${esc(glyph)}</button>`).join("")}</div><div class="design-description-editor"><textarea id="description" aria-label="接口详细说明" spellcheck="false">${esc(r.description)}</textarea><div id="design-description-preview" class="markdown-content" role="region" aria-label="说明预览">${descriptionOpen ? renderMarkdown(r.description) : ""}</div></div><small id="design-description-count">字数: ${Array.from(r.description || "").length}　行数: ${(r.description || "").split("\n").length}</small></details></section>
     <section class="design-request-parameters" aria-label="设计请求参数"><h2><span>${lineIcon("☷")}</span>设计请求参数</h2>${designParameterPanel(r)}</section>
-    <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2><div><div class="response-schema-actions"><button id="new-response-schema" type="button">新增响应结构</button>${(r.responses || []).flatMap((definition, index) => (Object.keys(definition.content || {}).length ? Object.keys(definition.content) : ["application/json"]).map((media) => `<button type="button" data-response-schema="${esc(JSON.stringify([index, media]))}">编辑 ${esc(definition.status)} · ${esc(media)}</button>`)).join("")}</div>${r.openapiExampleBindingsVersion === 1 ? '<p class="muted">此处可修改 Schema。绑定示例请用示例编辑器，响应状态请用可视编辑按钮；直接改源示例注解会产生导出冲突。</p>' : ""}<textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div></section>
+    <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2>${designResponsePanel(r.responses || [], designResponseSelections.get(designResponseKey(r)), r.openapiExampleBindingsVersion === 1)}</section>
     <section class="design-request-structure" aria-label="请求数据结构"><h2><span>${lineIcon("☷")}</span>请求数据结构</h2><div><button id="visual-schema" type="button">可视化编辑结构</button>${designParameter === "body" && r.bodyType !== "none" ? "" : '<button id="generate-body" type="button" class="ghost">基于数据结构生成</button>'}<textarea id="schema" aria-label="请求 JSON Schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div></section>
     <section class="design-advanced" aria-label="请求选项"><h2><span>${lineIcon("⚙")}</span>请求选项</h2><div class="form-grid"><label>全局请求参数</label><label><input id="inherit-global-parameters" type="checkbox" ${r.inheritGlobalParameters !== false ? "checked" : ""}>继承项目及目录 Header / Query / Cookie / 表单参数</label><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>HTTPS代理 CA（PEM，与目标站点CA分开）</label><textarea data-tls="proxyCa">${esc(r.tls?.proxyCa || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}">${attributeFields(project.settings?.attributes || [], r.attributes)}</div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div></section></div>`;
   }
@@ -2300,7 +2303,7 @@ function bind() {
         esc(media) +
         '"></label><label>说明<input id="schema-response-description" value="' +
         esc(definition.description || "") +
-        '"></label></div><p class="muted">更换Content-Type会新增该类型，不删除原有类型及示例。</p><div id="schema-editor">' +
+        '"></label></div><p class="muted">更换 Content-Type 会添加新类型。已有类型请切换后直接编辑，原有类型及示例不会被覆盖。</p><div id="schema-editor">' +
         schemaEditor(schema) +
         "</div>",
       () => {
@@ -2310,15 +2313,72 @@ function bind() {
             status: $("#schema-response-status").value,
             description: $("#schema-response-description").value,
             mediaType: $("#schema-response-media").value,
+            sourceMediaType: media,
             schema: readSchema(),
           }),
         );
+        const r = request();
+        const edited = index < 0 ? r.responses.at(-1) : r.responses[index];
+        designResponseSelections.set(designResponseKey(r), {
+          status: String(edited.status),
+          media: $("#schema-response-media").value.trim(),
+        });
         mark();
         render();
       },
     );
     readSchema = bindSchemaEditor($("#schema-editor"), schema);
   };
+  const selectDesignResponse = (index, media, focus) => {
+    const r = request();
+    const before = r.responses?.[index];
+    const status = before ? String(before.status) : undefined;
+    const top = $(".http-design-canvas").scrollTop;
+    collect();
+    const selection = responseSelection(r.responses, { status, media });
+    designResponseSelections.set(designResponseKey(r), {
+      status: selection.definition
+        ? String(selection.definition.status)
+        : undefined,
+      media: selection.media,
+    });
+    render();
+    $(".http-design-canvas").scrollTop = top;
+    $(
+      focus === "media"
+        ? "#design-response-media"
+        : "#design-response-" + selection.index,
+    )?.focus();
+  };
+  on("[data-design-response]", "click", (_, e) =>
+    selectDesignResponse(Number(e.dataset.designResponse), undefined, "tab"),
+  );
+  on("[data-design-response]", "keydown", (event, e) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const size = request().responses.length;
+    const index = Number(e.dataset.designResponse);
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? size - 1
+          : (index + (event.key === "ArrowRight" ? 1 : size - 1)) % size;
+    selectDesignResponse(next, undefined, "tab");
+  });
+  on("#design-response-media", "change", (_, e) => {
+    const r = request();
+    const previous = responseSelection(
+      r.responses,
+      designResponseSelections.get(designResponseKey(r)),
+    );
+    try {
+      selectDesignResponse(previous.index, e.value, "media");
+    } catch (error) {
+      e.value = previous.media;
+      throw error;
+    }
+  });
   on("#new-response-schema", "click", () => editResponseSchema());
   on("[data-response-schema]", "click", (_, element) =>
     editResponseSchema(...JSON.parse(element.dataset.responseSchema)),

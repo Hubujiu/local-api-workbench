@@ -3536,3 +3536,88 @@ body:not(.dark) .plans-heading {
   padding-block: 3px;
   color: var(--accent);
 }
+
+.design-response-structure > .design-response-shell {
+  padding: 0;
+  border: 0;
+}
+.design-response-bar,
+.design-response-tabs,
+.design-response-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.design-response-tabs {
+  overflow-x: auto;
+  flex: 1;
+}
+.design-response-tabs > button {
+  padding: 0 15px;
+  height: 39px;
+  flex: 0 0 auto;
+  max-width: min(300px, 48vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 4px 4px 0 0;
+  background: var(--panel);
+}
+.design-response-tabs > [aria-selected="true"] {
+  background: var(--bg);
+  color: var(--text);
+  border-bottom-color: var(--bg);
+}
+.design-response-tabs > button:focus-visible {
+  outline-offset: -4px;
+}
+.design-response-bar > button {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.design-response-surface {
+  margin-top: -1px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 0 4px 4px 4px;
+}
+.design-response-tools {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.design-response-tools > span {
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: var(--top);
+}
+.design-response-tools button {
+  margin-inline-start: auto;
+}
+.design-response-tree,
+.design-response-json {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.design-response-json {
+  margin-top: 10px;
+}
+.design-response-node {
+  display: grid;
+  grid-template-columns: 28% 28% minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 41px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.design-response-kind {
+  color: var(--accent);
+}
+.design-response-empty {
+  margin: 0;
+  padding: 12px;
+  color: var(--muted);
+}
