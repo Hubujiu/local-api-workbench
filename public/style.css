@@ -3886,3 +3886,45 @@ body:not(.dark) .plans-heading {
     left: auto;
   }
 }
+
+.editor[data-editor-mode="debug"] > .param-tabs {
+  flex: 0 0 auto;
+  height: 43px;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  overflow: auto hidden;
+  scrollbar-width: thin;
+  border-bottom: 0;
+  background: linear-gradient(to top, var(--line) 1px, transparent 1px);
+}
+.editor[data-editor-mode="debug"] > .param-tabs button {
+  flex: 0 0 auto;
+  min-width: var(--param-tab-width, 44px);
+  padding: 0 5px 0 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+.editor[data-editor-mode="debug"] > .param-tabs button.active {
+  border-bottom: 0;
+  box-shadow: inset 0 -2px var(--accent);
+}
+.editor[data-editor-mode="debug"] > .param-tabs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+}
+.param-tabs [data-param="headers"] {
+  --param-tab-width: 62px;
+}
+.param-tabs [data-param="query"] {
+  --param-tab-width: 55px;
+}
+.param-tabs [data-param="body"] {
+  --param-tab-width: 48px;
+}
+.param-tabs [data-param="cookies"] {
+  --param-tab-width: 59px;
+}
+.param-tabs :is([data-param="before"], [data-param="after"]) {
+  --param-tab-width: 87px;
+}

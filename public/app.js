@@ -1,4 +1,8 @@
 import {
+  requestParameterTabs,
+  revealParameterTab,
+} from "./http-request-parameter-tabs.js";
+import {
   httpRequestActions,
   requestCurlAction,
 } from "./http-request-actions.js";
@@ -1426,6 +1430,12 @@ function render(preserveEditingFocus = false) {
   syncSocketIOWorkbench();
   syncGrpcStreamWorkbench();
   const active = document.activeElement;
+  const parameterStrip = $(".param-tabs");
+  const oldParameterScroll = parameterStrip?.scrollLeft || 0;
+  const oldParameterFocus =
+    active?.closest(".param-tabs") && active.dataset.param;
+  const oldParameterSelection =
+    parameterStrip?.querySelector(".active")?.dataset.param;
   const oldTabs = $(".tab-scroll");
   const oldTabScroll = oldTabs?.scrollLeft || 0;
   const oldSelectedTab = oldTabs?.querySelector(".selected [data-open-tab]")
@@ -1511,6 +1521,22 @@ function render(preserveEditingFocus = false) {
         inline: "nearest",
       });
   }
+  const nextParameterStrip = $(".param-tabs");
+  if (nextParameterStrip) {
+    nextParameterStrip.scrollLeft = oldParameterScroll;
+    const restored =
+      oldParameterFocus &&
+      [...nextParameterStrip.querySelectorAll("[data-param]")].find(
+        (item) => item.dataset.param === oldParameterFocus,
+      );
+    const selected = nextParameterStrip.querySelector(".active");
+    if (restored) {
+      restored.focus({ preventScroll: true });
+      revealParameterTab(nextParameterStrip, restored);
+    } else if (selected && selected.dataset.param !== oldParameterSelection) {
+      revealParameterTab(nextParameterStrip, selected);
+    }
+  }
   if (focusState) {
     const replacement = focusKey.id
       ? document.getElementById(focusKey.id)
@@ -1552,26 +1578,7 @@ function editor(r) {
       "",
     )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button>${requestCurlAction(mode === "debug")}<button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : httpRequestActions({ debug: mode === "debug", busy, cancel: busy && mode !== "cases" && !caseCancellationOwner(), dirty })}</div>${
     mode === "debug"
-      ? `<div class="param-tabs">${[
-          ["headers", "Header"],
-          ["query", "Query"],
-          ["path", "Path"],
-          ["body", "Body"],
-          ["auth", "认证"],
-          ["cookies", "Cookie"],
-          ["examples", "响应示例"],
-          ["before", "前执行操作"],
-          ["after", "后执行操作"],
-          ["assertions", "断言"],
-          ["extract", "提取变量"],
-        ]
-          .map(
-            ([key, label]) =>
-              `<button data-param="${key}" class="${param === key ? "active" : ""}">${label}${key === "body" ? (r.bodyType !== "none" ? " (1)" : "") : Array.isArray(r[key]) && r[key].length ? " (" + r[key].length + ")" : ""}</button>`,
-          )
-          .join(
-            "",
-          )}</div><div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
+      ? `${requestParameterTabs(r, param)}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
           ["body", "实时响应"],
           ["headers", "响应头"],
           ["cookies", "Cookie"],
