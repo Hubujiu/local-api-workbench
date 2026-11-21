@@ -3,6 +3,29 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 
+export function httpWorkbenchImplementationCommit(
+  env = process.env,
+  readLocalCommit = () =>
+    execFileSync("git", ["rev-parse", "--verify", "HEAD^{commit}"], {
+      cwd: new URL("../../", import.meta.url),
+      encoding: "utf8",
+    }).trim(),
+) {
+  const inActions = env.GITHUB_ACTIONS === "true";
+  const commit = inActions
+    ? env.HTTP_WORKBENCH_CHECKOUT_COMMIT
+    : readLocalCommit();
+  assert(
+    typeof commit === "string" &&
+      /^[0-9a-f]{40}$/.test(commit) &&
+      commit !== "0".repeat(40),
+    inActions
+      ? "HTTP_WORKBENCH_CHECKOUT_COMMIT must be the full GitHub Actions checkout commit"
+      : "Local Git HEAD must resolve to a full implementation commit",
+  );
+  return commit;
+}
+
 export async function captureHTTPWorkbenchBaseline(
   page,
   {
@@ -19,12 +42,9 @@ export async function captureHTTPWorkbenchBaseline(
     url: await page.locator("#url").inputValue(),
     body: await page.locator("#body-code").inputValue(),
   };
-  const commit = execFileSync("git", ["rev-parse", "HEAD"], {
-    encoding: "utf8",
-  }).trim();
   const manifest = {
     schemaVersion: 1,
-    implementationCommit: commit,
+    implementationCommit: httpWorkbenchImplementationCommit(),
     fixtureDigest: createHash("sha256")
       .update(JSON.stringify(expected))
       .digest("hex"),
@@ -87,6 +107,8 @@ export async function captureHTTPWorkbenchBaseline(
           ".request-panel",
           ".body-editor-shell",
           "#body-code",
+          "#code-highlight",
+          "#code-gutter",
           ".response-tabs",
           ".response",
         ];
@@ -120,6 +142,22 @@ export async function captureHTTPWorkbenchBaseline(
         const bySelector = Object.fromEntries(
           metrics.elements.map((element) => [element.selector, element]),
         );
+        for (const selector of [
+          "#body-code",
+          "#code-highlight",
+          "#code-gutter",
+        ]) {
+          assert.equal(
+            bySelector[selector].fontSize,
+            "12px",
+            `${theme} ${selector} font size`,
+          );
+          assert.equal(
+            bySelector[selector].lineHeight,
+            "16px",
+            `${theme} ${selector} native row pitch`,
+          );
+        }
         for (const [selector, key, expected] of [
           [".rail", "width", 50],
           [".sidebar", "width", 263],

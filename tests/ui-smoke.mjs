@@ -534,11 +534,14 @@ try {
     responseTabsBox.y >= 490 && responseTabsBox.y <= 525,
     "response separator stays near official reference",
   );
-  assert.equal(
+  assert.deepEqual(
     await page
-      .locator("#body-code")
-      .evaluate((el) => getComputedStyle(el).lineHeight),
-    "18px",
+      .locator("#body-code, #code-highlight, #code-gutter")
+      .evaluateAll((nodes) =>
+        nodes.map((el) => getComputedStyle(el).lineHeight),
+      ),
+    ["16px", "16px", "16px"],
+    "request text, syntax highlight and gutter share the native 16px row pitch",
   );
   assert(await page.locator(".empty-symbol svg").isVisible());
   const searchFieldBox = await page.locator("#search").boundingBox();
