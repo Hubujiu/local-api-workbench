@@ -88,3 +88,22 @@ test("a replaced page cannot receive another project's connection draft", () => 
   assert.equal(node("#db-host").value, "");
   assert(dialog.removed);
 });
+
+test("draft separates truthful summary, transport and connection fields without exposing authorization actions", () => {
+  const { dialog } = fixture();
+  const html = dialog.innerHTML;
+  assert.match(html, /<dt>数据库类型<\/dt><dd>MySQL<\/dd>/);
+  assert.match(html, /仅回填当前连接表单/);
+  assert.match(html, /不测试连接、不保存密码、不授予访问权限/);
+  const tls = dialog.querySelector("#mysql-draft-tls");
+  const ca = dialog.querySelector("#mysql-draft-ca");
+  assert.equal(ca.hidden, true);
+  tls.checked = true;
+  tls.onchange();
+  assert.equal(ca.hidden, false);
+  assert.equal(ca.previousElementSibling.hidden, false);
+  tls.checked = false;
+  tls.onchange();
+  assert.equal(ca.hidden, true);
+  assert.equal(ca.previousElementSibling.hidden, true);
+});

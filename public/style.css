@@ -2706,16 +2706,50 @@ input[data-select-case] {
   max-height: 65vh;
   overflow: auto;
 }
-.mysql-type-row {
+.mysql-draft-summary {
+  margin: 0;
+}
+.mysql-draft-summary > div,
+.mysql-draft-transport,
+.mysql-draft-safety {
   display: grid;
-  grid-template-columns: 140px 1fr;
+  grid-template-columns: minmax(90px, 25%) minmax(0, 1fr);
   align-items: center;
+}
+.mysql-draft-summary > div,
+.mysql-draft-transport > span {
   min-height: 44px;
 }
-.mysql-connection-body > .notice {
+.mysql-draft-summary dd {
+  margin: 0;
+  color: var(--muted);
+}
+.mysql-draft-transport > span {
+  display: flex;
+  align-items: center;
+}
+.mysql-tls-choice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.mysql-draft-transport textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 70px;
+  margin: 5px 0 10px;
+}
+.mysql-draft-safety {
+  align-items: start;
+  margin: 12px 0 28px;
+}
+.mysql-draft-safety > span {
+  padding-top: 11px;
+}
+.mysql-draft-safety .notice {
   font-size: 12px;
   line-height: 1.8;
-  margin: 12px 0 24px 140px;
+  margin: 0;
 }
 .mysql-connection-grid {
   display: grid;
@@ -2732,30 +2766,24 @@ input[data-select-case] {
 .mysql-connection-grid > div {
   display: grid;
   grid-template-columns: 90px minmax(0, 1fr);
-  gap: 12px;
+  gap: 13px 12px;
   align-items: center;
-  padding: 12px 16px;
+  padding: 12px 15px 12px 16px;
 }
 .mysql-connection-grid h3 {
   grid-column: 1 / -1;
-  margin: 0 0 2px;
-  padding-bottom: 12px;
+  margin: 0;
+  padding-bottom: 11px;
   border-bottom: 1px solid var(--line);
   color: var(--accent);
   font-size: 14px;
   font-weight: 400;
 }
-.mysql-connection-grid input:not([type="checkbox"]),
-.mysql-connection-grid textarea {
+.mysql-connection-grid input {
   width: 100%;
   min-width: 0;
-  padding: 6px 10px;
-}
-.mysql-connection-grid textarea {
-  min-height: 70px;
-}
-.mysql-connection-grid input[type="checkbox"] {
-  justify-self: start;
+  height: 31px;
+  padding: 5px 10px;
 }
 @media (max-width: 650px) {
   .mysql-connection-grid {
@@ -2765,8 +2793,10 @@ input[data-select-case] {
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
-  .mysql-connection-body > .notice {
-    margin-left: 0;
+  .mysql-draft-safety {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    margin-bottom: 20px;
   }
 }
 
