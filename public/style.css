@@ -3706,3 +3706,39 @@ body:not(.dark) .plans-heading {
   padding-inline: 12px;
   color: var(--muted);
 }
+
+.design-response-settings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 4px;
+  background: var(--panel);
+}
+.design-response-settings > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+.design-response-settings output {
+  min-height: 31px;
+  padding: 6px 9px;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+.design-response-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+}
+@media (max-width: 760px) {
+  .design-response-settings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
