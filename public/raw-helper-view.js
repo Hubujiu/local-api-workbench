@@ -200,7 +200,7 @@ export function rawHelperFixedValue(value) {
 }
 
 export function rawHelperFixedChooser() {
-  return `<div class="raw-helper-fixed-chooser">
+  return `<div class="raw-helper-fixed-chooser raw-helper-preset">
     <label for="raw-helper-fixed-value">固定值</label>
     <input id="raw-helper-fixed-value" type="text" maxlength="65536" placeholder="输入固定文本" autocomplete="off">
     <p>以 JSON 字符串插入，不执行加工函数。</p>
@@ -232,4 +232,135 @@ export function bindRawHelperFixedChooser(chooser, id, confirm) {
   });
   update();
   return () => rawHelperFixedValue(input.value);
+}
+
+const rawHelperMockGroups = [
+  [
+    "数值与布尔",
+    [
+      ["integer", "整数", "@integer(1,100)", "integer"],
+      ["boolean", "布尔值", "@boolean()", "boolean"],
+    ],
+  ],
+  [
+    "日期",
+    [
+      ["date", "日期（年-月-日）", "@date()", "string"],
+      ["datetime", "ISO 日期时间（UTC 午夜）", "@datetime()", "string"],
+    ],
+  ],
+  ["标识", [["uuid", "UUID", "@uuid()", "string"]]],
+  [
+    "网络与邮箱",
+    [
+      ["url", "示例网址", "@url()", "string"],
+      ["ip", "示例 IPv4", "@ip()", "string"],
+      ["email", "示例邮箱", "@email()", "string"],
+    ],
+  ],
+  [
+    "姓名和文本",
+    [
+      ["cname", "中文姓名", "@cname()", "string"],
+      ["name", "英文姓名", "@name()", "string"],
+      ["word", "8 位小写字母", "@word(8)", "string"],
+    ],
+  ],
+];
+const mockRules = new Map(
+  rawHelperMockGroups.flatMap(([, items]) =>
+    items.map(([id, , value, type]) => [id, { value, type }]),
+  ),
+);
+
+export function rawHelperMockPreset(id) {
+  const rule = mockRules.get(id);
+  return rule
+    ? { spec: { source: "mock", ...rule, format: "json", functions: [] } }
+    : null;
+}
+
+export function rawHelperMockChooser() {
+  return `<div class="raw-helper-mock-chooser raw-helper-preset">
+    <label for="raw-helper-mock-search">Mock 规则</label>
+    <input id="raw-helper-mock-search" type="search" placeholder="搜索已支持的规则" autocomplete="off">
+    <div class="raw-helper-mock-groups">
+      <p>Workbench 内置规则，仅在实际发送时生成。</p>
+      ${rawHelperMockGroups
+        .map(
+          ([group, items]) =>
+            `<details data-raw-mock-group="${esc(group)}"><summary>${esc(group)}</summary>${items
+              .map(
+                ([id, label, expr]) =>
+                  `<button type="button" data-raw-mock-rule="${esc(id)}" aria-pressed="false"><span>${esc(label)}</span><code>${esc(expr)}</code></button>`,
+              )
+              .join("")}</details>`,
+        )
+        .join("")}
+      <p class="raw-helper-mock-status" role="status" hidden>没有匹配的内置规则</p>
+    </div>
+    <div class="raw-helper-mock-result">
+      <label for="raw-helper-mock-expression">表达式</label>
+      <input id="raw-helper-mock-expression" readonly>
+    </div>
+  </div>`;
+}
+
+export function bindRawHelperMockChooser(chooser, id, confirm, cancel) {
+  const search = chooser.querySelector("input[type=search]");
+  const token = chooser.querySelector("#raw-helper-mock-expression");
+  const groups = Array.from(chooser.querySelectorAll("details"));
+  const rows = Array.from(chooser.querySelectorAll("[data-raw-mock-rule]"));
+  const status = chooser.querySelector(".raw-helper-mock-status");
+  const openBeforeFilter = new Map();
+  let selected,
+    filtering = false;
+  const select = (row) => {
+    selected = row;
+    confirm.disabled = !row;
+    token.value = row ? bodyDynamicToken(id) : "";
+    for (const item of rows)
+      item.setAttribute("aria-pressed", String(item === row));
+  };
+  select(null);
+  for (const row of rows) row.addEventListener("click", () => select(row));
+  search.addEventListener("input", () => {
+    const term = search.value.trim().toLowerCase();
+    if (term && !filtering)
+      for (const group of groups) openBeforeFilter.set(group, group.open);
+    for (const group of groups) {
+      const name = group.dataset.rawMockGroup.toLowerCase();
+      const entries = Array.from(group.querySelectorAll("button"));
+      for (const row of entries)
+        row.hidden = Boolean(
+          term &&
+            !name.includes(term) &&
+            !row.textContent.toLowerCase().includes(term),
+        );
+      group.hidden = entries.every((row) => row.hidden);
+      if (term) group.open = !group.hidden;
+      else if (filtering) group.open = openBeforeFilter.get(group) ?? false;
+    }
+    filtering = Boolean(term);
+    if (selected?.hidden) select(null);
+    status.hidden = groups.some((group) => !group.hidden);
+  });
+  search.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") event.preventDefault();
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      cancel.click();
+    }
+    if (event.key === "ArrowDown") {
+      const row = rows.find(
+        (item) => !item.hidden && item.closest("details").open,
+      );
+      if (row) {
+        event.preventDefault();
+        row.focus();
+      }
+    }
+  });
+  return () => rawHelperMockPreset(selected?.dataset.rawMockRule);
 }

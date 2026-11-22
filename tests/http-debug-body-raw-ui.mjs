@@ -827,6 +827,135 @@ try {
     await waitChooserClosed();
   }
 
+  const mockCard = helperPanel.getByRole("button", {
+    name: "Mock数据",
+    exact: true,
+  });
+  const mockDialog = page.getByRole("dialog", {
+    name: "Mock数据",
+    exact: true,
+  });
+  const mockSearch = mockDialog.getByRole("searchbox", { name: "Mock 规则" });
+  const mockConfirm = mockDialog.getByRole("button", {
+    name: "确定",
+    exact: true,
+  });
+  const mockExpression = mockDialog.getByRole("textbox", {
+    name: "表达式",
+    exact: true,
+  });
+  const mockDateRule = mockDialog.locator('[data-raw-mock-rule="date"]');
+  const waitMockClosed = async () => {
+    await mockDialog.waitFor({ state: "hidden" });
+    assert.equal(
+      await page.locator("#dialog").evaluate((el) => el.open),
+      false,
+    );
+  };
+  await mockCard.press("Enter");
+  assert(await mockSearch.evaluate((el) => el === document.activeElement));
+  assert(await mockConfirm.isDisabled());
+  assert.equal(await mockExpression.inputValue(), "");
+  assert.equal(await mockDateRule.isVisible(), false);
+  const mockBox = await mockDialog.boundingBox();
+  near(mockBox.x, 696, 5, "Mock chooser left");
+  near(mockBox.y, 210, 5, "Mock chooser top");
+  near(mockBox.width, 360, 2, "Mock chooser width");
+  near(mockBox.height, 536, 3, "Mock chooser height");
+  measurements.mockChooser = mockBox;
+  await capture("open-mock");
+  await mockDialog
+    .locator('[data-raw-mock-group="日期"] > summary')
+    .press("Enter");
+  assert(await mockDateRule.isVisible());
+  assert.match(await mockDateRule.textContent(), /@date\(\)/);
+  assert(await mockConfirm.isDisabled());
+  await capture("open-mock-expanded");
+  await mockSearch.fill("@now()");
+  assert.equal(
+    await mockDialog.locator("[data-raw-mock-rule]:visible").count(),
+    0,
+  );
+  assert(await mockDialog.getByText("没有匹配的内置规则").isVisible());
+  await mockSearch.press("Enter");
+  assert(await mockDialog.isVisible());
+  await mockSearch.press("Escape");
+  await waitMockClosed();
+  assert(await mockCard.evaluate((el) => el === document.activeElement));
+  assert.equal(await body.inputValue(), "");
+
+  await mockCard.press("Enter");
+  await mockSearch.fill("@date()");
+  assert.equal(
+    await mockDialog.locator("[data-raw-mock-rule]:visible").count(),
+    1,
+  );
+  await mockSearch.press("ArrowDown");
+  assert(await mockDateRule.evaluate((el) => el === document.activeElement));
+  await page.keyboard.press("Space");
+  assert(await mockConfirm.isEnabled());
+  await page.setViewportSize({ width: 430, height: 760 });
+  await mockConfirm.click();
+  assert(await mockDialog.isVisible());
+  assert.match(
+    await page.locator("#toast").textContent(),
+    /接口、环境或草稿已变化/,
+  );
+  await mockDialog.getByRole("button", { name: "取消", exact: true }).click();
+  await waitMockClosed();
+  await page.setViewportSize({ width: 1363, height: 1023 });
+  await mockCard.waitFor();
+  assert.equal(await body.inputValue(), "");
+
+  await mockCard.press("Enter");
+  await mockSearch.fill("@date()");
+  await mockDateRule.press("Enter");
+  const mockToken = await mockExpression.inputValue();
+  assert.match(mockToken, /^\{\{@value:[a-z0-9-]+\}\}$/);
+  assert(await mockExpression.evaluate((el) => el.readOnly));
+  assert.equal(await mockDialog.getByText("预览", { exact: true }).count(), 0);
+  assert.equal(await body.inputValue(), "");
+  await mockConfirm.press("Enter");
+  await waitMockClosed();
+  assert.equal(await body.inputValue(), mockToken);
+  assert(await body.evaluate((el) => el === document.activeElement));
+  const mockId = mockToken.slice("{{@value:".length, -2);
+  await helperPanel
+    .locator(`[data-edit-body-dynamic="${mockId}"]`)
+    .press("Enter");
+  const oldEditor = page.getByRole("dialog", { name: "动态参数值" });
+  assert.equal(await oldEditor.locator("#dynamic-source").inputValue(), "mock");
+  assert.equal(
+    await oldEditor.locator("#dynamic-value").inputValue(),
+    "@date()",
+  );
+  assert.equal(await oldEditor.locator("#dynamic-format").inputValue(), "json");
+  assert.equal(
+    await oldEditor.locator("#dynamic-mock-type").inputValue(),
+    "string",
+  );
+  assert.equal(await oldEditor.locator("#dynamic-functions").inputValue(), "");
+  await oldEditor.getByRole("button", { name: "取消", exact: true }).click();
+  await oldEditor.waitFor({ state: "hidden" });
+  assert.equal(await body.inputValue(), mockToken);
+  for (const flip of [
+    () => page.locator("#theme").click(),
+    () => page.locator("#response-layout").click(),
+    () =>
+      page.setViewportSize(
+        page.viewportSize().width === 1363
+          ? { width: 430, height: 760 }
+          : { width: 1363, height: 1023 },
+      ),
+  ]) {
+    await flip();
+    await mockCard.waitFor({ state: "hidden" });
+    assert(await helperPanel.locator("#new-body-dynamic").isVisible());
+    assert.equal(await body.inputValue(), mockToken);
+    await flip();
+    await mockCard.waitFor();
+  }
+
   assert.deepEqual(blocked, []);
   assert.deepEqual(errors, []);
   assert.deepEqual(await app.store.get(project.id), baseline);

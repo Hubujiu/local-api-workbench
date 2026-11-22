@@ -203,9 +203,11 @@ import { renderPlans, renderRuns } from "./plan-view.js";
 import {
   bindRawHelper,
   bindRawHelperFixedChooser,
+  bindRawHelperMockChooser,
   bindRawHelperVariableChooser,
   bodyDynamicToken,
   rawHelperFixedChooser,
+  rawHelperMockChooser,
   rawHelperTabs,
   rawHelperVariableChooser,
   rawHelperVariableNames,
@@ -1721,7 +1723,8 @@ function pairs(rows, key, designOptions, debugOptions) {
 function bodyParameterHelper(r, tabbed) {
   const reference = `<button type="button" class="raw-helper-action-card" id="raw-helper-reference-variable" aria-label="引用变量"><span class="raw-helper-variable-icon">${lineIcon("helper-variable")}</span><span><strong>引用变量</strong><small>引用已配置的环境、集合或全局变量</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
   const fixed = `<button type="button" class="raw-helper-action-card" id="raw-helper-insert-fixed" aria-label="固定值"><span class="raw-helper-fixed-icon">${lineIcon("helper-fixed")}</span><span><strong>固定值</strong><small>插入固定文本</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
-  const dynamic = `${tabbed ? reference + fixed : ""}<h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
+  const mock = `<button type="button" class="raw-helper-action-card" id="raw-helper-insert-mock" aria-label="Mock数据"><span class="raw-helper-mock-icon">${lineIcon("helper-mock")}</span><span><strong>Mock数据</strong><small>选择 Workbench 内置生成规则</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
+  const dynamic = `${tabbed ? reference + mock + fixed : ""}<h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
     r.bodyDynamic || {},
   )
     .map(
@@ -3735,6 +3738,7 @@ function bind() {
     openRawHelperVariableChooser(),
   );
   on("#raw-helper-insert-fixed", "click", openRawHelperFixedChooser);
+  on("#raw-helper-insert-mock", "click", openRawHelperMockChooser);
   on("#new-body-dynamic", "click", () => editDynamicValue("body"));
   on("[data-edit-body-dynamic]", "click", (_, element) =>
     editDynamicValue("body", element.dataset.editBodyDynamic),
@@ -7307,20 +7311,48 @@ function setBodyDynamicDraft(
       sourceBody.slice(selection.end);
 }
 function openRawHelperFixedChooser() {
+  openRawHelperDynamicPreset({
+    label: "固定值",
+    action: "#raw-helper-insert-fixed",
+    chooser: ".raw-helper-fixed-chooser",
+    markup: rawHelperFixedChooser,
+    bindChooser: bindRawHelperFixedChooser,
+    missing: "请输入不超过 64 KiB 的固定值",
+  });
+}
+function openRawHelperMockChooser() {
+  openRawHelperDynamicPreset({
+    label: "Mock数据",
+    action: "#raw-helper-insert-mock",
+    chooser: ".raw-helper-mock-chooser",
+    markup: rawHelperMockChooser,
+    bindChooser: bindRawHelperMockChooser,
+    missing: "请选择已支持的 Mock 规则",
+  });
+}
+function openRawHelperDynamicPreset({
+  label,
+  action,
+  chooser,
+  markup,
+  bindChooser,
+  missing,
+}) {
   const owner = rawHelperBodyOwner();
   if (!owner) return;
   const id = uid();
   let read,
     inserted = false;
   modal(
-    "固定值",
-    rawHelperFixedChooser(),
+    label,
+    markup(),
     () => {
-      if (!owner.current()) throw Error("接口、环境或草稿已变化，未插入固定值");
+      if (!owner.current())
+        throw Error("接口、环境或草稿已变化，未插入" + label);
       const value = read?.();
-      if (!value) throw Error("请输入不超过 64 KiB 的固定值");
+      if (!value) throw Error(missing);
       if (Object.hasOwn(owner.request.bodyDynamic || {}, id))
-        throw Error("固定值标识已存在，未插入");
+        throw Error("动态值标识已存在，未插入");
       const previousScroll = $("#raw-helper-dynamic")?.scrollTop || 0;
       setBodyDynamicDraft(
         owner.request,
@@ -7343,16 +7375,16 @@ function openRawHelperFixedChooser() {
         field?.focus({ preventScroll: true });
         field?.setSelectionRange(caret, caret);
       } else {
-        const control =
-          $("#raw-helper-insert-fixed") || $("#toggle-parameter-helper");
+        const control = $(action) || $("#toggle-parameter-helper");
         control?.focus({ preventScroll: true });
       }
     },
   );
-  read = bindRawHelperFixedChooser(
-    $(".raw-helper-fixed-chooser"),
+  read = bindChooser(
+    $(chooser),
     id,
     $("#dialog-save"),
+    $('#dialog footer button[value="cancel"]'),
   );
 }
 function openRawHelperVariableChooser() {
