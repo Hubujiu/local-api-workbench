@@ -1,0 +1,78 @@
+#dialog:has(.project-create-form) {
+  width: min(600px, calc(100vw - 28px));
+  max-width: none;
+  border-radius: 8px;
+}
+#dialog:has(.project-create-form) > form > header {
+  height: 52px;
+  padding: 10px 19px;
+  border: 0;
+}
+#dialog:has(.project-create-form) > form > header strong {
+  font-size: calc(16 * var(--app-type-unit));
+}
+#dialog:has(.project-create-form) > form > footer {
+  min-height: 67px;
+  padding: 19px 19px 15px;
+  border: 0;
+}
+#dialog:has(.project-create-form) > form > footer button {
+  min-height: 32px;
+  min-width: 60px;
+  padding: 4px 12px;
+}
+body:not(.dark) #dialog:has(.project-create-form) #dialog-save {
+  border-color: #8a6b3c;
+  background: #8a6b3c;
+}
+#dialog:has(.project-create-form) #dialog-content {
+  padding: 13px 19px 0;
+}
+#dialog-content .project-create-form label {
+  margin: 28px 0 5px;
+  font-size: calc(14 * var(--app-type-unit));
+  line-height: 18px;
+}
+#dialog-content .project-create-form label:first-child {
+  margin-top: 0;
+}
+#dialog-content .project-create-form label[for="new-description"] {
+  margin-top: 29px;
+}
+#dialog-content .project-create-form :is(input, textarea) {
+  height: 32px;
+  padding: 5px 9px;
+}
+#dialog-content .project-create-form textarea {
+  display: block;
+  min-height: 71px;
+  resize: vertical;
+  font: inherit;
+  line-height: 20px;
+}
+.project-create-directory {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.project-create-directory > input {
+  min-width: 0;
+}
+.project-create-directory > button {
+  display: flex;
+  flex: 0 0 112px;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  gap: 7px;
+  padding: 4px 8px;
+}
+.project-create-directory > button svg {
+  width: 15px;
+  height: 15px;
+}
+@media (min-width: 1100px) {
+  #dialog:has(.project-create-form) {
+    translate: 100px 0;
+  }
+}

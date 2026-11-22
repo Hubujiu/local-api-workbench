@@ -482,3 +482,46 @@ test("complete custom commit followed by failed readback retains identity and do
   assert.equal((await restart.get(key)).revision, 1);
   assert.equal((await restart.list()).length, 1);
 });
+
+test("owner create preserves optional project description and rejects invalid values before registration", async (t) => {
+  const { root, custom } = await fixture(t);
+  const app = await createApp({ root, port: 0 });
+  t.after(() => app.close());
+  const create = (payload) =>
+    fetch(app.url + "/api/projects", {
+      method: "POST",
+      headers: {
+        "x-local-token": app.token,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  for (const description of [null, {}, 23, "文".repeat(2001)]) {
+    const response = await create({
+      name: "invalid",
+      directory: custom,
+      description,
+    });
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /项目描述/);
+  }
+  assert.deepEqual(await readdir(custom), []);
+  assert.deepEqual(await app.store.list(), []);
+  const description = "第一行\n" + "文".repeat(1996);
+  assert.equal(description.length, 2000);
+  const response = await create({
+    name: "with description",
+    directory: custom,
+    description,
+  });
+  assert.equal(response.status, 201);
+  const created = await response.json();
+  assert.equal(created.description, description);
+  assert.equal(
+    (await new Store(root).get(created.id)).description,
+    description,
+  );
+  const oldClient = await create({ name: "without optional field" });
+  assert.equal(oldClient.status, 201);
+  assert.equal(Object.hasOwn(await oldClient.json(), "description"), false);
+});
