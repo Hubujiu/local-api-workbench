@@ -4,6 +4,10 @@ import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createProjectImportGuard } from "../public/project-import-guard.js";
+import {
+  changedProvisionalQuery,
+  createProvisionalQuery,
+} from "../public/design-query-provisional.js";
 import { createApp } from "../src/server.mjs";
 const source = (
   await readFile(new URL("../public/app.js", import.meta.url), "utf8")
@@ -56,8 +60,11 @@ function harness(initial = fixture(), transport) {
     "initial",
     "api",
     "projectImports",
+    "changedProvisionalQuery",
+    "provisionalQuery",
     `
  const debugAuthDrafts = new WeakMap();
+ const request=()=>project.requests.find((entry)=>entry.id===current);
  let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
  let openedDocuments=[],activeDocumentId=null;
@@ -72,7 +79,13 @@ function harness(initial = fixture(), transport) {
  ${saveCode}\n${openCode}\n${errorCode}
  return {save,open:openProject,debugAuthDrafts,editError(){editErrorCode(0);return modalCallback()},rendered:()=>rendered,edit(){project.name='new draft';mark()},replace(p){project=p;mark()},rollback:(e,fn)=>rollbackProjectSave(e,fn),state:()=>({project,dirty,saving}),mark};`,
   );
-  return { ...build(initial, api, guard), guard, calls };
+  const provisional = createProvisionalQuery();
+  return {
+    ...build(initial, api, guard, changedProvisionalQuery, provisional),
+    guard,
+    calls,
+    provisional,
+  };
 }
 function rejection(id = "a", outcome = "not_committed") {
   return Object.assign(Error("rejected"), {
@@ -83,6 +96,37 @@ function rejection(id = "a", outcome = "not_committed") {
     },
   });
 }
+test("an unnamed Query setting prevents ambiguous saves without writing, then reset allows the same draft save", async () => {
+  const initial = fixture();
+  initial.requests[0].query = [];
+  const h = harness(initial);
+  const request = initial.requests[0];
+  h.provisional.observe(initial, request);
+  const defaults = h.provisional.read(initial, request);
+  assert.equal(
+    h.provisional.update(initial, request, defaults, {
+      ...defaults,
+      required: true,
+    }),
+    true,
+  );
+  await assert.rejects(h.save(), /待命名 Query 参数选项未保存/);
+  assert.deepEqual(h.calls, []);
+  assert.deepEqual(request.query, []);
+  assert.equal(
+    h.provisional.update(
+      initial,
+      request,
+      h.provisional.read(initial, request),
+      defaults,
+    ),
+    true,
+  );
+  const pending = h.save();
+  assert.deepEqual(h.calls[0].data.requests[0].query, []);
+  h.calls[0].resolve(saved(h.calls[0].data));
+  await pending;
+});
 test("current valid receipt replaces only owned draft", async () => {
   const h = harness();
   const p = h.save();
