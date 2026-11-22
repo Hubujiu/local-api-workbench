@@ -139,11 +139,20 @@ try {
     "after",
   ]);
   assert.equal(
-    await pane
-      .getByRole("button", { name: /获取\s*schema|刷新|新建查询/i })
-      .count(),
+    await pane.getByRole("button", { name: /获取\s*schema|刷新/i }).count(),
     0,
   );
+  const namedQueries = pane.getByRole("navigation", {
+    name: "GraphQL 查询列表",
+    exact: true,
+  });
+  const addQuery = namedQueries.getByRole("button", {
+    name: "＋ 新建查询",
+    exact: true,
+  });
+  assert.equal(await addQuery.count(), 1);
+  assert.equal(await addQuery.isVisible(), true);
+  assert.equal(await addQuery.isEnabled(), true);
   await page.locator('[data-param="graphql"]').focus();
   await screenshot("query");
   await toggle.press("Space");
