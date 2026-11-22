@@ -10,6 +10,7 @@ export const unappliedGraphQL =
 export function createGraphQLWorkspaceDrafts() {
   const latest = new WeakMap();
   const open = new WeakSet();
+  const operationDetails = new WeakSet();
   return {
     read(request) {
       const local = latest.get(request);
@@ -28,15 +29,25 @@ export function createGraphQLWorkspaceDrafts() {
       if (show) open.add(request);
       else open.delete(request);
     },
+    operationOpen: (request) => operationDetails.has(request),
+    showOperation(request, show) {
+      if (show) operationDetails.add(request);
+      else operationDetails.delete(request);
+    },
     edit(request, field, text) {
       const state = this.read(request);
       if (!state || state.original !== request.body)
         throw Error("GraphQL 正文已变化，未覆盖现有正文。");
-      const baseline = (state.view[field] ?? "").replace(/\r\n?/g, "\n");
-      if (text === baseline) delete state.patch[field];
-      else
-        state.patch[field] =
-          field === "variablesSource" && text === "" ? undefined : text;
+      if (field === "operationName") {
+        if (text === state.view.operationName) delete state.patch.operationName;
+        else state.patch.operationName = text;
+      } else {
+        const baseline = (state.view[field] ?? "").replace(/\r\n?/g, "\n");
+        if (text === baseline) delete state.patch[field];
+        else
+          state.patch[field] =
+            field === "variablesSource" && text === "" ? undefined : text;
+      }
       if (Object.keys(state.patch).length) latest.set(request, state);
       else latest.delete(request);
     },
@@ -45,6 +56,17 @@ export function createGraphQLWorkspaceDrafts() {
       if (!state) return false;
       if (state.original !== request.body)
         throw Error("GraphQL 正文已变化，未覆盖现有正文。");
+      // Validate only the explicitly edited identifier, not the Query document
+      // or an untouched historical string.
+      const operationName = state.patch.operationName;
+      if (
+        operationName !== undefined &&
+        (!/^[A-Za-z_]/.test(operationName) ||
+          /[^A-Za-z0-9_]/.test(operationName))
+      )
+        throw Error(
+          "操作名称须以英文字母或下划线开头，只能包含英文字母、数字或下划线；也可取消包含该字段。",
+        );
       const next = prepareGraphQLEdit(request, state.patch);
       latest.delete(request);
       if (next === request.body) return false;
@@ -59,6 +81,12 @@ export function graphqlWorkspaceHTML(request, drafts, esc, ownerId) {
   const data = drafts.read(request);
   const opened = data && drafts.variablesOpen(request);
   const pending = data && drafts.pending(request);
+  const operation =
+    data &&
+    (Object.hasOwn(data.patch, "operationName")
+      ? data.patch.operationName
+      : data.view.operationName);
+  const includesOperation = operation !== undefined;
   const value = (key) =>
     Object.hasOwn(data.patch, key)
       ? (data.patch[key] ?? "")
@@ -78,10 +106,19 @@ ${esc(value("variablesSource"))}</textarea>
       </label>
     </div></div>
     <div class="graphql-workspace-actions">
+      <details class="graphql-operation-name"${drafts.operationOpen(request) ? " open" : ""}>
+        <summary>操作名称（可选）</summary>
+        <div>
+          <label><input type="checkbox" id="graphql-include-operation-name"${includesOperation ? " checked" : ""}>包含 operationName</label>
+          <label for="graphql-operation-name">操作名称</label>
+          <input type="text" id="graphql-operation-name" autocomplete="off" spellcheck="false" value="${esc(operation ?? data.view.operationName ?? "")}" aria-describedby="graphql-operation-name-hint"${includesOperation ? "" : " disabled"}>
+          <small id="graphql-operation-name-hint" class="muted">手动指定要执行的操作。取消包含会省略该字段。</small>
+        </div>
+      </details>
       <div class="graphql-draft-actions"${pending ? "" : " hidden"}>
         <button type="button" id="graphql-discard" class="ghost">放弃</button><button type="button" id="graphql-apply" class="primary">应用到正文</button>
       </div>
-      <span class="muted">以 HTTP POST 发送 JSON${data.view.operationName === undefined ? "" : " · 保留现有操作名"}</span>
+      <span class="muted">以 HTTP POST 发送 JSON</span>
       <button type="button" id="graphql-detach" class="ghost">使用原始 HTTP 正文</button>
     </div>`
         : `<p class="notice">该正文无法用 Query / Variables 无损编辑，未修改原有内容。</p>
@@ -111,13 +148,43 @@ export function bindGraphQLWorkspace(
     }
   };
   const fieldControls = root.querySelector(".graphql-draft-actions");
+  const operationDetails = root.querySelector(".graphql-operation-name");
+  const includeOperation = root.querySelector(
+    "#graphql-include-operation-name",
+  );
+  const operation = root.querySelector("#graphql-operation-name");
+  const initialName = operation ? drafts.read(request) : null;
+  let operationCandidate =
+    initialName?.patch.operationName ?? initialName?.view.operationName;
+  operationDetails?.addEventListener("toggle", () => {
+    if (active()) drafts.showOperation(request, operationDetails.open);
+  });
+  const stage = (field, value) => {
+    drafts.edit(request, field, value);
+    revised();
+    fieldControls.hidden = !drafts.pending(request);
+  };
+  includeOperation?.addEventListener("change", () =>
+    attempt(() => {
+      operation.disabled = !includeOperation.checked;
+      stage(
+        "operationName",
+        includeOperation.checked
+          ? (operationCandidate ?? operation.value)
+          : undefined,
+      );
+    }),
+  );
+  operation?.addEventListener("input", () =>
+    attempt(() => {
+      if (operation.disabled) return;
+      operationCandidate = operation.value;
+      stage("operationName", operationCandidate);
+    }),
+  );
   for (const field of root.querySelectorAll("[data-graphql-field]")) {
     field.addEventListener("input", () =>
-      attempt(() => {
-        drafts.edit(request, field.dataset.graphqlField, field.value);
-        revised();
-        fieldControls.hidden = !drafts.pending(request);
-      }),
+      attempt(() => stage(field.dataset.graphqlField, field.value)),
     );
   }
   const toggle = root.querySelector("#graphql-variables-toggle");

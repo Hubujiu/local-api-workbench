@@ -202,3 +202,36 @@
     border-block-start: 0;
   }
 }
+
+.graphql-operation-name {
+  min-width: 0;
+  max-width: 100%;
+}
+.graphql-operation-name > summary {
+  min-height: 32px;
+  padding: 6px 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+.graphql-operation-name[open] {
+  flex-basis: 100%;
+}
+.graphql-operation-name > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 5px 8px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.graphql-operation-name input[type="checkbox"] {
+  margin-inline: 0 6px;
+  accent-color: var(--accent);
+}
+.graphql-operation-name input[type="text"] {
+  width: min(240px, 100%);
+  min-width: 0;
+}
+.graphql-operation-name small {
+  overflow-wrap: anywhere;
+}

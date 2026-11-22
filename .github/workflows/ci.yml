@@ -71,6 +71,7 @@ jobs:
       - run: node tests/api-sidebar-tree-ui.mjs
       - run: node tests/api-create-menu-ui.mjs
       - run: node tests/graphql-workspace-ui.mjs
+      - run: node tests/graphql-operation-name-ui.mjs
       - run: node tests/graphql-schema-directory-ui.mjs
       - run: node tests/project-create-form-ui.mjs
       - run: node tests/project-create-settlement-ui.mjs
