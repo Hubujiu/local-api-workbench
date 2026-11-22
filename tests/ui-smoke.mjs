@@ -429,6 +429,18 @@ async function saveAndWait(selector = "#save-project") {
     .getByText("✓ 已保存", { exact: true })
     .waitFor();
 }
+async function openBodyHelperTab(name) {
+  const toggle = page.locator("#toggle-parameter-helper");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true")
+    await toggle.click();
+  const helper = page.locator(".parameter-helper");
+  await helper.waitFor();
+  const tab = helper.getByRole("tab", { name, exact: true });
+  if (await tab.count()) {
+    await tab.click();
+    assert.equal(await tab.getAttribute("aria-selected"), "true");
+  }
+}
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 try {
@@ -473,7 +485,7 @@ try {
     "false",
   );
   assert.equal(await page.locator("#body-code").inputValue(), originalBody);
-  await page.locator("#toggle-parameter-helper").click();
+  await openBodyHelperTab("动态值");
   await page.getByText("插入环境变量", { exact: true }).waitFor();
   await page.locator("#body-code").fill('{"name":""}');
   await page
@@ -2547,7 +2559,7 @@ try {
   );
   await page.locator('[data-param="body"]').click();
   await page.locator("#body-code").fill('{"existing":true}');
-  await page.locator("#toggle-parameter-helper").click();
+  await openBodyHelperTab("字典库");
   await page
     .locator("[data-insert-dictionary]")
     .filter({ hasText: "customerId" })
@@ -3013,8 +3025,7 @@ try {
   assert.equal(generatedBody.label, "xxx");
   assert.match(generatedBody.user_name, /^[\u4e00-\u9fff]{2,3}$/);
   await page.locator("#body-code").fill("");
-  if (!(await page.locator("#new-body-dynamic").isVisible()))
-    await page.locator("#toggle-parameter-helper").click();
+  await openBodyHelperTab("动态值");
   await page.locator("#new-body-dynamic").click();
   await page.locator("#dynamic-value").fill('{"n":7,"literal":"{{keep}}"}');
   await page.locator("#dialog-save").click();
@@ -7250,10 +7261,7 @@ try {
     await page.locator("#body-code").inputValue(),
     "{{@value:apipost_body}}",
   );
-  if (
-    !(await page.locator('[data-edit-body-dynamic="apipost_body"]').isVisible())
-  )
-    await page.locator("#toggle-parameter-helper").click();
+  await openBodyHelperTab("动态值");
   await page.locator('[data-edit-body-dynamic="apipost_body"]').click();
   assert.equal(
     await page.locator("#dynamic-source").inputValue(),
@@ -7371,10 +7379,7 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.locator('[data-param="body"]').click();
-  if (
-    !(await page.locator('[data-edit-body-dynamic="apipost_body"]').isVisible())
-  )
-    await page.locator("#toggle-parameter-helper").click();
+  await openBodyHelperTab("动态值");
   await page.locator('[data-edit-body-dynamic="apipost_body"]').click();
   assert.equal(
     await page.locator("#dynamic-value").inputValue(),

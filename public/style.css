@@ -3927,6 +3927,114 @@ body:not(.dark) .plans-heading {
       height: 100%;
     }
   }
+  .body-editor-shell:has(> .raw-helper-open) {
+    position: relative;
+  }
+  .request-panel:has(> .body-editor-shell > .raw-helper-open)
+    > .http-debug-raw-actions
+    #expand-body {
+    inset-inline-end: 308px;
+  }
+  .body-editor-shell:has(> .raw-helper-open) > .debug-raw-helper {
+    position: absolute;
+    z-index: 1;
+    inset-block-start: 4px;
+    inset-inline-end: 7px;
+    width: 24px;
+    height: 24px;
+    padding: 4px;
+    border: 0;
+    border-radius: 4px;
+    background: var(--bg);
+    color: #6f6352;
+    &:hover {
+      background: var(--hover);
+    }
+    & .helper-label > span:not(.helper-pane-chevron) {
+      display: none;
+    }
+    & .helper-pane-chevron,
+    & .helper-pane-chevron svg {
+      display: block;
+      width: 14px;
+      height: 14px;
+    }
+  }
+  .parameter-helper.raw-helper-open {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 296px;
+    width: 296px;
+    min-width: 0;
+    overflow: hidden;
+    padding: 7px 8px 8px;
+    background: var(--bg);
+    & .raw-helper-tabs {
+      display: flex;
+      align-self: start;
+      gap: 1px;
+      margin-bottom: 8px;
+      padding: 1px;
+      border-radius: 4px;
+      background: #f7f2e7;
+    }
+    & .raw-helper-tabs button {
+      margin: 0;
+      padding: 3px 7px;
+      border: 0;
+      border-radius: 3px;
+      background: transparent;
+      color: #786b57;
+    }
+    & .raw-helper-tabs [aria-selected="true"] {
+      background: #eee4d0;
+      color: var(--text);
+    }
+    & #raw-helper-dictionary {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    & #raw-helper-filter {
+      flex: none;
+      min-width: 0;
+      width: 100%;
+      height: 29px;
+      margin-bottom: 5px;
+      padding: 4px 9px;
+    }
+    & .raw-helper-entries,
+    & #raw-helper-dynamic {
+      min-height: 0;
+      overflow: auto;
+      padding: 2px;
+    }
+    & .raw-helper-entries > button {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      gap: 8px;
+      min-height: 28px;
+      margin: 0;
+      padding: 4px 7px;
+      border: 0;
+    }
+    & .raw-helper-entries > button > span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    & .raw-helper-entries > button > span + span,
+    & .raw-helper-empty {
+      color: #786b57;
+    }
+    & :is(#raw-helper-dictionary, #raw-helper-dynamic)[hidden],
+    & .raw-helper-entries > button[hidden],
+    & .raw-helper-empty[hidden] {
+      display: none;
+    }
+  }
   .editor[data-editor-mode="debug"]:not(.split-layout)
     > .request-panel
     > .body-none {

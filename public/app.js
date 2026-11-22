@@ -200,6 +200,7 @@ import {
 } from "./dictionary-view.js";
 import { clientConfiguration, mcpClients } from "./mcp-client-config.js";
 import { renderPlans, renderRuns } from "./plan-view.js";
+import { bindRawHelper, rawHelperTabs } from "./raw-helper-view.js";
 import { createPlanHistoryRefresh } from "./plan-history-refresh.js";
 const refreshPlanHistory = createPlanHistoryRefresh();
 import { resources, settingsSidebar } from "./resource-view.js";
@@ -320,6 +321,34 @@ let opened = [],
   responseLayout = "stacked",
   compactUI = false,
   settingsSection = "settings-basic";
+const rawHelperMedia = globalThis.matchMedia?.(
+  "(min-width: 1000px) and (min-height: 720px)",
+);
+let rawHelperOwner = null;
+let rawHelperState = { tab: "dictionary", query: "" };
+const useTabbedRawHelper = () =>
+  rawHelperMedia?.matches &&
+  responseLayout !== "split" &&
+  !bodyExpanded &&
+  !document.body.classList.contains("dark");
+function bodyHelperState(owner) {
+  if (rawHelperOwner !== owner) {
+    rawHelperOwner = owner;
+    rawHelperState = { tab: "dictionary", query: "" };
+  }
+  return rawHelperState;
+}
+function refreshResponsiveRawHelper() {
+  if (!helperOpen || !$(".debug-raw-helper")) return;
+  const before = $(".raw-helper-open");
+  if (Boolean(before) === Boolean(useTabbedRawHelper())) return;
+  const restoreToggle = before?.contains(document.activeElement);
+  collect();
+  render(true);
+  if (restoreToggle)
+    $("#toggle-parameter-helper")?.focus({ preventScroll: true });
+}
+rawHelperMedia?.addEventListener("change", refreshResponsiveRawHelper);
 let socketioWorkbenchState = null,
   socketioWorkbenchProject = "",
   socketioNavigationGeneration = 0,
@@ -1680,6 +1709,44 @@ function pairs(rows, key, designOptions, debugOptions) {
       "",
     )}${debugComposer ? debugPairComposer(key, false) : ""}</tbody></table>${compactEmpty || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
 }
+function bodyParameterHelper(r, tabbed) {
+  const dynamic = `<h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
+    r.bodyDynamic || {},
+  )
+    .map(
+      (id) =>
+        `<button data-edit-body-dynamic="${esc(id)}">编辑 ${esc(id.slice(0, 8))}</button>`,
+    )
+    .join("")}<h4>插入环境变量</h4>${
+    Object.keys({
+      ...project.globalVariables,
+      ...project.environments.find((item) => item.id === env())?.variables,
+    })
+      .map(
+        (key) =>
+          `<button data-insert-variable="${esc(key)}">{{${esc(key)}}}</button>`,
+      )
+      .join("") || "<p>暂无变量</p>"
+  }<h4>内置动态变量</h4><select id="builtin-variable" aria-label="内置动态变量">${builtinVariableNames.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join("")}</select><button id="insert-builtin-variable">插入占位符</button><small>每次发送生成；JSON字符串值须加引号。</small>`;
+  const more = `<h4>共享函数</h4><p class="muted">供前后置脚本调用</p>${(project.settings?.functions || []).map((fn) => `<code>utils.${esc(fn.name)}(...)</code>`).join("<br>")}<h4>请求结构</h4><pre>${esc(JSON.stringify(r.schema, null, 2))}</pre>`;
+  const contents = tabbed
+    ? rawHelperTabs(
+        effectiveParameterDictionary(project),
+        dynamic + more,
+        bodyHelperState(r),
+      )
+    : dynamic +
+      `<h4>参数字典 · 插入 JSON 字段</h4>${
+        effectiveParameterDictionary(project)
+          .map(
+            (entry) =>
+              `<button data-insert-dictionary="${esc(entry.id)}" title="${esc(entry.description)}">${esc(entry.key)} · ${esc(entry.type)}</button>`,
+          )
+          .join("") || "<p>暂无字典参数</p>"
+      }` +
+      more;
+  return `<aside id="body-parameter-helper" class="parameter-helper${tabbed ? " raw-helper-open" : ""}">${contents}</aside>`;
+}
 function paramPanel(r, param, design = false) {
   if (["headers", "query", "path", "cookies"].includes(param))
     return (
@@ -1712,6 +1779,7 @@ function paramPanel(r, param, design = false) {
   if (param === "body") {
     const debugRawJSON = !design && r.bodyType === "json";
     const expandLabel = bodyExpanded ? "收起编辑器" : "展开编辑器";
+    const tabbedHelper = helperOpen && debugRawJSON && useTabbedRawHelper();
     return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${!design && (r.bodyType === "none" || debugRawJSON) ? `<span class="body-type-caption" title="${type}">${type}</span>` : type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" ? "" : `<div class="body-actions${debugRawJSON ? " http-debug-raw-actions" : ""}"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost"${debugRawJSON ? ' aria-label="格式化 JSON"' : ""}>${debugRawJSON ? "美化" : "格式化 JSON"}</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${debugRawJSON ? `<span class="debug-raw-expand-icon">${lineIcon("editor-expand")}</span><span class="debug-raw-expand-label">${expandLabel}</span>` : expandLabel}</button>`}</div>`}${
       ["form-data", "urlencoded"].includes(r.bodyType)
         ? pairs(r.form, "form")
@@ -1722,35 +1790,8 @@ function paramPanel(r, param, design = false) {
               .map((_, i) => i + 1)
               .join(
                 "\n",
-              )}</pre><pre id="code-highlight" aria-hidden="true"${debugRawJSON ? ' class="debug-raw-json-highlight"' : ""}>${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle${debugRawJSON ? " debug-raw-helper" : ""}" aria-label="参数助手" aria-expanded="${helperOpen}"${helperOpen ? ' aria-controls="body-parameter-helper"' : ""}><span class="helper-label" aria-hidden="true">${debugRawJSON ? `<span class="helper-rail-chevron">${lineIcon("helper-rail-left")}</span>` : ""}<span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
-              helperOpen
-                ? `<aside id="body-parameter-helper" class="parameter-helper"><h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
-                    r.bodyDynamic || {},
-                  )
-                    .map(
-                      (id) =>
-                        `<button data-edit-body-dynamic="${esc(id)}">编辑 ${esc(id.slice(0, 8))}</button>`,
-                    )
-                    .join("")}<h4>插入环境变量</h4>${
-                    Object.keys({
-                      ...project.globalVariables,
-                      ...project.environments.find((item) => item.id === env())
-                        ?.variables,
-                    })
-                      .map(
-                        (key) =>
-                          `<button data-insert-variable="${esc(key)}">{{${esc(key)}}}</button>`,
-                      )
-                      .join("") || "<p>暂无变量</p>"
-                  }<h4>内置动态变量</h4><select id="builtin-variable" aria-label="内置动态变量">${builtinVariableNames.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join("")}</select><button id="insert-builtin-variable">插入占位符</button><small>每次发送生成；JSON字符串值须加引号。</small><h4>参数字典 · 插入 JSON 字段</h4>${
-                    effectiveParameterDictionary(project)
-                      .map(
-                        (entry) =>
-                          `<button data-insert-dictionary="${esc(entry.id)}" title="${esc(entry.description)}">${esc(entry.key)} · ${esc(entry.type)}</button>`,
-                      )
-                      .join("") || "<p>暂无字典参数</p>"
-                  }<h4>共享函数</h4><p class="muted">供前后置脚本调用</p>${(project.settings?.functions || []).map((fn) => `<code>utils.${esc(fn.name)}(...)</code>`).join("<br>")}<h4>请求结构</h4><pre>${esc(JSON.stringify(r.schema, null, 2))}</pre></aside>`
-                : ""
+              )}</pre><pre id="code-highlight" aria-hidden="true"${debugRawJSON ? ' class="debug-raw-json-highlight"' : ""}>${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle${debugRawJSON ? " debug-raw-helper" : ""}" aria-label="参数助手" aria-expanded="${helperOpen}"${helperOpen ? ' aria-controls="body-parameter-helper"' : ""}><span class="helper-label" aria-hidden="true">${debugRawJSON ? `<span class="helper-rail-chevron">${lineIcon("helper-rail-left")}</span>` : ""}${tabbedHelper ? `<span class="helper-pane-chevron">${lineIcon("helper-pane-right")}</span>` : ""}<span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
+              helperOpen ? bodyParameterHelper(r, tabbedHelper) : ""
             }</div>`
     }`;
   }
@@ -2330,6 +2371,7 @@ function bind() {
       "theme",
       document.body.classList.contains("dark") ? "dark" : "light",
     );
+    refreshResponsiveRawHelper();
   });
   on("#project-select", "change", (_, e) => openProject(e.value));
   on("#env", "change", (_, e) => {
@@ -3659,6 +3701,8 @@ function bind() {
     render();
     $("#body-code")?.focus();
   });
+  if ($(".raw-helper-open"))
+    bindRawHelper($(".raw-helper-open"), bodyHelperState(request()));
   on("#toggle-parameter-helper", "click", (event, button) => {
     const keepFocus =
       button.classList.contains("debug-raw-helper") &&
@@ -3666,6 +3710,7 @@ function bind() {
       button === document.activeElement;
     collect();
     helperOpen = !helperOpen;
+    if (helperOpen) rawHelperOwner = null;
     render();
     if (keepFocus)
       $("#toggle-parameter-helper")?.focus({ preventScroll: true });
@@ -7204,14 +7249,17 @@ async function openCookieManager(workspace = null) {
 function insertVariable(name) {
   const editor = $("#body-code");
   if (!editor) return;
+  const helperScrollRegion = () =>
+    $("#raw-helper-dynamic:not([hidden])") || $(".parameter-helper");
   const start = editor.selectionStart,
     end = editor.selectionEnd,
-    helperScroll = $(".parameter-helper")?.scrollTop || 0;
+    helperScroll = helperScrollRegion()?.scrollTop || 0;
   request().body =
     editor.value.slice(0, start) + "{{" + name + "}}" + editor.value.slice(end);
   mark();
   render();
-  if ($(".parameter-helper")) $(".parameter-helper").scrollTop = helperScroll;
+  const helper = helperScrollRegion();
+  if (helper) helper.scrollTop = helperScroll;
   const updated = $("#body-code");
   updated?.setSelectionRange(start + name.length + 4, start + name.length + 4);
   updated?.focus({ preventScroll: true });

@@ -43,6 +43,36 @@ try {
   project.requests.push(request);
   await app.store.save(project);
   const baseline = await app.store.get(project.id);
+  const dictionaryProject = await app.store.create("字典参数本机验收");
+  const dictionaryRequest = normalizeRequest({
+    id: "dictionary-draft",
+    name: "Dictionary draft",
+    url: "http://127.0.0.1:38982/verification",
+    bodyType: "json",
+    body: original,
+  });
+  dictionaryProject.requests.push(dictionaryRequest);
+  dictionaryProject.settings.builtinDictionary = false;
+  dictionaryProject.parameterDictionary = [
+    {
+      id: "request-id",
+      key: "requestId",
+      type: "string",
+      note: "only note",
+      description: "公开追踪字段",
+      default: "draft-only",
+    },
+    {
+      id: "limit-field",
+      key: "limit",
+      type: "integer",
+      note: "分组",
+      description: "maximum page size",
+      default: 25,
+    },
+  ];
+  await app.store.save(dictionaryProject);
+  const dictionaryBaseline = await app.store.get(dictionaryProject.id);
   const origin = new URL(app.launchUrl).origin;
   const blocked = [];
   const errors = [];
@@ -58,7 +88,8 @@ try {
   });
   page.setDefaultTimeout(6500);
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.addInitScript(() => {
+  await page.addInitScript((initialProject) => {
+    sessionStorage.setItem("project", initialProject);
     localStorage.setItem("theme", "light");
     window.__bodyCopyEvents = [];
     document.addEventListener("copy", (event) => {
@@ -71,7 +102,7 @@ try {
       // Exercise the native keyboard event without touching the host clipboard.
       event.preventDefault();
     });
-  });
+  }, project.id);
   await page.route("**/*", (route) => {
     const req = route.request();
     if (req.method() === "GET" && new URL(req.url()).origin === origin)
@@ -285,11 +316,26 @@ try {
       (button) => getComputedStyle(button).outlineWidth === "2px",
     ),
   );
+  const dictionaryTab = helperPanel.getByRole("tab", { name: "字典库" });
+  const dynamicTab = helperPanel.getByRole("tab", { name: "动态值" });
+  assert.equal(await dictionaryTab.getAttribute("aria-selected"), "true");
+  assert(await helperPanel.getByRole("searchbox").isVisible());
+  assert(await helperPanel.getByText("当前项目暂无字典参数").isVisible());
+  const openBox = await helperPanel.boundingBox();
+  near(openBox.x, 1051, 3, "open helper left");
+  near(openBox.y, 315, 2, "open helper top");
+  near(openBox.width, 296, 2, "open helper width");
+  near(openBox.y + openBox.height, 570, 3, "open helper bottom");
+  measurements.openHelper = openBox;
+  await capture("open-empty");
+  await dictionaryTab.press("ArrowRight");
+  assert.equal(await dynamicTab.getAttribute("aria-selected"), "true");
+  assert(await dynamicTab.evaluate((tab) => tab === document.activeElement));
+  assert.equal(await helperPanel.getByRole("searchbox").count(), 0);
   for (const name of [
     "动态值",
     "插入环境变量",
     "内置动态变量",
-    "参数字典 · 插入 JSON 字段",
     "共享函数",
     "请求结构",
   ])
@@ -297,7 +343,17 @@ try {
       await helperPanel.getByRole("heading", { name, exact: true }).count(),
       1,
     );
-  await assertLegacyHelper();
+  await capture("open-dynamic");
+  await dynamicTab.press("ArrowLeft");
+  assert.equal(await dictionaryTab.getAttribute("aria-selected"), "true");
+  assert(await dictionaryTab.evaluate((tab) => tab === document.activeElement));
+  assert(await helperPanel.getByRole("searchbox").isVisible());
+  assert.equal(
+    await helperPanel
+      .getByRole("heading", { name: "动态值", exact: true })
+      .count(),
+    0,
+  );
   assert.equal(await body.inputValue(), formatted);
   await helperToggle.press("Space");
   assert.equal(await helperToggle.getAttribute("aria-expanded"), "false");
@@ -377,9 +433,80 @@ try {
   await format.press("Enter");
   assert.equal(await body.inputValue(), formatted);
 
+  await page.setViewportSize({ width: 1363, height: 1023 });
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("#project-select").selectOption(dictionaryProject.id);
+  await page.locator('[data-request="dictionary-draft"]').waitFor();
+  await bodyTab.click();
+  await helperToggle.press("Enter");
+  const filter = helperPanel.getByRole("searchbox", {
+    name: "搜索参数、备注或描述",
+  });
+  const rows = helperPanel.locator(".raw-helper-entries button:visible");
+  const tablist = helperPanel.getByRole("tablist");
+  assert.equal(await rows.count(), 2);
+  for (const [query, key] of [
+    ["  REQUESTID ", "requestId"],
+    ["only note", "requestId"],
+    ["page size", "limit"],
+  ]) {
+    await filter.fill(query);
+    assert.equal(await rows.count(), 1);
+    assert.match(await rows.first().textContent(), new RegExp(key));
+    assert.equal(await body.inputValue(), original);
+  }
+  await filter.fill("not present");
+  assert(await helperPanel.getByText("没有匹配的字典参数").isVisible());
+  assert.equal(await rows.count(), 0);
+  await filter.fill("only note");
+  await rows.first().press("Enter");
+  const insertedBody = await body.inputValue();
+  assert.deepEqual(JSON.parse(insertedBody), {
+    ...JSON.parse(original),
+    requestId: "draft-only",
+  });
+  assert.equal(await filter.inputValue(), "only note");
+  await rows.first().press("Enter");
+  assert.equal(await body.inputValue(), insertedBody);
+  for (const flip of [
+    () => page.locator("#theme").click(),
+    () => page.locator("#response-layout").click(),
+    async () =>
+      page.setViewportSize(
+        (await page.viewportSize()).width === 1363
+          ? { width: 430, height: 760 }
+          : { width: 1363, height: 1023 },
+      ),
+  ]) {
+    await flip();
+    await tablist.waitFor({ state: "detached" });
+    assert(
+      await helperPanel
+        .getByRole("heading", {
+          name: "参数字典 · 插入 JSON 字段",
+          exact: true,
+        })
+        .isVisible(),
+    );
+    assert.equal(await body.inputValue(), insertedBody);
+    await flip();
+    await tablist.waitFor();
+    assert.equal(await filter.inputValue(), "only note");
+    assert.equal(await body.inputValue(), insertedBody);
+  }
+  await helperToggle.press("Space");
+  await helperToggle.press("Enter");
+  assert.equal(await filter.inputValue(), "");
+  assert.equal(await rows.count(), 2);
+  assert.equal(await body.inputValue(), insertedBody);
+
   assert.deepEqual(blocked, []);
   assert.deepEqual(errors, []);
   assert.deepEqual(await app.store.get(project.id), baseline);
+  assert.deepEqual(
+    await app.store.get(dictionaryProject.id),
+    dictionaryBaseline,
+  );
   if (prefix)
     await writeFile(
       prefix + ".json",
