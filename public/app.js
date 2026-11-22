@@ -3643,6 +3643,12 @@ function bind() {
     if ($("#code-gutter")) $("#code-gutter").scrollTop = element.scrollTop;
   });
   on('input[name="body-type"],#raw-format', "change", (_, e) => {
+    const restoreEmptyBodyRadio =
+      mode === "debug" &&
+      e.name === "body-type" &&
+      e.matches(":focus-visible") &&
+      (e.value === "none" ||
+        e.closest(".request-panel")?.querySelector(":scope > .body-none"));
     collect();
     if (["none", "form-data", "urlencoded"].includes(e.value))
       bodyExpanded = false;
@@ -3650,6 +3656,8 @@ function bind() {
       request().bodyType = "json";
     mark();
     render();
+    if (restoreEmptyBodyRadio)
+      $('input[name="body-type"]:checked')?.focus({ preventScroll: true });
   });
   on("#expand-body", "click", () => {
     collect();
