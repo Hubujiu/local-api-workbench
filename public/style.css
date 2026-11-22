@@ -1844,6 +1844,94 @@ body:not(.dark) .plans-page .plan-history-layout {
 body:not(.dark) .project-group #open-location {
   background: var(--hover);
 }
+#project-search-trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  min-width: 28px;
+  height: 30px;
+  padding: 0;
+  color: var(--muted);
+}
+#project-search-trigger svg,
+.project-search-field svg,
+#project-search-results svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+#project-search-popup {
+  position: fixed;
+  inset: 44px auto auto calc(50% + 5px);
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: min(401px, calc(100vw - 24px));
+  height: min(367px, calc(100dvh - 55px));
+  margin: 0;
+  padding: 16px 19px 20px 20px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 5px 20px #0002;
+}
+.project-search-field {
+  position: relative;
+  display: block;
+}
+.project-search-field svg {
+  position: absolute;
+  z-index: 1;
+  inset: 8px auto auto 10px;
+  pointer-events: none;
+  color: var(--muted);
+}
+.project-search-field input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px 0 29px;
+  background: var(--panel);
+}
+#project-search-results {
+  list-style: none;
+  max-height: calc(100% - 44px);
+  overflow: auto;
+  margin: 12px 0 0;
+  padding: 0;
+}
+#project-search-results button {
+  width: 100%;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  text-align: start;
+}
+#project-search-results button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#project-search-results button:is(:hover, :focus-visible),
+#project-search-results button[aria-current="true"] {
+  background: var(--hover);
+}
+.project-search-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+@media (max-width: 760px) {
+  #project-search-popup {
+    inset-inline-start: 50%;
+    padding-inline: 14px;
+  }
+}
 .top-actions {
   justify-content: flex-end;
 }
