@@ -9,6 +9,7 @@
 @import url("./case-list.css");
 @import url("./load-workspace.css");
 @import url("./recent-history.css");
+@import url("./appearance-settings.css");
 :root {
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
   color: #413d35;
