@@ -22,6 +22,12 @@
 | 回收站：空列表                  | [#367](https://github.com/Hubujiu/local-api-workbench/pull/367) 原生与 Workbench 空态在 1363 px 对照；Workbench 430 px 实测打开、键盘关闭、焦点及原工作区草稿保留。                                                                                                                                                                                                                                                                                                               | Workbench 另验已有回收条目仍可恢复；这不是原生非空、还原或永久删除对照。                                                                                                         |
 | 接口移入回收站：确认与取消      | [#369](https://github.com/Hubujiu/local-api-workbench/pull/369) 原生只打开合成接口的确认框并取消；Workbench 在 1363 px 实测确认框 416 × 117，430 px 验证提示与键盘。Workbench 另以合成接口走通真实软删除、显式保存和恢复，未发送请求。                                                                                                                                                                                                                                            | 原生未确认删除或还原；未验原生非空和永久删除，也不推及其他资源。                                                                                                                 |
 
+| APIS：普通 HTTP 接口树右键菜单 | [#371](https://github.com/Hubujiu/local-api-workbench/pull/371) 原生普通接口菜单与 Workbench 局部对照；Chromium 实测在相应接口上复制、移到回收站和取消，含 430 px 键盘和焦点检查。 | 原生还提供其他动作；这里只验 Workbench 的复制与移到回收站。两者仅修改本地草稿，不自动保存、不发送请求；不推及其他协议、资源和原生动作。 |
+| 最近：已保存版本批量选择 | [#372](https://github.com/Hubujiu/local-api-workbench/pull/372) 1363 px 成对查看选中一项和取消；原生只勾选并取消。Workbench 单独在 430 px 检查键盘/焦点，并用两个合成接口走通重新校验、草稿内批量移到回收站、显式保存及恢复。 | 不验证原生批量删除或恢复。Workbench 不对已有未保存修改的项目启用此操作，不对原生继承模式启用；取消或版本已变化不写入。 |
+| 项目选择器：搜索及无匹配 | [#373](https://github.com/Hubujiu/local-api-workbench/pull/373) 原生仅查看当前项目、无匹配与点外侧取消，未切换。Workbench 1363 px 实测面板 401 × 367；用两个合成项目验证过滤、空结果和现有草稿保护下的切换，另测 430 px。 | 仅为选择器组件对照；Workbench 保留现有选择器，另外提供搜索入口。无原生切换后的页面或草稿状态对照，不视为整屏对齐。 |
+
+**下一项独立验收缺口：项目切换后的工作区。** 现有原生截图停在选择器。下一轮可用两个隔离合成项目分别实操切换并记录进入后的页面；如需对照未保存草稿提示，须另用可丢弃草稿验证，不能用选择器截图代替。
+
 更早证据：[HTTP 基线](HTTP-WORKBENCH-BASELINE.md)、[次级页面截图](APIPOST-NATIVE-SECONDARY-SCREENS.md)、[旧像素差异数据](SECONDARY-PIXEL-DIAGNOSTICS.json)。已实测原生 Git 导航在当前状态会打开项目目录终端（未运行命令），不能当成已验证的页面或 Git 同步流程。
 
 继续补证时，每行记录具体状态、原生版本、Workbench 精确提交、运行环境、合成数据、主题、视口/DPR、裁切和公开证据。分别注明是否实操、是否同态及严格结论；不调整尺寸掩盖差异，不公开密钥或设备识别信息。
