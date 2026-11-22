@@ -1,4 +1,5 @@
 import { markdownTools } from "./design-markdown.js";
+import { workspaceMarkdownIcon } from "./workspace-markdown-icons.js";
 import { renderMarkdown } from "./vendor/markdown-renderer.js";
 
 const esc = (value) =>
@@ -51,7 +52,7 @@ export function workspaceDocumentHTML(
     </header>
     ${
       editing
-        ? `<div class="workspace-document-editor"><div class="workspace-document-toolbar" role="group" aria-label="文档格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-workspace-markdown="${key}" aria-label="${esc(label)}" title="${esc(label)}">${esc(glyph)}</button>`).join("")}</div><div class="workspace-document-panes"><textarea id="workspace-document-text" aria-label="Markdown 正文" spellcheck="false">\n${esc(content)}</textarea>${preview}</div><footer class="workspace-document-footer"><small id="workspace-document-count">${documentCounts(content)}</small><div class="workspace-document-scroll-actions"><label><input id="workspace-document-sync" type="checkbox" ${synchronized ? "checked" : ""}> 同步滚动</label><button type="button" class="ghost" id="workspace-document-top">回到顶部</button></div></footer></div>`
+        ? `<div class="workspace-document-editor"><div class="workspace-document-toolbar" role="group" aria-label="文档格式工具">${markdownTools.map(([key, , label]) => `<button type="button" class="ghost" data-workspace-markdown="${key}" aria-label="${esc(label)}" title="${esc(label)}">${workspaceMarkdownIcon(key)}</button>`).join("")}</div><div class="workspace-document-panes"><textarea id="workspace-document-text" aria-label="Markdown 正文" spellcheck="false">\n${esc(content)}</textarea>${preview}</div><footer class="workspace-document-footer"><small id="workspace-document-count">${documentCounts(content)}</small><div class="workspace-document-scroll-actions"><label><input id="workspace-document-sync" type="checkbox" ${synchronized ? "checked" : ""}> 同步滚动</label><button type="button" class="ghost" id="workspace-document-top">回到顶部</button></div></footer></div>`
         : preview
     }
   </section>`;

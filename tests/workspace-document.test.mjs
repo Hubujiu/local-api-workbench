@@ -39,6 +39,12 @@ test("workspace Markdown has only real draft controls and no raw HTML or remote 
   assert.match(editor, /value="&quot;&gt;&lt;img&gt;"/);
   assert.match(editor, /<h1>Safe Markdown<\/h1>/);
   assert.match(editor, /data-workspace-markdown="bold"/);
+  assert.equal((editor.match(/data-workspace-markdown=/g) || []).length, 12);
+  assert.equal(
+    (editor.match(/aria-hidden="true" focusable="false"/g) || []).length,
+    12,
+  );
+  assert.doesNotMatch(editor, /data-workspace-markdown="(?:image|share|help)"/);
   assert.match(editor, /id="save"[^>]+disabled/);
   assert.doesNotMatch(editor, /<script>|<img src=|id="send"/);
   const preview = workspaceDocumentHTML(record, {});
