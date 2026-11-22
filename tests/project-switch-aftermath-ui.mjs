@@ -1,3 +1,4 @@
+import { chooseProjectSwitch } from "./helpers/project-switch-confirmation-ui.mjs";
 import assert from "node:assert/strict";
 import { pickProjectUI } from "./helpers/pick-project-ui.mjs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -133,18 +134,9 @@ try {
     if (decision === undefined) {
       await choice.click();
     } else {
-      let message;
-      const confirm = (event) => {
-        message = event.message();
-        return decision ? event.accept() : event.dismiss();
-      };
-      page.once("dialog", confirm);
-      try {
-        await choice.click();
-      } finally {
-        page.off("dialog", confirm);
-      }
-      assert.equal(message, "当前修改尚未保存，确定切换项目？");
+      await chooseProjectSwitch(page, decision ? "discard" : "cancel", () =>
+        choice.click(),
+      );
     }
     if (decision !== false)
       await direct
