@@ -70,6 +70,7 @@ jobs:
       - run: node tests/workspace-document-history-ui.mjs
       - run: node tests/workspace-document-scroll-ui.mjs
       - run: node tests/dictionary-page-ui.mjs
+      - run: node tests/dictionary-entry-ui.mjs
       - run: node tests/ui-smoke.mjs
         env:
           HTTP_WORKBENCH_CHECKOUT_COMMIT: ${{ steps.browser_checkout.outputs.commit }}

@@ -194,6 +194,7 @@ import { adoptVariableWrites } from "./variable-write-receipt.js";
 import { stepEditor, bindStepEditor } from "./step-editor.js";
 import {
   dictionaryPanel,
+  dictionaryEntryEditor,
   dictionarySidebar,
   dictionaryViewPosition,
   bindDictionaryView,
@@ -2986,14 +2987,20 @@ function bind() {
     );
   });
   function editParameterEntry(id, initial) {
-    const entry = (project.parameterDictionary || []).find(
+    const owner = project,
+      version = editVersion;
+    const existing = (owner.parameterDictionary || []).find(
       (item) => item.id === id,
-    ) ||
+    );
+    if (id && !existing) throw Error("字典参数已不存在");
+    const entry = existing ||
       initial || { key: "", type: "string", description: "", note: "" };
     modal(
-      "字典参数",
-      `<label>参数名</label><input id="dict-key" value="${esc(entry.key)}"><label>类型</label><select id="dict-type">${["string", "integer", "number", "boolean", "object", "array"].map((type) => `<option ${type === entry.type ? "selected" : ""}>${type}</option>`).join("")}</select><label>说明</label><input id="dict-description" value="${esc(entry.description)}"><label>备注</label><input id="dict-note" value="${esc(entry.note)}"><label>默认值 / 示例 / 枚举（JSON对象）</label>${jsonEditor(Object.fromEntries(["default", "example", "enum"].filter((key) => entry[key] !== undefined).map((key) => [key, entry[key]])))}`,
+      existing ? "编辑字典参数" : "新建字典参数",
+      dictionaryEntryEditor(entry),
       async () => {
+        if (project !== owner || editVersion !== version)
+          throw Error("项目或字典草稿已变化，请重新打开编辑器");
         const extras = JSON.parse($("#modal-json").value);
         if (!extras || typeof extras !== "object" || Array.isArray(extras))
           throw Error("扩展定义必须是JSON对象");
@@ -3008,6 +3015,7 @@ function bind() {
           throw Error("枚举值必须是数组");
         const previous = structuredClone(project.parameterDictionary || []);
         const value = {
+          ...(entry.required !== undefined ? { required: entry.required } : {}),
           ...extras,
           id: entry.id || uid(),
           key: $("#dict-key").value,
