@@ -65,9 +65,8 @@ try {
     [frame.x, frame.y, frame.width, frame.height],
     [371, 273, 976, 140],
   );
-  const radios = await editor
-    .locator('input[name="body-type"]')
-    .evaluateAll((nodes) =>
+  const measureRadios = () =>
+    editor.locator('input[name="body-type"]').evaluateAll((nodes) =>
       nodes.map((node) => {
         const box = node.getBoundingClientRect();
         const style = getComputedStyle(node);
@@ -80,17 +79,58 @@ try {
         };
       }),
     );
-  assert.deepEqual(
-    radios.map(({ value }) => value),
-    types,
-  );
+  const assertRadioSlots = (radios) => {
+    assert.deepEqual(
+      radios.map(({ value }) => value),
+      types,
+    );
+    for (const [i, targetX] of [386, 451, 545, 648, 720, 810].entries()) {
+      near(radios[i].x, targetX, 6, types[i] + " center x");
+      near(radios[i].y, 249, 2, types[i] + " center y");
+      assert.equal(radios[i].width, 13);
+    }
+  };
+  const radios = await measureRadios();
+  assertRadioSlots(radios);
   assert.equal(await radio("none").isChecked(), true);
-  for (const [i, targetX] of [386, 451, 545, 648, 720, 810].entries()) {
-    near(radios[i].x, targetX, 6, types[i] + " center x");
-    near(radios[i].y, 249, 2, types[i] + " center y");
-    assert.equal(radios[i].width, 13);
-  }
   assert.notEqual(radios[0].outline, radios[1].outline);
+  const radioStrip = editor.locator(".body-types");
+  const priorInlineFont = await radioStrip.evaluate((strip) => {
+    const prior = {
+      family: strip.style.fontFamily,
+      size: strip.style.fontSize,
+    };
+    strip.style.fontFamily = "monospace";
+    strip.style.fontSize = "16px";
+    return prior;
+  });
+  try {
+    const activeFont = await radioStrip.evaluate((strip) => {
+      const style = getComputedStyle(strip);
+      return [style.fontFamily, style.fontSize];
+    });
+    assert.deepEqual(activeFont, ["monospace", "16px"]);
+    const alternateRadios = await measureRadios();
+    assertRadioSlots(alternateRadios);
+    assert.deepEqual(
+      alternateRadios,
+      radios,
+      "font substitution must not move radio slots",
+    );
+    const caption = editor.locator('.body-type-caption[title="urlencoded"]');
+    assert(await caption.evaluate((el) => el.scrollWidth > el.clientWidth));
+    assert.equal(
+      await editor
+        .getByRole("radio", { name: "urlencoded", exact: true })
+        .count(),
+      1,
+    );
+  } finally {
+    await radioStrip.evaluate((strip, prior) => {
+      strip.style.fontFamily = prior.family;
+      strip.style.fontSize = prior.size;
+    }, priorInlineFont);
+  }
   const icon = await empty.locator(".body-none-icon svg").boundingBox();
   const message = await empty.locator("p").boundingBox();
   const generate = empty.getByRole("button", {

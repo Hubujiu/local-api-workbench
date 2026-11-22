@@ -3713,9 +3713,22 @@ body:not(.dark) .plans-heading {
   .editor[data-editor-mode="debug"]:not(.split-layout)
     > .request-panel:has(> .body-none)
     .body-types {
+    display: grid;
+    /* Native radio center-to-center distances, independent of system fonts. */
+    grid-template-columns: 65px 94px 103px 72px 90px max-content;
+    gap: 0;
     min-height: 30px;
     padding-inline: 8px;
     margin-bottom: 10px;
+  }
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    > .request-panel:has(> .body-none)
+    .body-types
+    .body-type-caption {
+    min-width: 0;
+    margin-inline-end: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .editor[data-editor-mode="debug"]:not(.split-layout)
     > .request-panel:has(> .body-none)
