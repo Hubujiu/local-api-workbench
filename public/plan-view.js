@@ -1,3 +1,4 @@
+import { renderStepPicker } from "./plan-step-picker.js";
 import { isHTTPPlanStep, planStepSummary } from "./plan-step-types.js";
 import { assertionState } from "./assertion-state.js";
 const esc = (value) =>
@@ -124,46 +125,6 @@ function renderEditor(plan, busy, environments, requests) {
     (plan.statusPolicy === "strict200" ? "selected" : "") +
     ">原版兼容：仅 200，断言不能豁免非 200</option></select>" +
     '<div class="row"><button id="edit-plan">编辑 JSON</button><button id="edit-plan-structure">编辑步骤结构</button></div></section>'
-  );
-}
-function renderStepPicker(requests) {
-  const groups = new Map();
-  for (const item of requests) {
-    if (item.deletedAt) continue;
-    const group = item.folder || "";
-    if (!groups.has(group)) groups.set(group, []);
-    groups.get(group).push(item);
-  }
-  const options = [...groups]
-    .map(
-      ([folder, items]) =>
-        '<div class="plan-picker-group">' +
-        (folder
-          ? '<span class="plan-picker-folder">' + esc(folder) + "</span>"
-          : "") +
-        items
-          .map(
-            (item) =>
-              '<label class="plan-picker-option"><input type="checkbox" name="plan-picker-api" value="' +
-              esc(item.id) +
-              '"><span>' +
-              esc(item.method) +
-              " " +
-              esc(item.name) +
-              "</span></label>",
-          )
-          .join("") +
-        "</div>",
-    )
-    .join("");
-  return (
-    '<div class="plan-editor-picker"><details id="plan-step-picker"><summary>选择要执行的接口</summary>' +
-    '<input type="search" id="plan-step-search" aria-label="搜索接口" placeholder="选择要执行的接口"><div class="plan-picker-popover">' +
-    options +
-    '<p id="plan-step-picker-empty" class="muted" ' +
-    (options ? "hidden" : "") +
-    ">没有匹配接口</p></div></details>" +
-    '<button id="add-step" type="button" disabled>添加接口</button></div>'
   );
 }
 function stepOverview(step, position, inheritedDisabled = false) {

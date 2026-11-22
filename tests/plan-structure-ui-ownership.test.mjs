@@ -159,7 +159,7 @@ test("explicit inline add freezes the selected steps in one saved plan", async (
   };
   const picker = source.slice(
     source.indexOf('  on("#add-step"'),
-    source.indexOf('  on("#plan-step-search"'),
+    source.indexOf('  const stepPicker = $("#plan-step-picker");'),
   );
   new Function("env", `with(env){${picker}}`)(environment);
   await add();
