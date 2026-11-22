@@ -48,6 +48,7 @@ export function localProjectImportMarkup() {
     <p id="local-import-mode-help" class="muted">${first.help}</p>
     <div data-local-import-panel="file">
       <label class="local-import-chooser" for="import-file">${upload}<strong id="local-import-file-label">${first.fileLabel}</strong><small id="local-import-file-name">未选择文件</small><input id="import-file" type="file" accept=".json,.yaml,.yml,.txt" aria-labelledby="local-import-file-label" aria-describedby="local-import-file-name local-import-mode-help"></label>
+      <div class="local-import-review-tools" hidden><button id="local-import-preview-file" type="button">预览 Swagger / OpenAPI</button><p id="local-import-preview-status" role="status"></p></div>
       <div class="local-import-paste"><label for="import-text" id="local-import-paste-label">或粘贴 JSON、YAML 或 cURL</label><textarea id="import-text" placeholder="粘贴 JSON、YAML 或 cURL" spellcheck="false"></textarea><small class="muted">同时选择文件和粘贴时，使用所选文件。</small></div>
     </div>
     <div data-local-import-panel="directory" hidden>
@@ -64,6 +65,12 @@ export function bindLocalProjectImport(root) {
   const file = pick("#import-file");
   const directory = pick("#import-directory");
   const paste = pick("#import-text");
+  const review = pick(".local-import-review-tools");
+  const status = pick("#local-import-preview-status");
+  const syncReview = () => {
+    review.hidden = mode.value !== "interfaces" || !file.files.length;
+    status.textContent = "";
+  };
   const sync = () => {
     const config = modes.find((item) => item.value === mode.value);
     if (!config) return;
@@ -79,6 +86,7 @@ export function bindLocalProjectImport(root) {
     file.accept = restore ? ".json" : ".json,.yaml,.yml,.txt";
     paste.placeholder = restore ? "粘贴备份 JSON" : "粘贴 JSON、YAML 或 cURL";
     pick("#local-import-paste-label").textContent = "或" + paste.placeholder;
+    syncReview();
   };
   for (const radio of radios)
     radio.addEventListener("change", () => {
@@ -90,6 +98,7 @@ export function bindLocalProjectImport(root) {
   file.addEventListener("change", () => {
     pick("#local-import-file-name").textContent =
       file.files[0]?.name || "未选择文件";
+    syncReview();
   });
   directory.addEventListener("change", () => {
     pick("#local-import-directory-name").textContent = directory.files.length

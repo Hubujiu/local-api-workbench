@@ -117,6 +117,12 @@ import {
   bindLocalProjectImport,
   localProjectImportMarkup,
 } from "./local-project-import.js";
+import {
+  assertOpenAPIApplyReceipt,
+  assertOpenAPIReview,
+  openAPIReviewMarkup,
+  readOpenAPIReviewInput,
+} from "./openapi-file-review.js";
 import { selectedDirectoryDocument } from "./apipost-directory-input.js";
 import { createCaseResultStore } from "./case-result-store.js";
 import { runCaseBatch, caseEvidence } from "./case-batch.js";
@@ -1374,6 +1380,163 @@ function previewDraftOwner() {
       projectImports.assertCanSave(owner.id);
     },
   };
+}
+// The classic import modes stay independent. This review lane only consumes the
+// explicitly selected OpenAPI file, never the paste buffer or another project.
+function bindOpenAPIFileReview(shell) {
+  const button = shell.querySelector("#local-import-preview-file");
+  const file = shell.querySelector("#import-file");
+  const mode = shell.querySelector("#import-mode");
+  const status = shell.querySelector("#local-import-preview-status");
+  let sourceGeneration = 0;
+  for (const name of ["input", "change"])
+    shell.addEventListener(name, () => sourceGeneration++);
+  button.addEventListener("click", async () => {
+    const selected = file.files[0];
+    if (button.disabled || mode.value !== "interfaces" || !selected) return;
+    const source = sourceGeneration;
+    const originalRevision = modalRevision;
+    const classicApply = $("#dialog-save");
+    button.disabled = true;
+    classicApply.disabled = true;
+    status.textContent = "正在读取并预览所选文件…";
+    const isOriginal = () =>
+      shell.isConnected &&
+      $("#dialog").open &&
+      modalRevision === originalRevision;
+    try {
+      collect();
+      const owner = project;
+      const configRevision = owner.configRevision ?? owner.revision;
+      const version = editVersion;
+      const opening = projectOpenSequence;
+      const importCheckpoint = projectImports.reloadCheckpoint();
+      const nativeCheckpoint = nativeRequestLifecycle.reloadCheckpoint();
+      const assertOwner = (dialogRevision, beforeApply = true) => {
+        if (
+          project !== owner ||
+          (project.configRevision ?? project.revision) !== configRevision ||
+          editVersion !== version ||
+          projectOpenSequence !== opening ||
+          modalRevision !== dialogRevision ||
+          !$("#dialog").open
+        )
+          throw Error("项目、草稿或导入窗口已变化，请重新预览");
+        if (dirty || busy || saving)
+          throw Error("请先结束请求并另行保存草稿，再预览或导入；未自动保存");
+        nativeRequestLifecycle.assertReloadCurrent(nativeCheckpoint);
+        nativeRequestLifecycle.assertCanSave(owner.id);
+        if (beforeApply) {
+          projectImports.assertReloadCurrent(importCheckpoint);
+          projectImports.assertCanStart(owner.id, "interfaces");
+        }
+      };
+      const assertSource = () => {
+        assertOwner(originalRevision);
+        if (
+          !isOriginal() ||
+          source !== sourceGeneration ||
+          mode.value !== "interfaces" ||
+          file.files[0] !== selected
+        )
+          throw Error("所选文件或导入方式已变化，请重新预览");
+      };
+      assertSource();
+      const input = await readOpenAPIReviewInput(selected);
+      assertSource();
+      const route = "/projects/" + owner.id;
+      const preview = await api(route + "/import-preview", "POST", input);
+      assertSource();
+      const canApply = assertOpenAPIReview(preview, configRevision);
+      let pending = canApply ? { input, preview } : null;
+      let reviewRevision;
+      modal(
+        "预览 Swagger / OpenAPI",
+        openAPIReviewMarkup({
+          projectName: owner.name,
+          fileName: selected.name,
+          preview,
+          input,
+          canApply,
+        }),
+        async () => {
+          const alert = $("#openapi-file-review-error");
+          try {
+            assertOwner(reviewRevision);
+            if (!pending || pending.preview.expiresAt <= Date.now())
+              throw Error("预览已失效，请关闭后重新选择文件并预览");
+            const accept = pending;
+            pending = null; // Never replay the attempted write or use its token again.
+            const operation = projectImports.begin(owner.id, "interfaces");
+            try {
+              const receipt = await api(route + "/import-apply", "POST", {
+                input: accept.input,
+                token: accept.preview.token,
+              });
+              assertOpenAPIApplyReceipt(receipt, accept.preview);
+              assertOwner(reviewRevision, false);
+              const loaded = await api(route);
+              assertOwner(reviewRevision, false);
+              assertProjectSaveReceipt(loaded, owner);
+              if (
+                loaded.configRevision !== receipt.configRevision ||
+                loaded.revision !== receipt.revision
+              )
+                throw Error("导入后的项目版本已变化");
+              project = loaded;
+              if (!current) {
+                current = project.requests.find((item) => !item.deletedAt)?.id;
+                if (current && !opened.includes(current)) opened.push(current);
+              }
+              render();
+              toast("导入完成");
+            } catch {
+              operation.requireReconciliation();
+              throw Error(
+                "导入结果未能核对。请重新加载原项目核对，勿重复导入；当前草稿仍保留。",
+              );
+            } finally {
+              operation.finish();
+            }
+          } catch (error) {
+            pending = null;
+            if (
+              $("#dialog").open &&
+              modalRevision === reviewRevision &&
+              alert?.isConnected
+            ) {
+              alert.textContent = error.message;
+              // The shared modal resets the button after its callback rejects.
+              setTimeout(() => {
+                if (
+                  $("#dialog").open &&
+                  modalRevision === reviewRevision &&
+                  !pending
+                )
+                  $("#dialog-save").disabled = true;
+              }, 0);
+            }
+            throw error;
+          }
+        },
+        "确认导入",
+        () => {
+          pending = null;
+          $("#import")?.focus();
+        },
+      );
+      reviewRevision = modalRevision;
+      $("#dialog-save").disabled = !canApply;
+      $(".openapi-file-review").focus();
+    } catch (error) {
+      if (isOriginal()) status.textContent = error.message;
+    } finally {
+      if (isOriginal()) {
+        button.disabled = false;
+        classicApply.disabled = false;
+      }
+    }
+  });
 }
 function openScopedDefinitionExport() {
   const context = previewDraftOwner();
@@ -4379,7 +4542,10 @@ function bind() {
       "导入",
     );
     const shell = $(".local-project-import");
-    if (shell) bindLocalProjectImport(shell);
+    if (shell) {
+      bindLocalProjectImport(shell);
+      bindOpenAPIFileReview(shell);
+    }
   });
   on("#export", "click", () => {
     modal(
