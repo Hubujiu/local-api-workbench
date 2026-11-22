@@ -1,3 +1,7 @@
+import {
+  chooseProjectSwitch,
+  projectSwitchPrompt,
+} from "./helpers/project-switch-confirmation-ui.mjs";
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -154,21 +158,8 @@ try {
   const target = "/api/projects/" + other.id;
   const correspondingReads = () =>
     reads.filter((path) => path === target).length;
-  const handleDialog = async (accept, action) => {
-    let promptMessage;
-    const answer = (prompt) => {
-      promptMessage = prompt.message();
-      return accept ? prompt.accept() : prompt.dismiss();
-    };
-    page.once("dialog", answer);
-    try {
-      await action();
-    } finally {
-      page.off("dialog", answer);
-    }
-    assert.equal(promptMessage, "当前修改尚未保存，确定切换项目？");
-  };
-
+  const handleDialog = (discard, action) =>
+    chooseProjectSwitch(page, discard ? "discard" : "cancel", action);
   await searchOther();
   await handleDialog(false, () => found.click());
   await popup.waitFor({ state: "hidden" });
@@ -183,13 +174,19 @@ try {
   });
   await handleDialog(true, () => input.press("Enter"));
   await held;
-  await name.fill("加载期间的新草稿");
+  await name.evaluate((input) => {
+    input.value = "加载期间的新草稿";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
   release();
-  await page.waitForFunction(
-    () =>
-      document.querySelector("#toast").textContent ===
-      "加载期间项目或草稿已变化，未替换当前内容；请重新操作",
-  );
+  await projectSwitchPrompt(page)
+    .getByRole("status")
+    .getByText("加载期间项目或草稿已变化，未替换当前内容；请重新操作", {
+      exact: true,
+    })
+    .waitFor();
+  await page.keyboard.press("Escape");
+  await projectSwitchPrompt(page).waitFor({ state: "hidden" });
   assert.equal(correspondingReads(), 1);
   assert.equal(await name.inputValue(), "加载期间的新草稿");
   assert.equal(await owned.getAttribute("value"), original.id);

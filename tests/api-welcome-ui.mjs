@@ -1,3 +1,4 @@
+import { chooseProjectSwitch } from "./helpers/project-switch-confirmation-ui.mjs";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -69,15 +70,10 @@ try {
   await adopted(source.id);
   await page.locator("#request-name").waitFor();
   const to = async (id, decision) => {
+    const open = () => projectSelect.selectOption(id);
     if (typeof decision === "boolean")
-      page.once("dialog", (confirmation) => {
-        assert.equal(
-          confirmation.message(),
-          "当前修改尚未保存，确定切换项目？",
-        );
-        return decision ? confirmation.accept() : confirmation.dismiss();
-      });
-    await projectSelect.selectOption(id);
+      await chooseProjectSwitch(page, decision ? "discard" : "cancel", open);
+    else await open();
     if (decision !== false) await adopted(id);
   };
   await to(destination.id);

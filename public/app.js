@@ -1,3 +1,4 @@
+import { confirmDirtyProjectSwitch } from "./project-switch-confirmation.js";
 import { apiWelcome } from "./api-welcome.js";
 import {
   applyFontScale,
@@ -1158,6 +1159,7 @@ async function save() {
     snapshot = structuredClone(project),
     version = editVersion,
     operation = projectImports.beginSave(project.id);
+  let applied = null;
   snapshot.history = [];
   snapshot.runs = [];
   saving = true;
@@ -1187,6 +1189,7 @@ async function save() {
         }
         project = saved;
         dirty = false;
+        applied = saved;
       } else {
         project.revision = saved.revision;
         project.configRevision = saved.configRevision;
@@ -1196,6 +1199,7 @@ async function save() {
       }
     }
     toast(dirty ? "已保存本次快照，后续修改仍未保存" : "已保存到本地");
+    return applied && { owner, applied, version };
   } catch (error) {
     const outcome = error?.projectCommitOutcome;
     const rejected =
@@ -1332,7 +1336,8 @@ async function changeNativeRequestLifecycle(requestId, restore) {
     },
   });
 }
-async function openProject(id, { fromPicker = false } = {}) {
+async function openProject(id, { fromPicker = false, pickerGuard } = {}) {
+  if (pickerGuard && !pickerGuard()) return false;
   if (
     socketioWorkbenchState?.draftDirty &&
     socketioWorkbenchProject === project?.id &&
@@ -1348,7 +1353,8 @@ async function openProject(id, { fromPicker = false } = {}) {
   )
     return false;
   if (busy || saving) throw Error("请先结束当前请求或保存，再切换项目");
-  if (dirty && !confirm("当前修改尚未保存，确定切换项目？")) return;
+  if (dirty && !pickerGuard && !confirm("当前修改尚未保存，确定切换项目？"))
+    return;
   const reloadCheckpoint = nativeRequestLifecycle.reloadCheckpoint();
   const importCheckpoint = projectImports.reloadCheckpoint();
   const sequence = ++projectOpenSequence,
@@ -1361,6 +1367,7 @@ async function openProject(id, { fromPicker = false } = {}) {
     project !== previousProject ||
     editVersion !== version ||
     dirty !== previousDirty ||
+    (pickerGuard && !pickerGuard()) ||
     busy ||
     saving
   )
@@ -1419,6 +1426,7 @@ async function openProject(id, { fromPicker = false } = {}) {
   selectedProtocolId = "";
   sessionStorage.setItem("project", id);
   render();
+  return true;
 }
 // A preview is read-only; its result may write only the draft and dialog that
 // requested it. Rebind only when synchronously advancing to confirmation.
@@ -2739,13 +2747,80 @@ function bind() {
       },
     });
   });
-  const openFromProjectPicker = (id) => openProject(id, { fromPicker: true });
+  const openFromProjectPicker = (
+    id,
+    focusSelector = "#project-search-trigger",
+  ) => {
+    const owner = project,
+      opening = projectOpenSequence,
+      version = editVersion;
+    const pendingProtocol =
+      (socketioWorkbenchState?.draftDirty &&
+        socketioWorkbenchProject === owner.id) ||
+      (grpcWorkbenchState?.draftDirty && grpcWorkbenchProject === owner.id);
+    if (
+      id === owner.id ||
+      !dirty ||
+      pendingProtocol ||
+      owner.settings?.nativeInheritance
+    )
+      return openProject(id, { fromPicker: true });
+    const dialog = $("#project-switch-confirmation");
+    if (dialog.open || $("#dialog").open || busy || saving) return;
+    const isCurrent = () =>
+      dialog.open && editVersion === version && !busy && !saving;
+    confirmDirtyProjectSwitch(dialog, {
+      restoreFocus(switched) {
+        if (switched) {
+          const heading = $("#api-welcome-title");
+          if (heading) {
+            heading.tabIndex = -1;
+            heading.focus({ preventScroll: true });
+          }
+        } else $(focusSelector)?.focus({ preventScroll: true });
+      },
+      async run(decision) {
+        if (
+          !isCurrent() ||
+          project !== owner ||
+          projectOpenSequence !== opening ||
+          !dirty
+        )
+          throw Error("项目或草稿已变化，请重新选择目标项目");
+        if (decision === "discard") {
+          // A different project cannot reconcile an uncertain save on this owner.
+          nativeRequestLifecycle.assertCanSave(owner.id);
+          projectImports.assertCanSave(owner.id);
+          return openProject(id, {
+            fromPicker: true,
+            pickerGuard: () => isCurrent() && project === owner && dirty,
+          });
+        }
+        const receipt = await save();
+        if (
+          !receipt ||
+          receipt.owner !== owner ||
+          receipt.version !== version ||
+          projectOpenSequence !== opening ||
+          project !== receipt.applied ||
+          dirty ||
+          !isCurrent()
+        )
+          throw Error("保存未应用到当前草稿，未切换项目");
+        return openProject(id, {
+          fromPicker: true,
+          pickerGuard: () =>
+            isCurrent() && project === receipt.applied && !dirty,
+        });
+      },
+    });
+  };
   on("#project-select", "change", (_, element) => {
     if (!element.isConnected) return;
     const target = element.value;
     // Keep the control showing the actual owner until openProject adopts a receipt.
     element.value = project.id;
-    return openFromProjectPicker(target);
+    return openFromProjectPicker(target, "#project-select");
   });
   const switcherOwner = project;
   bindProjectSwitcher($(".project-group"), {
@@ -7229,7 +7304,8 @@ document.addEventListener("keydown", (e) => {
   if (
     $("#dialog").open ||
     $("#empty-trash-dialog")?.open ||
-    $("#appearance-dialog")?.open
+    $("#appearance-dialog")?.open ||
+    $("#project-switch-confirmation")?.open
   ) {
     if ((e.ctrlKey || e.metaKey) && ["s", "Enter"].includes(e.key))
       e.preventDefault();

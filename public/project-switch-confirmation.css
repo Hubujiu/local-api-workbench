@@ -1,0 +1,61 @@
+#project-switch-confirmation {
+  inset: 100px 0 auto;
+  width: min(409px, calc(100vw - 28px));
+  max-height: calc(100dvh - 120px);
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 20px 24px;
+  border: none;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+}
+#project-switch-confirmation[open] {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 0 12px;
+}
+#project-switch-confirmation::backdrop {
+  background: #0007;
+}
+.project-switch-warning {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #b77709;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  margin-block-start: 3px;
+}
+.project-switch-message h2,
+.project-switch-message p {
+  margin: 0;
+}
+.project-switch-message h2 {
+  font-size: calc(16 * var(--app-type-unit));
+  line-height: 24px;
+}
+.project-switch-message #project-switch-confirm-detail {
+  margin-block-start: 6px;
+  font-size: calc(14 * var(--app-type-unit));
+  line-height: 22px;
+}
+#project-switch-confirm-progress:not(:empty) {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.project-switch-confirm-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-block-start: 13px;
+}
+.project-switch-confirm-actions > button {
+  min-height: 32px;
+  padding: 4px 15px;
+}
