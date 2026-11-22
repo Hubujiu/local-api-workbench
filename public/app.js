@@ -131,6 +131,10 @@ import { applySelectedFormFile } from "./form-file-selection.js";
 import { variableRows } from "./variable-definitions.js";
 import { mountVariableEditor } from "./variable-editor.js";
 import {
+  mountWorkspaceGlobalVariables,
+  workspaceGlobalVariablesHTML,
+} from "./workspace-global-variables.js";
+import {
   inferSchemaFromJSON,
   inferSchemaFromMySQL,
   inferSchemaFromXML,
@@ -4853,13 +4857,72 @@ function bind() {
     $("#dialog-content [data-env-services]").onclick = () =>
       leaveEnvironmentDraft(editor, () => editService());
   }
+  function editWorkspaceGlobals(workspace, query = "") {
+    const owner = project;
+    const epoch = editVersion;
+    const draftInputs = () => [
+      project.globalVariables || {},
+      project.globalVariableDefinitions || {},
+    ];
+    const source = draftInputs();
+    const original = JSON.stringify(source);
+    const rows = variableRows(...source);
+    let editor, revision;
+    const apply = () => {
+      if (
+        project !== owner ||
+        epoch !== editVersion ||
+        revision !== modalRevision ||
+        !$("#dialog").open ||
+        original !== JSON.stringify(draftInputs())
+      )
+        throw Error("项目或变量草稿已变化，请重新打开全局变量");
+      if (!editor.changed) return;
+      const next = editor.read();
+      if (original === JSON.stringify([next.values, next.definitions])) return;
+      owner.globalVariables = next.values;
+      owner.globalVariableDefinitions = next.definitions;
+      mark();
+      render();
+    };
+    modal(
+      "全局变量",
+      environmentDialogShell(owner, {
+        workspace: true,
+        section: "globals",
+        content: workspaceGlobalVariablesHTML(),
+        actions:
+          '<button type="button" id="environment-save-stay">保存</button>',
+      }),
+      apply,
+      "保存并关闭",
+    );
+    revision = modalRevision;
+    editor = mountWorkspaceGlobalVariables(
+      $(".environment-global-content"),
+      rows,
+      query,
+    );
+    bindEnvironmentNavigation(workspace, editor);
+    $("#environment-save-stay").onclick = () => {
+      try {
+        apply();
+        editWorkspaceGlobals(workspace, editor.query);
+      } catch (error) {
+        toast(error.message);
+      }
+    };
+  }
   function leaveEnvironmentDraft(editor, action) {
     if (editor?.changed && !confirm("放弃尚未保存的环境修改？")) return;
     return action();
   }
   function switchEnvironmentSection(section, workspace) {
     if (section === "cookies") return openCookieManager(workspace);
-    if (section === "globals") return editVariableDefinitions();
+    if (section === "globals")
+      return workspace
+        ? editWorkspaceGlobals(workspace)
+        : editVariableDefinitions();
     $("#dialog").close();
     page = "settings";
     settingsSection = "settings-global-parameters";

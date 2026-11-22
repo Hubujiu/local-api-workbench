@@ -24,7 +24,7 @@ export function environmentDialogShell(
       <p class="environment-section-label">全局</p>
       <button data-env-section="cookies" ${currentPage(section === "cookies")}><span class="environment-nav-icon cookie">${icon("◷")}</span>Cookie管理器</button>
       <button data-env-section="parameters"><span class="environment-nav-icon">${icon("☷")}</span>全局参数</button>
-      <button data-env-section="globals"><span class="environment-nav-icon global">${icon("⇄")}</span>全局变量</button>
+      <button data-env-section="globals" ${currentPage(section === "globals")}><span class="environment-nav-icon global">${icon("⇄")}</span>全局变量</button>
       <p class="environment-section-label">环境管理</p>
       <div class="environment-list">${project.environments.map((item) => `<button data-env-open="${esc(item.id)}" ${currentPage(section === "environment" && item.id === current)}><span class="environment-nav-icon">${icon("☷")}</span><span>${esc(item.name)}</span></button>`).join("")}
       ${section === "environment" && !environment ? '<button aria-current="page" data-env-current><span class="environment-nav-icon">' + icon("☷") + "</span><span>新建环境</span></button>" : ""}</div>
