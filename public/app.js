@@ -71,6 +71,11 @@ import {
 } from "./environment-dialog.js";
 import { bindMCPDatabase } from "./mcp-database-view.js";
 import {
+  isMCPActivityReceipt,
+  mcpTopStatusButton,
+  updateMCPTopStatus,
+} from "./mcp-top-status.js";
+import {
   loadDatabasePreviewCapabilities,
   isPreviewDatabase,
   readDatabasePreviewConnection,
@@ -390,6 +395,8 @@ let opened = [],
     canStop: false,
   },
   mcpState = { enabled: false, activities: [] },
+  mcpTopStatusUnavailable = false,
+  mcpTopStatusKnown = false,
   updateMCPPanel = null,
   mcpPollSequence = 0,
   helperOpen = false,
@@ -1842,7 +1849,7 @@ function render(preserveEditingFocus = false) {
       )
       .join(
         "",
-      )}</select>${projectSwitcherHTML(busy || saving)}<button id="open-location" class="ghost">打开位置</button><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost top-plan ${page === "plans" ? "active" : ""}"><span class="icon">${lineIcon("plan-play")}</span>执行计划</button><button id="mcp-status" data-page="settings" data-settings-target="settings-mcp" class="offline" title="打开 MCP 连接设置">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button><button type="button" id="appearance-settings" class="ghost" title="全局外观设置" aria-label="全局外观设置" aria-haspopup="dialog">${lineIcon("⚙")}</button></div></header><div class="shell"><nav class="rail" aria-label="工作区导航">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}" ${page === "trash" ? 'aria-current="page"' : ""}><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar" data-sidebar-page="${page}">${
+      )}</select>${projectSwitcherHTML(busy || saving)}<button id="open-location" class="ghost">打开位置</button><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost top-plan ${page === "plans" ? "active" : ""}"><span class="icon">${lineIcon("plan-play")}</span>执行计划</button>${mcpTopStatusButton(mcpTopStatusKnown ? mcpState : null, mcpTopStatusUnavailable)}<button id="theme" class="ghost" aria-label="切换主题">◐</button><button type="button" id="appearance-settings" class="ghost" title="全局外观设置" aria-label="全局外观设置" aria-haspopup="dialog">${lineIcon("⚙")}</button></div></header><div class="shell"><nav class="rail" aria-label="工作区导航">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}" ${page === "trash" ? 'aria-current="page"' : ""}><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar" data-sidebar-page="${page}">${
       page === "settings"
         ? settingsSidebar(settingsSection)
         : page === "dictionary" || page === "database-manager"
@@ -2671,6 +2678,9 @@ function bind() {
         });
         mcpPollSequence++;
         mcpState = result;
+        mcpTopStatusKnown = isMCPActivityReceipt(result);
+        mcpTopStatusUnavailable = !mcpTopStatusKnown;
+        updateMCPTopStatus($("#mcp-status"), result, mcpTopStatusUnavailable);
         updateMCPPanel?.(result);
         if (result.enabled) {
           setTimeout(() => showMCPClientConfiguration(result), 0);
@@ -7627,28 +7637,33 @@ async function pollSession() {
 
 async function refreshMCPActivity() {
   if (!token || document.hidden) return;
+  const poll = ++mcpPollSequence;
+  let nextState;
   try {
-    const poll = ++mcpPollSequence;
-    const nextState = await api("/mcp/config");
-    if (poll !== mcpPollSequence) return;
-    mcpState = nextState;
+    nextState = await api("/mcp/config");
+    if (!isMCPActivityReceipt(nextState)) throw Error("MCP config unavailable");
+  } catch {
+    if (poll === mcpPollSequence) {
+      // A failed read must not overwrite the last confirmed permission data.
+      mcpTopStatusUnavailable = true;
+      updateMCPTopStatus($("#mcp-status"), null, true);
+    }
+    return;
+  }
+  if (poll !== mcpPollSequence) return;
+  mcpState = nextState;
+  mcpTopStatusKnown = true;
+  mcpTopStatusUnavailable = false;
+  updateMCPTopStatus($("#mcp-status"), mcpState, false);
+  try {
     updateMCPPanel?.(mcpState);
-    const running = (mcpState.activities || []).filter(
-      (item) => item.status === "running",
-    );
-    const top = $("#mcp-status");
-    if (top)
-      top.textContent =
-        "MCP · " +
-        (running.length
-          ? running.length + " 个任务运行中"
-          : mcpState.enabled
-            ? "已开启"
-            : "未开启");
     const area = $("#mcp-plan-status");
     if (area)
-      area.textContent = running
-        .filter((item) => item.projectId === project?.id)
+      area.textContent = (mcpState.activities || [])
+        .filter(
+          (item) =>
+            item?.status === "running" && item.projectId === project?.id,
+        )
         .map(
           (item) =>
             item.tool +

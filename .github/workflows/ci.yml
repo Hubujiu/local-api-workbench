@@ -93,6 +93,7 @@ jobs:
       - run: node tests/load-workspace-ui.mjs
       - run: node tests/load-result-ownership-ui.mjs
       - run: node tests/mcp-off-summary-ui.mjs
+      - run: node tests/mcp-top-status-ui.mjs
       - run: node tests/recent-history-ui.mjs
       - run: node tests/recent-dark-shell-ui.mjs
       - run: node tests/recent-saved-versions-ui.mjs
