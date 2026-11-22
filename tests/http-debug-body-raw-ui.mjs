@@ -179,23 +179,40 @@ try {
     .locator("#code-highlight")
     .evaluate((highlight) => {
       const key = highlight.querySelector(".syntax-key");
+      const prefix = key.previousSibling;
+      const start = prefix.textContent.lastIndexOf("\n") + 1;
+      const space = document.createRange();
+      space.setStart(prefix, start);
+      space.setEnd(prefix, start + 1);
+      const spaceBox = space.getBoundingClientRect();
       const style = getComputedStyle(highlight);
-      const context = document.createElement("canvas").getContext("2d");
-      context.font = `${style.fontSize} ${style.fontFamily}`;
       return {
+        whitespace: prefix.textContent.slice(start),
+        charWidth: spaceBox.width,
+        lineStartX: spaceBox.x,
+        editorTextX:
+          highlight.getBoundingClientRect().x + parseFloat(style.paddingLeft),
         keyX: key.getBoundingClientRect().x,
-        editorX: highlight.getBoundingClientRect().x,
-        charWidth: context.measureText(" ").width,
       };
     });
-  near(
-    indent.keyX - indent.editorX,
-    4 * indent.charWidth,
-    1,
-    "four-column ruler",
+  assert.deepEqual(
+    Array.from(indent.whitespace, (character) => character.charCodeAt(0)),
+    [0x20, 0x20, 0x20, 0x20],
   );
-  near(indent.keyX - indent.editorX, 29, 3, "native indentation");
-  measurements.indent = indent;
+  assert(indent.charWidth > 0, "rendered ASCII space must have a width");
+  near(indent.lineStartX, indent.editorTextX, 1, "first text column");
+  const offset = indent.keyX - indent.lineStartX;
+  const columns = offset / indent.charWidth;
+  near(columns, 4, 0.15, "native indentation in actual rendered columns");
+  // Only paired PNG captures on the calibrated font can assert native pixels.
+  const compareNativePNG =
+    process.env.HTTP_DEBUG_RAW_COMPARE_NATIVE_PNG === "1";
+  if (compareNativePNG) {
+    assert(prefix, "native PNG comparison requires an output capture prefix");
+    near(indent.charWidth, 7.25, 0.25, "reference font space calibration");
+    near(offset, 29, 3, "calibrated native PNG indentation");
+  }
+  measurements.indent = { ...indent, offset, columns, compareNativePNG };
   await capture("formatted");
 
   await body.fill(invalid);
