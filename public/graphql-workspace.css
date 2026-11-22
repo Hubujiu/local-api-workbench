@@ -1,0 +1,95 @@
+.graphql-workspace {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+.graphql-panes {
+  display: grid;
+  grid-template-rows: minmax(145px, 1fr) auto;
+  min-height: 240px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+.graphql-panes.variables-open {
+  grid-template-rows: minmax(95px, 1fr) auto minmax(95px, 1fr);
+}
+.graphql-source {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  cursor: text;
+}
+.graphql-source[hidden],
+.graphql-draft-actions[hidden] {
+  display: none;
+}
+.graphql-source > span {
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+}
+.graphql-source small {
+  margin-inline-start: 6px;
+  color: var(--muted);
+}
+.graphql-source textarea {
+  display: block;
+  width: 100%;
+  min-height: 60px;
+  height: 100%;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 0;
+  resize: none;
+  background: var(--bg);
+  font-family: monospace;
+}
+.graphql-source textarea:focus-visible {
+  outline-offset: -2px;
+}
+.graphql-variables-toggle {
+  width: 100%;
+  min-height: 24px;
+  border: 0;
+  border-block: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--text);
+}
+.graphql-variables-toggle > span {
+  display: inline-block;
+  margin-inline-end: 4px;
+}
+.graphql-variables-toggle[aria-expanded="true"] > span {
+  rotate: 180deg;
+}
+.graphql-workspace-actions,
+.graphql-draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.graphql-workspace-actions > #graphql-detach {
+  margin-inline-start: auto;
+}
+.graphql-error {
+  margin: 0;
+  color: var(--danger);
+}
+.graphql-error:empty {
+  display: none;
+}
+.editor[data-editor-mode="debug"] > .param-tabs [data-param="graphql"] {
+  padding-inline: 8px;
+}
+.method.graphql-badge {
+  color: var(--accent-text, var(--accent));
+}
+#api-create-menu #new-graphql-request > span {
+  background: var(--hover);
+  color: var(--text);
+}

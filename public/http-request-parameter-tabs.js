@@ -12,11 +12,27 @@ const tabs = [
   ["extract", "提取变量"],
 ];
 
+const graphqlTabs = [
+  ["graphql", "Query"],
+  ["headers", "Header"],
+  ["auth", "认证"],
+  ["cookies", "Cookie"],
+  ["before", "预执行操作"],
+  ["after", "后执行操作"],
+  ["query", "URL 参数"],
+  ...tabs.filter(([key]) =>
+    ["path", "examples", "assertions", "extract"].includes(key),
+  ),
+];
 export const namedFormRows = (request) =>
   (request.form || []).filter((row) => String(row.key || "").trim()).length;
 
 export function requestParameterTabs(request, active) {
-  return `<div class="param-tabs" role="group" aria-label="请求参数">${tabs
+  return `<div class="param-tabs" role="group" aria-label="请求参数">${(request.graphqlEditorVersion ===
+  1
+    ? graphqlTabs
+    : tabs
+  )
     .map(([key, label]) => {
       const selected = active === key;
       const count =

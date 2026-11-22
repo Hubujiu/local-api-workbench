@@ -28,6 +28,13 @@ import {
 } from "./project-create-settlement.js";
 const projectCreationFlow = createProjectCreationFlow(sessionStorage);
 import { apiCreateMenu, bindApiCreateMenu } from "./api-create-menu.js";
+import { newGraphQLEditorRequest } from "./graphql-editor.js";
+import {
+  bindGraphQLWorkspace,
+  createGraphQLWorkspaceDrafts,
+  graphqlWorkspaceHTML,
+  unappliedGraphQL,
+} from "./graphql-workspace.js";
 import { confirmDirtyProjectSwitch } from "./project-switch-confirmation.js";
 import { apiWelcome } from "./api-welcome.js";
 import {
@@ -363,6 +370,8 @@ let designParameter = "headers";
 const designResponseSelections = new Map();
 const collapsedDesignResponseRoots = new WeakMap();
 const debugAuthDrafts = new WeakMap();
+const graphqlDrafts = createGraphQLWorkspaceDrafts();
+let debugParameterOwner = "";
 const designResponseKey = (r) => JSON.stringify([project?.id, r.id]);
 const caseResults = createCaseResultStore();
 const caseSelections = new Map();
@@ -1202,6 +1211,11 @@ async function save() {
   if (project) projectImports.assertCanSave(project.id);
   if (!project) return;
   if (saving) throw Error("保存尚未完成，请等待");
+  if (
+    project.requests.some((r) => r.graphqlEditorVersion === 1) &&
+    graphqlDrafts.hasProject(project)
+  )
+    throw Error(unappliedGraphQL);
   collect();
   const owner = project,
     snapshot = structuredClone(project),
@@ -1409,6 +1423,11 @@ async function openProject(
   )
     return false;
   if (busy || saving) throw Error("请先结束当前请求或保存，再切换项目");
+  if (
+    project?.requests?.some((r) => r.graphqlEditorVersion === 1) &&
+    graphqlDrafts.hasProject(project)
+  )
+    throw Error(unappliedGraphQL);
   if (dirty && !pickerGuard && !confirm("当前修改尚未保存，确定切换项目？"))
     return;
   const reloadCheckpoint = nativeRequestLifecycle.reloadCheckpoint();
@@ -1930,6 +1949,18 @@ function render(preserveEditingFocus = false) {
     : null;
   const r = request();
   const doc = workspaceDocument();
+  if (page === "apis" && !doc && r) {
+    const nextOwner = JSON.stringify([project.id, r.id]);
+    const switched = debugParameterOwner !== nextOwner;
+    debugParameterOwner = nextOwner;
+    if (r.graphqlEditorVersion === 1 && (switched || param === "body")) {
+      param = "graphql";
+      bodyExpanded = false;
+    } else if (r.graphqlEditorVersion !== 1 && param === "graphql") {
+      param = "body";
+      bodyExpanded = false;
+    }
+  }
   const dictionaryPosition = dictionaryViewPosition(
     $(".dictionary-page"),
     project?.id,
@@ -1975,7 +2006,7 @@ function render(preserveEditingFocus = false) {
             )
             .map((id) => {
               const item = project.requests.find((r) => r.id === id);
-              return `<div class="tab ${!doc && current === id ? "selected" : ""}"><button class="ghost tab-switch" data-open-tab="${id}"><span class="method ${item.method}">${item.method}</span> <span data-tab-name="${id}">${esc(item.name)}</span></button><button class="ghost tab-close" data-close-tab="${id}" aria-label="关闭 ${esc(item.name)}">×</button></div>`;
+              return `<div class="tab ${!doc && current === id ? "selected" : ""}"><button class="ghost tab-switch" data-open-tab="${id}"><span class="method ${item.graphqlEditorVersion === 1 ? "graphql-badge" : item.method}">${item.graphqlEditorVersion === 1 ? "GraphQL" : item.method}</span> <span data-tab-name="${id}">${esc(item.name)}</span></button><button class="ghost tab-close" data-close-tab="${id}" aria-label="关闭 ${esc(item.name)}">×</button></div>`;
             })
             .join(
               "",
@@ -2031,6 +2062,8 @@ function render(preserveEditingFocus = false) {
       replacement &&
       replacement.tagName === active.tagName &&
       replacement.type === active.type &&
+      replacement.closest("[data-graphql-owner]")?.dataset.graphqlOwner ===
+        active.closest("[data-graphql-owner]")?.dataset.graphqlOwner &&
       !replacement.disabled
     ) {
       replacement.value = focusState.value;
@@ -2060,7 +2093,7 @@ function editor(r) {
     )
     .join(
       "",
-    )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button>${requestCurlAction(mode === "debug")}<button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : httpRequestActions({ debug: mode === "debug", busy, cancel: busy && mode !== "cases" && !caseCancellationOwner(), dirty })}</div>${
+    )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button>${requestCurlAction(mode === "debug")}<button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法"${r.graphqlEditorVersion === 1 ? " disabled" : ""}>${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : httpRequestActions({ debug: mode === "debug", busy, cancel: busy && mode !== "cases" && !caseCancellationOwner(), dirty })}</div>${
     mode === "debug"
       ? `${requestParameterTabs(r, param)}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" && r.bodyType !== "binary" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded", "binary"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length)}<div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div></div>`
       : modePanel(r)
@@ -2154,6 +2187,10 @@ function bodyParameterHelper(r, tabbed) {
   return `<aside id="body-parameter-helper" class="parameter-helper${tabbed ? " raw-helper-open" : ""}">${contents}</aside>`;
 }
 function paramPanel(r, param, design = false) {
+  if (r.graphqlEditorVersion === 1 && param === "graphql" && !design)
+    return graphqlWorkspaceHTML(r, graphqlDrafts, esc, project.id);
+  if (r.graphqlEditorVersion === 1 && param === "body")
+    return '<p class="notice">此接口使用 GraphQL 请求编辑器。切到调试可编辑 Query / Variables，或保留完整正文并打开原始 HTTP 编辑器。</p><button type="button" id="graphql-design-debug" class="ghost">打开 GraphQL 调试</button>';
   if (["headers", "query", "path", "cookies"].includes(param))
     return (
       (param === "headers"
@@ -2328,7 +2365,7 @@ function modePanel(r) {
     <section class="request-description-section" aria-label="详细说明"><h2><span>${lineIcon("▧")}</span>详细说明</h2><details id="design-description" ${descriptionOpen ? "open" : ""}><summary><span class="design-description-closed">＋ 添加详细说明</span><span class="design-description-open">收起</span></summary><div class="design-description-toolbar" role="group" aria-label="说明格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-design-markdown="${key}" aria-label="${label}" title="${label}">${esc(glyph)}</button>`).join("")}</div><div class="design-description-editor"><textarea id="description" aria-label="接口详细说明" spellcheck="false">${esc(r.description)}</textarea><div id="design-description-preview" class="markdown-content" role="region" aria-label="说明预览">${descriptionOpen ? renderMarkdown(r.description) : ""}</div></div><small id="design-description-count">字数: ${Array.from(r.description || "").length}　行数: ${(r.description || "").split("\n").length}</small></details></section>
     <section class="design-request-parameters" aria-label="设计请求参数"><h2><span>${lineIcon("☷")}</span>设计请求参数</h2>${designParameterPanel(r)}</section>
     <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2>${designResponsePanel(r.responses || [], designResponseSelections.get(designResponseKey(r)), r.openapiExampleBindingsVersion === 1, r.examples, collapsedDesignResponseRoots.get(r))}</section>
-    <section class="design-request-structure" aria-label="请求数据结构"><h2><span>${lineIcon("☷")}</span>请求数据结构</h2><div><button id="visual-schema" type="button">可视化编辑结构</button>${r.bodyType === "binary" || (designParameter === "body" && r.bodyType !== "none") ? "" : '<button id="generate-body" type="button" class="ghost">基于数据结构生成</button>'}<textarea id="schema" aria-label="请求 JSON Schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div></section>
+    <section class="design-request-structure" aria-label="请求数据结构"><h2><span>${lineIcon("☷")}</span>请求数据结构</h2><div><button id="visual-schema" type="button">可视化编辑结构</button>${r.graphqlEditorVersion === 1 || r.bodyType === "binary" || (designParameter === "body" && r.bodyType !== "none") ? "" : '<button id="generate-body" type="button" class="ghost">基于数据结构生成</button>'}<textarea id="schema" aria-label="请求 JSON Schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div></section>
     <section class="design-advanced" aria-label="请求选项"><h2><span>${lineIcon("⚙")}</span>请求选项</h2><div class="form-grid"><label>全局请求参数</label><label><input id="inherit-global-parameters" type="checkbox" ${r.inheritGlobalParameters !== false ? "checked" : ""}>继承项目及目录 Header / Query / Cookie / 表单参数</label><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>HTTPS代理 CA（PEM，与目标站点CA分开）</label><textarea data-tls="proxyCa">${esc(r.tls?.proxyCa || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}">${attributeFields(project.settings?.attributes || [], r.attributes)}</div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div></section></div>`;
   }
   if (mode === "mock")
@@ -2486,8 +2523,17 @@ function download(name, data, type = "application/json") {
   setTimeout(() => URL.revokeObjectURL(u), 1000);
 }
 function addRequest() {
+  addHTTPDraft(false);
+}
+function addHTTPDraft(graphql) {
   collect();
-  const r = defaultRequest();
+  const r = defaultRequest(graphql ? "未命名 GraphQL 查询" : undefined);
+  if (graphql) {
+    Object.assign(r, newGraphQLEditorRequest(), { url: "" });
+    param = "graphql";
+    responseTab = "body";
+    bodyExpanded = false;
+  }
   r.timeout = readNewHTTPTimeout(localStorage);
   project.requests.push(r);
   current = r.id;
@@ -2747,6 +2793,8 @@ function bind() {
   });
   on("[data-close-tab]", "click", (event, e) => {
     const fromKeyboard = event.detail === 0 && e === document.activeElement;
+    const closing = project.requests.find((r) => r.id === e.dataset.closeTab);
+    if (graphqlDrafts.pending(closing)) throw Error(unappliedGraphQL);
     collect();
     opened = opened.filter((id) => id !== e.dataset.closeTab);
     if (current === e.dataset.closeTab) {
@@ -2835,8 +2883,9 @@ function bind() {
     id,
     focusSelector = "#project-search-trigger",
   ) => {
-    const owner = project,
-      opening = projectOpenRequestSequence,
+    const owner = project;
+    if (graphqlDrafts.hasProject(owner)) throw Error(unappliedGraphQL);
+    const opening = projectOpenRequestSequence,
       version = editVersion;
     const pendingProtocol =
       (socketioWorkbenchState?.draftDirty &&
@@ -2957,6 +3006,10 @@ function bind() {
     if (button.dataset.treeImport === "curl" && input)
       input.placeholder = "粘贴 cURL 命令。导入只解析定义，不执行命令。";
     input?.focus({ preventScroll: true });
+  });
+  on("#new-graphql-request", "click", (event) => {
+    addHTTPDraft(true);
+    if (event.detail === 0) $("#graphql-query")?.focus({ preventScroll: true });
   });
   on("#new-tree-document", "click", () => editDocument());
   on("#new-folder", "click", () =>
@@ -4332,6 +4385,47 @@ function bind() {
           : (index + (event.key === "ArrowRight" ? 1 : size - 1)) % size;
     selectDesignParameter(designParameterTabs[next][0]);
   });
+  const graphqlEditor = $(".graphql-workspace");
+  if (graphqlEditor) {
+    const owner = project;
+    const target = request();
+    bindGraphQLWorkspace(graphqlEditor, {
+      request: target,
+      drafts: graphqlDrafts,
+      owns: () =>
+        project === owner &&
+        request() === target &&
+        page === "apis" &&
+        mode === "debug" &&
+        param === "graphql" &&
+        !workspaceDocument(),
+      revised: () => editVersion++,
+      changed: mark,
+      redraw: () => {
+        render();
+        $("#graphql-query")?.focus({ preventScroll: true });
+      },
+      detach: () => {
+        collect();
+        delete target.graphqlEditorVersion;
+        param = "body";
+        mark();
+        render();
+        const raw = $("#body-code");
+        if (raw) raw.value = target.body;
+        raw?.focus({ preventScroll: true });
+      },
+    });
+  }
+  on("#graphql-design-debug", "click", () => {
+    collect();
+    mode = "debug";
+    param = "graphql";
+    render();
+    ($("#graphql-query") || $("#graphql-detach"))?.focus({
+      preventScroll: true,
+    });
+  });
   on("[data-param]", "click", (_, e) => {
     collect();
     param = e.dataset.param;
@@ -4503,7 +4597,11 @@ function bind() {
     render();
   });
   on("#generate-body", "click", async () => {
-    if (request()?.bodyType === "binary") return;
+    if (
+      request()?.bodyType === "binary" ||
+      request()?.graphqlEditorVersion === 1
+    )
+      return;
     collect();
     const targetProject = project,
       targetRequest = request(),
@@ -4973,6 +5071,7 @@ function bind() {
   on("#save-menu-project", "click", () => save());
   on("#duplicate", "click", () => duplicateRequest(request()));
   on("#delete", "click", async (_, opener) => {
+    if (graphqlDrafts.pending(request())) throw Error(unappliedGraphQL);
     if (project.settings?.nativeInheritance) {
       await changeNativeRequestLifecycle(request().id, false);
       return;
@@ -6982,7 +7081,11 @@ function bind() {
       page === "history" &&
       project === owner &&
       projectOpenSequence === openedVersion;
-    const state = () => ({ dirty, busy, saving });
+    const state = () => ({
+      dirty: dirty || graphqlDrafts.hasProject(owner),
+      busy,
+      saving,
+    });
     const loadSaved = (id) =>
       api("/projects/" + encodeURIComponent(id) + "/recent-saved-definitions");
     const canSelectSaved = (receipt) => {
@@ -7148,6 +7251,7 @@ function bind() {
   );
 }
 function duplicateRequest(target) {
+  if (graphqlDrafts.pending(target)) throw Error(unappliedGraphQL);
   collect();
   const copy = structuredClone(target);
   copy.id = uid();
@@ -7185,6 +7289,7 @@ function ordinaryRequestRowOwner(target) {
 }
 
 function confirmOrdinaryRequestTrash(target, opener) {
+  if (graphqlDrafts.pending(target)) throw Error(unappliedGraphQL);
   const owner = project,
     selected = !workspaceDocument() && request() === target,
     ownsTarget = ordinaryRequestRowOwner(target);
@@ -7645,6 +7750,7 @@ function editDictionary(index) {
 }
 async function send() {
   assertExecutionReady();
+  if (graphqlDrafts.pending(request())) throw Error(unappliedGraphQL);
   collect();
   const targetId = current,
     projectId = project.id,
@@ -7735,6 +7841,7 @@ document.addEventListener("keydown", (e) => {
 window.addEventListener("beforeunload", (e) => {
   if (
     dirty ||
+    graphqlDrafts.hasProject(project) ||
     (grpcWorkbenchProject === project?.id && grpcWorkbenchState?.draftDirty) ||
     (socketioWorkbenchProject === project?.id &&
       socketioWorkbenchState?.draftDirty)

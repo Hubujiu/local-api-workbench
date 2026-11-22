@@ -14,6 +14,7 @@ export function apiCreateMenu() {
         ${item("WebSocket", "⇄", 'data-tree-protocol="websocket"')}
         ${item("Socket.IO 调试", "⇄", 'data-page="socketio"')}
         ${item("gRPC unary 调试", "⇄", 'data-page="grpc"')}
+        ${item("GraphQL 请求", "▤", 'id="new-graphql-request"')}
         ${item("TCP 客户端", "⇄", 'data-tree-protocol="tcp"')}
         ${item("Markdown 文档", "▧", 'id="new-tree-document" aria-haspopup="dialog"')}
         ${item("新建目录", "folder", 'id="new-folder" aria-haspopup="dialog"')}

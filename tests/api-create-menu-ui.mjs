@@ -117,7 +117,7 @@ try {
     8,
   );
   assert.equal(Math.round(desktop.folder.width), 420);
-  assert.equal(await panel.getByRole("button", { name: /GraphQL/ }).count(), 0);
+  assert.equal(await tile("GraphQL 请求").count(), 1);
   await tile("HTTP 接口").press("Tab");
   assert(await focused(tile("Event Stream · SSE")));
   await close();
@@ -187,6 +187,17 @@ try {
   assert.equal(await page.locator("#saved-state").textContent(), "● 未保存");
   assert.equal(await page.locator(".tab-scroll .tab-switch").count(), 2);
   assert.equal(await page.locator("#method").inputValue(), "GET");
+  await activate("GraphQL 请求");
+  const graphql = page.getByRole("region", { name: "GraphQL 请求编辑" });
+  await graphql.waitFor();
+  assert(await focused(graphql.getByRole("textbox", { name: "Query" })));
+  assert.equal(await page.locator("#method").inputValue(), "POST");
+  assert.equal(await page.locator("#method").isDisabled(), true);
+  assert.equal(await page.locator("#url").inputValue(), "");
+  assert.match(
+    await page.locator(".tab.selected .method").textContent(),
+    /GraphQL/,
+  );
   const after = await app.store.get(project.id);
   assert.equal(after.configRevision, project.configRevision);
   assert.deepEqual(after.requests, project.requests);
