@@ -1708,8 +1708,10 @@ function paramPanel(r, param, design = false) {
             )}</select></label></div><p class="muted">只作用于参数表，不重写显式 Cookie 请求头或 Cookie 管理器内容。</p>`
         : "")
     );
-  if (param === "body")
-    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${!design && r.bodyType === "none" ? `<span class="body-type-caption" title="${type}">${type}</span>` : type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" ? "" : `<div class="body-actions"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${bodyExpanded ? "收起编辑器" : "展开编辑器"}</button>`}</div>`}${
+  if (param === "body") {
+    const debugRawJSON = !design && r.bodyType === "json";
+    const expandLabel = bodyExpanded ? "收起编辑器" : "展开编辑器";
+    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${!design && (r.bodyType === "none" || debugRawJSON) ? `<span class="body-type-caption" title="${type}">${type}</span>` : type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" ? "" : `<div class="body-actions${debugRawJSON ? " http-debug-raw-actions" : ""}"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost"${debugRawJSON ? ' aria-label="格式化 JSON"' : ""}>${debugRawJSON ? "美化" : "格式化 JSON"}</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${debugRawJSON ? `<span class="debug-raw-expand-icon">${lineIcon("editor-expand")}</span><span class="debug-raw-expand-label">${expandLabel}</span>` : expandLabel}</button>`}</div>`}${
       ["form-data", "urlencoded"].includes(r.bodyType)
         ? pairs(r.form, "form")
         : r.bodyType === "none"
@@ -1719,7 +1721,7 @@ function paramPanel(r, param, design = false) {
               .map((_, i) => i + 1)
               .join(
                 "\n",
-              )}</pre><pre id="code-highlight" aria-hidden="true">${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体">${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle" aria-label="参数助手" aria-expanded="${helperOpen}"><span class="helper-label" aria-hidden="true"><span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
+              )}</pre><pre id="code-highlight" aria-hidden="true">${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle" aria-label="参数助手" aria-expanded="${helperOpen}"><span class="helper-label" aria-hidden="true"><span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
               helperOpen
                 ? `<aside class="parameter-helper"><h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
                     r.bodyDynamic || {},
@@ -1750,6 +1752,7 @@ function paramPanel(r, param, design = false) {
                 : ""
             }</div>`
     }`;
+  }
   if (param === "auth")
     return !design && mode === "debug" && usesDebugAuthChoice(project, r)
       ? httpDebugAuthPane(r)
@@ -3725,11 +3728,16 @@ function bind() {
     mark();
     render();
   });
-  on("#format-json", "click", () => {
+  on("#format-json", "click", (event, button) => {
+    const keepFocus =
+      event.detail === 0 &&
+      button === document.activeElement &&
+      button.closest(".http-debug-raw-actions");
     collect();
     request().body = JSON.stringify(JSON.parse(request().body), null, 2);
     mark();
     render();
+    if (keepFocus) $("#format-json")?.focus({ preventScroll: true });
   });
   on("[data-field-type]", "change", (_, e) => {
     request().form[e.dataset.fieldType].type = e.value;

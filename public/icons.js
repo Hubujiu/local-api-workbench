@@ -1,5 +1,6 @@
 // Original line icons. No external image, font, or icon CDN dependency.
 const paths = {
+  "editor-expand": '<path d="M14 4h6v6m0-6-6 6M10 20H4v-6m0 6 6-6"/>',
   "body-empty":
     '<path d="M7 9V3h10v6m-8-3h6m-6 2h6M4 9h16l2 5v7H2v-7zm-2 5h7l1 3h4l1-3h7"/>',
   folder:
