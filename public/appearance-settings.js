@@ -1,4 +1,9 @@
 import {
+  afterSendSettingsMarkup,
+  readAfterSendResponse,
+  saveAfterSendResponse,
+} from "./after-send-settings.js";
+import {
   productBuild,
   productVersionMarkup,
   updateProductVersion,
@@ -22,7 +27,16 @@ export function applyAppearanceTheme(body, storage, theme) {
 
 export function openAppearanceSettings(
   dialog,
-  { opener, findOpener, read, apply, readScale, applyScale, readBuild },
+  {
+    opener,
+    findOpener,
+    read,
+    apply,
+    readScale,
+    applyScale,
+    readBuild,
+    storage,
+  },
 ) {
   if (dialog.open) return;
   dialog.innerHTML = `
@@ -31,8 +45,10 @@ export function openAppearanceSettings(
         <h2 id="appearance-settings-heading">应用设置</h2>
         <div role="tablist" aria-label="应用设置栏目" aria-orientation="vertical">
           <button type="button" class="appearance-tab" id="appearance-main-tab" role="tab" aria-controls="appearance-main-panel" aria-selected="true">${icon("appearance")}外观</button>
+          <button type="button" class="appearance-tab" id="after-send-settings-tab" role="tab" aria-controls="after-send-settings-panel" aria-selected="false" tabindex="-1">${icon("⇄")}发送后设置</button>
           <button type="button" class="appearance-tab" id="appearance-version-tab" role="tab" aria-controls="appearance-version-panel" aria-selected="false" tabindex="-1">${icon("☷")}版本信息</button>
         </div>
+        <button id="after-send-reset" type="button" class="ghost" hidden>恢复默认发送后设置</button>
         <button id="appearance-reset" type="button" class="ghost">恢复默认外观</button>
       </aside>
       <div class="appearance-content" id="appearance-main-panel" role="tabpanel" aria-labelledby="appearance-main-tab">
@@ -53,11 +69,18 @@ export function openAppearanceSettings(
         </fieldset>
         ${appearanceFontScaleHTML()}
       </div>
+      ${afterSendSettingsMarkup()}
       ${productVersionMarkup()}
       <button id="appearance-close" type="button" class="ghost" aria-label="关闭外观设置" autofocus>×</button>
     </div>`;
 
   const reset = dialog.querySelector("#appearance-reset");
+  const resetAfterSend = dialog.querySelector("#after-send-reset");
+  const openResponse = dialog.querySelector("#after-send-open-response");
+  const syncAfterSend = () => {
+    openResponse.checked = readAfterSendResponse(storage);
+    resetAfterSend.disabled = !openResponse.checked;
+  };
   const choices = [
     ...dialog.querySelectorAll('input[name="appearance-theme"]'),
   ];
@@ -78,6 +101,7 @@ export function openAppearanceSettings(
         !active;
     });
     reset.hidden = selected !== 0;
+    resetAfterSend.hidden = selected !== 1;
   };
   tabs.forEach((tab, index) => {
     tab.addEventListener("click", () => show(index), options);
@@ -97,7 +121,14 @@ export function openAppearanceSettings(
           return;
         event.preventDefault();
         const next =
-          event.key === "Home" ? 0 : event.key === "End" ? 1 : 1 - index;
+          event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? tabs.length - 1
+              : (index +
+                  tabs.length +
+                  (["ArrowUp", "ArrowLeft"].includes(event.key) ? -1 : 1)) %
+                tabs.length;
         show(next);
         tabs[next].focus();
       },
@@ -105,6 +136,26 @@ export function openAppearanceSettings(
     );
   });
   updateProductVersion(dialog, readBuild?.() || productBuild());
+  openResponse.addEventListener(
+    "change",
+    () => {
+      if (!dialog.open) return;
+      saveAfterSendResponse(storage, openResponse.checked);
+      syncAfterSend();
+    },
+    options,
+  );
+  resetAfterSend.addEventListener(
+    "click",
+    () => {
+      if (!dialog.open || resetAfterSend.disabled) return;
+      saveAfterSendResponse(storage, false);
+      syncAfterSend();
+      openResponse.focus();
+    },
+    options,
+  );
+  syncAfterSend();
 
   const syncScale = bindAppearanceFontScale(dialog, {
     read: readScale,

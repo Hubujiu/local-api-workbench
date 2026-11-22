@@ -78,7 +78,7 @@ try {
     const info = panel.locator("#appearance-version-text");
     const footer = page.locator("#product-version-footer");
     await trigger.press("Enter");
-    await appearance.press("ArrowDown");
+    await appearance.press("End");
     await panel.waitFor();
     assert(await view.evaluate((tab) => tab === document.activeElement));
     assert.equal(await info.textContent(), "本地服务版本：" + runtime);
@@ -114,7 +114,7 @@ try {
     await page.setViewportSize({ width: 430, height: 760 });
     const narrow = await geometry(dialog);
     assert(narrow[0] >= 0 && narrow[0] + narrow[2] <= 430);
-    await view.press("ArrowUp");
+    await view.press("Home");
     assert(await appearance.evaluate((tab) => tab === document.activeElement));
     assert.equal(
       await page.evaluate(() => localStorage.getItem("theme")),

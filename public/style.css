@@ -15,6 +15,7 @@
 @import url("./project-create-form.css");
 @import url("./project-top-menu.css");
 @import url("./product-version.css");
+@import url("./after-send-settings.css");
 @import url("./project-switch-confirmation.css");
 :root {
   --app-type-unit: 1px;
