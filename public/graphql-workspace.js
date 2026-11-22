@@ -167,7 +167,7 @@ export function bindGraphQLWorkspace(
     if (!active()) return;
     try {
       error.textContent = "";
-      fn();
+      return fn();
     } catch (cause) {
       error.textContent = cause.message;
     }
@@ -178,7 +178,13 @@ export function bindGraphQLWorkspace(
       active,
       add: (keyboard) => attempt(() => named.add(keyboard)),
       select: (id, keyboard) => attempt(() => named.select(id, keyboard)),
-      arrange: (type, id) => attempt(() => named.arrange(type, id)),
+      arrange: (id) => attempt(() => named.arrange(id)),
+      prepareDelete: (id) => {
+        const action = attempt(() => named.prepareDelete(id));
+        return (
+          action && { name: action.name, apply: () => attempt(action.apply) }
+        );
+      },
     });
   const fieldControls = root.querySelector(".graphql-draft-actions");
   const operationDetails = root.querySelector(".graphql-operation-name");

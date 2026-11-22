@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createGraphQLResponseFence,
   defaultNamedQuery,
+  placeGraphQLDelete,
 } from "../public/graphql-named-workspace.js";
 import { createGraphQLWorkspaceDrafts } from "../public/graphql-workspace.js";
 import { newGraphQLEditorRequest } from "../public/graphql-editor.js";
@@ -43,5 +44,20 @@ test("default display labels only consider existing display names", () => {
   assert.equal(
     defaultNamedQuery([{ name: "自定义查询" }, { name: "自定义查询 3" }]),
     "自定义查询 4",
+  );
+});
+
+test("delete placement follows the reference on desktop and clamps at narrow edges", () => {
+  assert.deepEqual(
+    placeGraphQLDelete({ right: 550, top: 277 }, 128, 96, 1363, 1023),
+    { x: 496, y: 243 },
+  );
+  assert.deepEqual(
+    placeGraphQLDelete({ right: 423, top: 825 }, 128, 96, 430, 830),
+    { x: 294, y: 726 },
+  );
+  assert.deepEqual(
+    placeGraphQLDelete({ right: 30, top: 22 }, 128, 96, 430, 830),
+    { x: 8, y: 8 },
   );
 });
