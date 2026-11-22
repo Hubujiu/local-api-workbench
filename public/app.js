@@ -1,4 +1,5 @@
 import { selectedSSEWorkbench } from "./sse-workbench.js";
+import { protocolDefinitionEdit } from "./protocol-definition-edit.js";
 import { renderWorkspaceTree } from "./api-sidebar-tree.js";
 import { bindPlanPickerTree } from "./plan-step-picker.js";
 import { unsentResponseData } from "./http-response-empty.js";
@@ -4633,19 +4634,25 @@ function bind() {
     bindTree();
   });
   on("#save-protocol", "click", async () => {
-    const item = {
+    if (saving) throw Error("保存尚未完成，请等待");
+    nativeRequestLifecycle.assertCanSave(project.id);
+    projectImports.assertCanSave(project.id);
+    const protocols = project.protocols || [];
+    const index = protocols.findIndex(
+      (existing) => existing.id === selectedProtocolId,
+    );
+    if (selectedProtocolId && index < 0)
+      throw Error("连接定义已变化，请重新选择");
+    const item = protocolDefinitionEdit(protocols[index], {
       id: selectedProtocolId || uid(),
       name: $("#protocol-name").value || "新连接",
       type: $("#protocol-type").value,
       url: $("#protocol-url").value,
       port: Number($("#protocol-port").value),
-    };
-    project.protocols ??= [];
-    const index = project.protocols.findIndex(
-      (existing) => existing.id === item.id,
-    );
-    if (index < 0) project.protocols.push(item);
-    else project.protocols[index] = item;
+    });
+    if (index < 0) protocols.push(item);
+    else protocols[index] = item;
+    project.protocols = protocols;
     selectedProtocolId = item.id;
     mark();
     await save();
