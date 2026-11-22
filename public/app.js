@@ -2157,7 +2157,9 @@ function modePanel(r) {
     );
   return loadWorkspace(
     loadOptions.get(project.id + ":" + r.id),
-    loadResult,
+    loadResult?.projectId === project.id && loadResult.requestId === r.id
+      ? loadResult.result
+      : null,
     busy,
   );
 }
@@ -5983,20 +5985,29 @@ function bind() {
       concurrency,
       dataCSV,
     });
-    loadResult = null;
+    const owner = { projectId: project.id, requestId: current, result: null };
+    const requestDraft = request(),
+      environmentId = env();
+    loadResult = owner;
     busy = true;
     runId = uid();
     render();
     try {
-      loadResult = await api("/projects/" + project.id + "/load", "POST", {
-        ...timing,
-        request: request(),
-        environmentId: env(),
-        count,
-        concurrency,
-        dataCSV,
-        runId,
-      });
+      const result = await api(
+        "/projects/" + owner.projectId + "/load",
+        "POST",
+        {
+          ...timing,
+          request: requestDraft,
+          environmentId,
+          count,
+          concurrency,
+          dataCSV,
+          runId,
+        },
+      );
+      if (loadResult === owner && project.id === owner.projectId)
+        owner.result = result;
     } finally {
       busy = false;
       render();
