@@ -79,7 +79,7 @@ try {
     );
   const adoptProject = async (id) => {
     // The DOM attribute is generated from the application owner on render.
-    // selectOption changes the control value before the asynchronous load adopts it.
+    // Wait for the destination owner before opening its resource.
     if ((await renderedOwner.getAttribute("value")) === id) return;
     await projectSelect.selectOption(id);
     await page.waitForFunction(
@@ -122,6 +122,7 @@ try {
     }
   };
   await confirmFixture(nativeState.id, "native-list", async () => {
+    await page.locator('[data-request="verification"]').click();
     await tab.press("Enter");
     await nativeRow.getByText("新建用例", { exact: true }).waitFor();
   });
@@ -178,9 +179,11 @@ try {
   assert(await focusIs(selectAll));
   assert(!(await selection("native-case").isChecked()));
 
-  await confirmFixture(batch.id, "batch-list", () =>
-    selection("batch-first").waitFor(),
-  );
+  await confirmFixture(batch.id, "batch-list", async () => {
+    await page.locator('[data-request="verification"]').click();
+    await tab.press("Enter");
+    await selection("batch-first").waitFor();
+  });
   assert(!(await selectAll.isChecked()));
   assert(await selection("batch-alternate").isHidden());
   await selection("batch-first").press("Space");

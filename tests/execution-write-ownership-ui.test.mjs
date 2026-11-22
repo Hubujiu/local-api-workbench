@@ -445,6 +445,8 @@ test("actual Ctrl+Enter dispatch catches admission rejection and shows toast", a
       "document",
       "send",
       "toast",
+      "workspaceDocument",
+      "request",
       `const $=()=>({open:false});let page="apis",busy=false,bodyExpanded=false;const save=()=>Promise.resolve();${keyboard}`,
     )(
       {
@@ -458,6 +460,8 @@ test("actual Ctrl+Enter dispatch catches admission rejection and shows toast", a
         return Promise.reject(Error(message));
       },
       (text) => messages.push(text),
+      () => null,
+      () => ({ id: "request" }),
     );
     listener({
       ctrlKey: true,
@@ -470,6 +474,44 @@ test("actual Ctrl+Enter dispatch catches admission rejection and shows toast", a
     assert.equal(calls, 1);
     assert.equal(prevented, 1);
     assert.deepEqual(messages, [message]);
+  }
+});
+test("actual Ctrl+Enter does not dispatch from the project welcome or Markdown", () => {
+  const keyboard = source.slice(
+    source.indexOf('document.addEventListener("keydown"'),
+    source.indexOf('window.addEventListener("beforeunload"'),
+  );
+  for (const [selectedDocument, selectedRequest] of [
+    [null, null],
+    [{ id: "document" }, { id: "background-request" }],
+  ]) {
+    let listener;
+    new Function(
+      "document",
+      "send",
+      "workspaceDocument",
+      "request",
+      `const $=()=>({open:false});let page="apis",busy=false,bodyExpanded=false;${keyboard}`,
+    )(
+      {
+        addEventListener: (_, callback) => {
+          listener = callback;
+        },
+      },
+      () =>
+        assert.fail(
+          "shortcut must not dispatch without a visible HTTP request",
+        ),
+      () => selectedDocument,
+      () => selectedRequest,
+    );
+    listener({
+      ctrlKey: true,
+      key: "Enter",
+      preventDefault() {
+        assert.fail("no application shortcut taken");
+      },
+    });
   }
 });
 test("blocked plan structure callbacks never mutate the current draft before rejection", async () => {

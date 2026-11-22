@@ -1,3 +1,4 @@
+import { pickProjectUI } from "./helpers/pick-project-ui.mjs";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -101,7 +102,7 @@ try {
     );
 
   await page.goto(app.launchUrl);
-  await page.locator("#project-select").selectOption(project.id);
+  await pickProjectUI(page, project.id);
   await enter();
   await customPanel
     .getByRole("status")
@@ -185,7 +186,8 @@ try {
   await custom.press("End");
   assert.equal(await builtinSearch.inputValue(), "no-match");
 
-  await page.locator("#project-select").selectOption(populated.id);
+  await pickProjectUI(page, populated.id);
+  await enter();
   await customPanel.getByText("workbenchExample", { exact: true }).waitFor();
   assert.equal(await custom.getAttribute("aria-selected"), "true");
   await customSearch.fill("WORKBENCHCOUNT");
@@ -247,7 +249,8 @@ try {
   // Only the original configured checkbox is styled. Keep the form control's
   // own focus, native state and draft-only change in the original project.
   await page.setViewportSize({ width: 1363, height: 1023 });
-  await page.locator("#project-select").selectOption(project.id);
+  await pickProjectUI(page, project.id);
+  await enter();
   await page.waitForFunction(
     (id) =>
       document.querySelector(".dictionary-page")?.dataset.dictionaryProject ===

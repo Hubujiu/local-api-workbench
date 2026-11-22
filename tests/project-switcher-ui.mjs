@@ -199,12 +199,16 @@ try {
   await owned
     .and(direct.locator(`option[value="${other.id}"]`))
     .waitFor({ state: "attached" });
+  assert.equal(await name.count(), 0);
+  await page.locator('[data-request="other"]').click();
   assert.equal(await name.inputValue(), "Synthetic other");
   assert.equal(correspondingReads(), 2);
   await direct.selectOption(original.id);
   await owned
     .and(direct.locator(`option[value="${original.id}"]`))
     .waitFor({ state: "attached" });
+  assert.equal(await name.count(), 0);
+  await page.locator('[data-request="original"]').click();
   assert.equal(await name.inputValue(), "Synthetic original");
   assert.deepEqual(await app.store.get(original.id), original);
   assert.deepEqual(await app.store.get(other.id), other);

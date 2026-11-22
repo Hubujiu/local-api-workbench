@@ -503,7 +503,7 @@ try {
   await page.setViewportSize({ width: 1363, height: 1023 });
   page.once("dialog", (dialog) => dialog.accept());
   await page.locator("#project-select").selectOption(dictionaryProject.id);
-  await page.locator('[data-request="dictionary-draft"]').waitFor();
+  await page.locator('[data-request="dictionary-draft"]').click();
   await bodyTab.click();
   await helperToggle.press("Enter");
   const filter = helperPanel.getByRole("searchbox", {

@@ -1,3 +1,4 @@
+import { pickProjectUI } from "./helpers/pick-project-ui.mjs";
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -173,7 +174,9 @@ try {
   assert.equal(await busy.getAttribute("aria-busy"), "true");
   assert.equal(await message.innerText(), "正在读取会话授权");
   assert.equal(await empty.isVisible(), false);
-  await page.locator("#project-select").selectOption(second.id);
+  await pickProjectUI(page, second.id);
+  await page.locator('.rail [data-page="dictionary"]').click();
+  await shortcut.press("Enter");
   await empty.waitFor();
   assert.equal(await busy.getAttribute("aria-busy"), "false");
   pending.release.resolve();

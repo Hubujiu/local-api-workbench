@@ -89,7 +89,6 @@ try {
   await page.goto(app.launchUrl);
   await page.locator("#project-select").selectOption(project.id);
   const editor = page.locator("#request-name");
-  await editor.waitFor();
   const row = page.locator(`[data-request="${requestId}"]`);
   const trigger = page.locator(`[data-api-row-menu="${requestId}"]`);
   const menu = page.getByRole("menu", { name: "接口操作", exact: true });
