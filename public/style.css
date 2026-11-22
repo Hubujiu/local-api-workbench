@@ -5933,7 +5933,9 @@ body.dark .sse-workbench-tab strong {
 .sse-workbench-session-actions {
   padding: 8px 0;
 }
-.sse-workbench-result:has(pre:empty),
+.sse-workbench-result:has(#sse-capture-status:empty):has(pre:empty),
+.sse-workbench-result pre:empty,
+.sse-workbench-result [hidden],
 .sse-workbench-events pre:empty,
 .sse-workbench-events pre:not(:empty) + .sse-workbench-empty {
   display: none;
