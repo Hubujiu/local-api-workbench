@@ -31,8 +31,20 @@
 | 外观：字体缩放 | [#379](https://github.com/Hubujiu/local-api-workbench/pull/379) 原生实机观察 100% → 110% → 100%；Workbench 核对 90 × 32 控件、对话框和预览尺寸不随文字缩放、键盘与数字输入、刷新记忆和 430 px。 | Workbench 的 80%–120% 是本地实现边界，不是原生边界；不推及系统缩放或所有字阶。 |
 | 最近：复选框的对比度 | [#380](https://github.com/Hubujiu/local-api-workbench/pull/380) 原生 16 px 深色未选中、浅色选中与 Workbench 成对查看；Workbench 另验键盘、强制颜色及 430 px。 | Workbench 有意保留更强可辨对比，不是严格像素匹配；原生深色选中未观察。 |
 | APIs 欢迎页：合成空项目 | [#383](https://github.com/Hubujiu/local-api-workbench/pull/383) 原生 Apipost 2.0.1 浅色实拍及 Workbench 1363 px 同名空项目：四步卡片 620 × 464、位置 x549/y329；Workbench 另在 430 px 实测导入打开和取消、实有 MCP 设置关闭态、新建仅创建草稿及显式丢弃。 | 只验欢迎内容区，不推及侧栏、标签、品牌和文案、原生深色与 Windows。未改变权限；打开设置不启动 MCP 服务，不发送请求或写入项目。 |
+| 项目切换：未保存草稿三选项 | [#386](https://github.com/Hubujiu/local-api-workbench/pull/386) 原生与 Workbench 实操「取消」「不保存」「保存并继续」；Workbench 对照弹窗为 409 × 137。对该提交的 Linux 便携包核验 SHA-256 后，在隔离桌面实测：取消保留草稿，丢弃不写入，保存只落在原项目。 | 仅用合成项目且未发送请求；不推及原生失败、Windows 桌面或整屏像素。此 Linux 包不包含后续 #387 的目标读取改动。 |
+| 项目切换：目标读取取消、超时与失败 | [#387](https://github.com/Hubujiu/local-api-workbench/pull/387) Workbench 独立实测：仅目标项目读取可取消或 15 秒超时，迟到回执不接管原工作区；原项目保存不取消、不重试，冲突不读取目标。[#388](https://github.com/Hubujiu/local-api-workbench/pull/388) 修复真实切换确认后的 Raw 编辑器测试操作。 | 未做原生取消读取、超时或冲突的成对对照；已有保存不会因取消目标读取而撤回。 |
+| APIs 资源树：新建菜单 | [#389](https://github.com/Hubujiu/local-api-workbench/pull/389) 原生只打开并关闭分类菜单。Workbench 1363 px 核对约 446 px 菜单和 40 px 条目，430 px 另验键盘；菜单接真实 HTTP、Markdown、目录、已有协议和文件或粘贴导入入口。 | 不是原生选项全集；未加入 GraphQL 创建项，也未验原生协议连接、导入执行或保存。 |
+| 新建项目表单与项目顶栏入口 | [#390](https://github.com/Hubujiu/local-api-workbench/pull/390) 原生仅打开并取消 600 × 395 表单；Workbench 在桌面与 430 px 实测输入、选目录和取消，并显式创建一个带多行描述的合成项目。[#391](https://github.com/Hubujiu/local-api-workbench/pull/391) 原生与 Workbench 的新建/导入顶栏菜单局部对照（约 129 × 82）；Workbench 在最近和 APIs 都可进入真实流程。 | 不证明原生项目写入、目录选择系统权限或 Windows 文件选择。仅打开菜单不创建、不导入。 |
+| 新建项目：迟到与不明回执 | [#392](https://github.com/Hubujiu/local-api-workbench/pull/392) Workbench 独立实测：创建、读取列表、打开目标的迟到回执不会接管已离开的工作区，也不会覆盖较新草稿；结果不明时不重试，用户可显式重读列表，再手动选择。 | 返回工作区不取消或撤回已经发出的创建；列表未出现某项不证明创建失败。无原生失败或恢复状态的同态证据。 |
+| 全局设置：版本信息 | [#393](https://github.com/Hubujiu/local-api-workbench/pull/393) 原生只读版本。Workbench 区分浏览器的本地服务版本和安装版的真实桌面版本；核验该提交 Linux 便携包 SHA-256 后，隔离启动并在版本页与状态栏均读到 0.1.1。 | 未查更新、未下载更新、未验证升级；不证明自动更新通道或 Windows 版本页。 |
+| 发送后设置：切换到「响应」 | [#394](https://github.com/Hubujiu/local-api-workbench/pull/394) 原生只查看默认关闭的对应项。Workbench 实测一项默认关闭的本地偏好，用合成 HTTP 回执验证：仅手动发送、同一项目与请求、仍停在原调试视图时切到响应标签。 | 没有真实外部请求；不改变传输、响应证据或项目写入，不推及保存示例、自动美化等其他选项。 |
+| 发送设置：新建空白 HTTP 的默认超时 | [#395](https://github.com/Hubujiu/local-api-workbench/pull/395) 原生只读取控件和 10000 ms 默认值；Workbench 在 1363 px 和 430 px 实测 109 × 32 控件及手动新建入口。有意保持 15000 ms 默认，变更只用作之后手动新建的空白 HTTP 草稿初始值。 | 不改已有或导入接口、其他协议、Agent 或无头入口，也不改变全局网络策略；这是控件对照，不是默认值或传输行为相同。 |
 
-**下一项独立验收缺口：项目切换的草稿与失败状态，及真实 Windows 工作区。** 已核对浅色欢迎版式和成功切换落点；尚未观察原生未保存草稿警告、切换失败、深色欢迎或 Windows。其他优先缺口包括原生成功用例结果、实时 SSE、实库连接查询和启用后的 MCP 授权；均不能用本机成功或替代状态补记。
+**优先剩余验收**
+
+- **项目失败与恢复：** 尚无原生切换超时、保存冲突、新建结果不明或排错恢复的成对证据；Workbench 的故障保护不能替代原生实操。原生深色欢迎页也未验收。
+- **接口、协议与传输：** 已对照的 HTTP、API 树、SSE 与测试面仅覆盖具体状态。仍需逐项核对其余编辑/响应和协议状态，尤其是真实成功的原生用例、实时流/取消、实库与已启用 MCP；GraphQL 不在本轮新建菜单证据中。默认超时、重定向及其他发送策略以各自明确支持的范围为准，不因控件相近而视为一致。
+- **平台与交付：** 当前零散 Linux 包级验证和各平台 CI 不等于真实 Windows 桌面、安装、升级、失败恢复或卸载验收。未验证自动更新；不宣称完整 UI/UX、严格整屏像素或正式交付通过。
 
 更早证据：[HTTP 基线](HTTP-WORKBENCH-BASELINE.md)、[次级页面截图](APIPOST-NATIVE-SECONDARY-SCREENS.md)、[旧像素差异数据](SECONDARY-PIXEL-DIAGNOSTICS.json)。已实测原生 Git 导航在当前状态会打开项目目录终端（未运行命令），不能当成已验证的页面或 Git 同步流程。
 
