@@ -4693,11 +4693,14 @@ body:not(.dark) .plans-heading {
   .design-parameter-panel .design-pairs-empty col:first-child {
     width: 37px;
   }
+  /* Fixed table layout distributes a mixed-unit calc() column as auto in
+     Chromium. Give the name and description columns resolvable percentages
+     and let the value column take the remaining width. */
   .design-parameter-panel .design-pairs-empty col:nth-child(2) {
-    width: calc(31.82% - 37px);
+    width: 28%;
   }
   .design-parameter-panel .design-pairs-empty col:last-child {
-    width: 32.64%;
+    width: 31.82%;
   }
   .design-parameter-panel .request-pairs-table.design-pairs-empty thead th {
     width: auto;

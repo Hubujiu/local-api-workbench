@@ -125,6 +125,14 @@ try {
         insideRules: [1, 2].map(
           (i) => getComputedStyle(cells[i]).borderRightWidth,
         ),
+        cells: [...cells].map((cell) => {
+          const { x, width } = cell.getBoundingClientRect();
+          return {
+            x,
+            width,
+            padding: getComputedStyle(cell).paddingInlineStart,
+          };
+        }),
         box: {
           y: table.getBoundingClientRect().y,
           height: table.getBoundingClientRect().height,
