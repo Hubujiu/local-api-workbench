@@ -736,8 +736,34 @@ try {
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await addRootField.press("Enter");
   assert(await focused(fieldInput));
+  await page
+    .locator("#dialog")
+    .getByRole("button", { name: "关闭", exact: true })
+    .press("Enter");
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.waitForFunction(
+    () => document.activeElement?.id === "design-response-root-add",
+  );
+  await quickType.press("Enter");
+  // In one task, close the Type dialog natively and open Add. The old close
+  // event must dispatch while Add is still open, not steal its focus return.
+  assert.equal(
+    await page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const dialog = document.querySelector("#dialog");
+          dialog.addEventListener("close", () => resolve(dialog.open), {
+            once: true,
+          });
+          dialog.close();
+          document.querySelector("#design-response-root-add").click();
+        }),
+    ),
+    true,
+  );
+  assert(await focused(fieldInput));
   await fieldInput.fill("fixture-field");
-  await saveRootModal.click();
+  await saveRootModal.press("Enter");
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.waitForFunction(
     () => document.activeElement?.id === "design-response-root-add",

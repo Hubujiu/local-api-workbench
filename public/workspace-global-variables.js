@@ -2,7 +2,7 @@ import { variableMapsFromRows } from "./variable-definitions.js";
 
 export const workspaceGlobalVariablesHTML = () => `
   <section class="environment-dialog-main environment-global-content" aria-label="项目全局变量">
-    <p class="environment-dialog-notice">同一项目下的所有环境均可引用全局变量：{{ 变量名 }}。同名值仍按全局、环境、调试运行时覆盖。这里只保存到项目草稿；点「保存项目」才会写入本地。</p>
+    <p class="environment-dialog-notice">同一项目下的所有环境均可引用全局变量：{{ 变量名 }}。同名值按项目全局、当前 Postman 集合（若有）、环境、调试运行时的顺序覆盖。这里只保存到项目草稿；点「保存项目」才会写入本地。</p>
     <input id="environment-global-search" type="search" autocomplete="off" placeholder="搜索变量名、描述" aria-label="搜索全局变量">
     <div class="environment-table-wrap"><table class="environment-global-table"><thead><tr><th scope="col">变量名</th><th scope="col">变量值 <small title="JSON 格式；字符串需要双引号">JSON</small></th><th scope="col">描述</th></tr></thead><tbody id="environment-global-rows"></tbody></table></div>
     <div class="environment-global-tools">
