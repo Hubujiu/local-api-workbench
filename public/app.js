@@ -69,6 +69,7 @@ import {
   bindDatabaseManager,
 } from "./database-manager.js";
 import { selectedSSEWorkbench } from "./sse-workbench.js";
+import { createSSECaptureOwner, sseCaptureView } from "./sse-capture-owner.js";
 import { protocolDefinitionEdit } from "./protocol-definition-edit.js";
 import { renderWorkspaceTree } from "./api-sidebar-tree.js";
 import { bindApiRowMenu } from "./api-row-menu.js";
@@ -396,9 +397,11 @@ const graphqlSchemaDirectory = createGraphQLSchemaDirectory();
 let debugParameterOwner = "";
 const designResponseKey = (r) => JSON.stringify([project?.id, r.id]);
 const caseResults = createCaseResultStore();
+const sseCaptures = createSSECaptureOwner();
 const caseSelections = new Map();
 let caseBatch = null;
 let singleCaseRun = null;
+let genericProtocolCapture = null;
 function caseCancellationOwner() {
   return caseBatch?.running ? caseBatch : singleCaseRun;
 }
@@ -1150,7 +1153,7 @@ async function api(
   path,
   method = "GET",
   data,
-  { signal, expectedStatus } = {},
+  { signal, expectedStatus, protocolReceiptRunId } = {},
 ) {
   const r = await fetch("/api" + path, {
     method,
@@ -1160,6 +1163,7 @@ async function api(
   });
   const b = await r.json();
   if (!r.ok) {
+    if (protocolReceiptRunId && b?.runId === protocolReceiptRunId) return b;
     const error = Error(b.error || r.statusText);
     error.projectCommitOutcome = {
       project_id: b.project_id,
@@ -2427,6 +2431,30 @@ function modePanel(r) {
     busy,
   );
 }
+function selectedSSEOwner(
+  item = project?.protocols?.find((entry) => entry.id === selectedProtocolId),
+) {
+  if (page !== "protocols" || !project || item?.type !== "sse") return null;
+  return {
+    projectId: project.id,
+    definitionId: item.id,
+    definitionUrl: item.url,
+  };
+}
+function paintSSECapture() {
+  const owner = selectedSSEOwner();
+  const status = $("#sse-capture-status");
+  if (!owner || !status) return;
+  const view = sseCaptureView(sseCaptures.current(owner));
+  status.textContent = view.notice;
+  $("#protocol-result").textContent = view.result;
+  $("#cancel").disabled = !view.canCancel;
+  $("#protocol-run").disabled = busy || view.blocksStart;
+  for (const selector of ["#sse-capture-check", "#sse-capture-abandon"]) {
+    $(selector).hidden = !view.needsCheck;
+    $(selector).disabled = !view.canCheck;
+  }
+}
 function renderPage() {
   if (page === "socketio")
     return `<div class="page"><button id="socketio-project-reload" ${busy || saving ? "disabled" : ""}>重新加载项目核对（不重发）</button><p class="muted">刷新页面不重连。内存会话可能仍在运行；请显式读取列表核对。定义和消息正文可进入项目历史，临时认证/TLS不保存。</p>${renderSocketIO(socketioWorkbenchState, project.settings?.socketioDefinitions || [])}</div>`;
@@ -2485,6 +2513,7 @@ function renderPage() {
     );
     const sse = selectedSSEWorkbench(selected, {
       busy,
+      capture: sseCaptures.current(selectedSSEOwner(selected)),
       session: sessionState,
       status: sessionLabel(),
       events: activeSession?.events
@@ -5315,8 +5344,59 @@ function bind() {
   on("#send", "click", send);
   const cancelForegroundRun = () =>
     runId ? api("/cancel", "POST", { id: runId }) : undefined;
-  on("#cancel", "click", () => {
+  on("#cancel", "click", async (_, button) => {
+    if (button.closest(".selected-sse-workbench")) {
+      const attempt = sseCaptures.current(selectedSSEOwner());
+      if (!sseCaptures.cancel(attempt)) {
+        if (genericProtocolCapture?.cancel === button)
+          return cancelForegroundRun();
+        return;
+      }
+      paintSSECapture();
+      try {
+        await api("/cancel", "POST", { id: attempt.runId });
+      } catch {
+        // The acknowledgement is not proof of stop either way. Only the
+        // original run response or the matching terminal record can settle it.
+      }
+      return;
+    }
     if (!caseCancellationOwner()) return cancelForegroundRun();
+  });
+  on("#sse-capture-check", "click", async (_, button) => {
+    const attempt = sseCaptures.current(selectedSSEOwner());
+    if (attempt?.phase !== "unknown" || attempt.checking) return;
+    attempt.checking = true;
+    paintSSECapture();
+    let found = false;
+    try {
+      const records = await api(
+        "/projects/" + attempt.owner.projectId + "/protocol-runs?type=sse",
+      );
+      found = sseCaptures.check(attempt, records);
+    } catch {
+      // The current local service could not return this history read.
+    } finally {
+      attempt.checking = false;
+      paintSSECapture();
+    }
+    if (sseCaptures.current(selectedSSEOwner()) !== attempt) return;
+    if (
+      button.isConnected &&
+      (document.activeElement === button ||
+        document.activeElement === document.body)
+    )
+      (found ? $("#protocol-run") : button).focus();
+    if (!found) toast("未核对到这一笔采集的已保存记录；不能据此判断未执行");
+  });
+  on("#sse-capture-abandon", "click", () => {
+    const attempt = sseCaptures.current(selectedSSEOwner());
+    if (attempt?.phase !== "unknown" || attempt.checking) return;
+    if (!confirm("结束这一次核对？这不会取消、重发或证明远端未执行。")) return;
+    if (sseCaptures.abandon(attempt)) {
+      paintSSECapture();
+      $("#protocol-run").focus();
+    }
   });
   on("#cancel-case-run", "click", () => {
     if (!canCancelCurrentCase()) return;
@@ -5590,30 +5670,63 @@ function bind() {
     if (!sessionController.status().intentId) throw Error("没有会话或恢复证据");
     download("protocol-session.json", sessionController.evidence());
   });
-  on("#protocol-run", "click", async () => {
+  on("#protocol-run", "click", async (_, button) => {
     assertExecutionReady();
-    runId = uid();
+    const type = $("#protocol-type").value;
+    const url = $("#protocol-url").value;
+    const id = uid();
+    const input = {
+      type,
+      url,
+      host: url,
+      port: Number($("#protocol-port").value),
+      duration: Number($("#protocol-duration").value),
+      message: $("#protocol-message").value,
+      runId: id,
+    };
+    const path = "/projects/" + project.id + "/protocol";
+    const owner = selectedSSEOwner();
+    if (type === "sse" && owner) {
+      const attempt = sseCaptures.start(owner, { runId: id, url });
+      if (!attempt) throw Error("请先核对之前的采集结果，不要重复采集");
+      runId = "";
+      busy = true;
+      paintSSECapture();
+      let receipt;
+      try {
+        receipt = await api(path, "POST", input, { protocolReceiptRunId: id });
+      } catch {
+        // A transport/API exception cannot prove that the original run never
+        // reached the local service or that its remote effects did not occur.
+      } finally {
+        sseCaptures.settle(attempt, receipt);
+        busy = false;
+        if (selectedSSEOwner()) paintSSECapture();
+        else if ($("#protocol-run")) $("#protocol-run").disabled = false;
+      }
+      return;
+    }
+    const resultNode = $("#protocol-result");
+    const cancel = $("#cancel");
+    genericProtocolCapture = { cancel };
+    runId = id;
     busy = true;
-    $("#protocol-run").disabled = true;
+    button.disabled = true;
+    cancel.disabled = false;
     try {
-      const type = $("#protocol-type").value;
-      const result = await api(
-        "/projects/" + project.id + "/protocol",
-        "POST",
-        {
-          type,
-          url: $("#protocol-url").value,
-          host: $("#protocol-url").value,
-          port: Number($("#protocol-port").value),
-          duration: Number($("#protocol-duration").value),
-          message: $("#protocol-message").value,
-          runId,
-        },
-      );
-      $("#protocol-result").textContent = JSON.stringify(result, null, 2);
+      const result = await api(path, "POST", input);
+      if (resultNode.isConnected)
+        resultNode.textContent = JSON.stringify(result, null, 2);
     } finally {
+      genericProtocolCapture = null;
+      runId = "";
       busy = false;
-      if ($("#protocol-run")) $("#protocol-run").disabled = false;
+      if (selectedSSEOwner()) {
+        if (resultNode.isConnected && type !== "sse") {
+          button.disabled = false;
+          cancel.disabled = true;
+        } else paintSSECapture();
+      } else if ($("#protocol-run")) $("#protocol-run").disabled = false;
     }
   });
   on("#db-register", "click", () => {

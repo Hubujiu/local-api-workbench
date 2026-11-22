@@ -99,6 +99,9 @@ jobs:
       - run: node tests/scoped-export-surface-ui.mjs
       - run: node tests/graphql-export-notice-ui.mjs
       - run: node tests/sse-workbench-ui.mjs
+      - run: node tests/sse-capture-owner-ui.mjs
+        env:
+          SSE_CAPTURE_EVIDENCE: /tmp/local-api-sse-capture-owner
       - run: node tests/database-manager-ui.mjs
       - run: node tests/empty-trash-ui.mjs
       - run: node tests/request-trash-confirmation-ui.mjs
