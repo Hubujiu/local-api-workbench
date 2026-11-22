@@ -378,13 +378,18 @@ try {
   assert.deepEqual(put, []);
   assert.equal(await tab("Header").getAttribute("aria-selected"), "true");
   await panel.getByRole("button", { name: "＋ 添加参数" }).click();
+  const designHeader = panel.getByRole("textbox", { name: "新Header参数名" });
+  assert.equal(
+    await designHeader.evaluate((input) => input === document.activeElement),
+    true,
+  );
+  await designHeader.fill("X-Verification");
   assert.equal(
     await pair("headers", "key").evaluate(
       (input) => input === document.activeElement,
     ),
     true,
   );
-  await pair("headers", "key").fill("X-Verification");
   await pair("headers", "value").fill("draft-header");
   await tab("Header").press("ArrowRight");
   assert.equal(await tab("Query").getAttribute("aria-selected"), "true");
@@ -396,7 +401,8 @@ try {
     .getByRole("checkbox", { name: "空值 Query 参数添加等号" })
     .uncheck();
   await panel.getByRole("button", { name: "＋ 添加参数" }).click();
-  await pair("query", "key").fill("preview");
+  await panel.getByRole("textbox", { name: "新Query参数名" }).fill("preview");
+  assert.equal(await pair("query", "key").inputValue(), "preview");
   await pair("query", "value").fill("draft-query");
   await tab("Path").click();
   await panel.getByRole("button", { name: "＋ 添加参数" }).click();
