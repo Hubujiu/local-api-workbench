@@ -95,6 +95,59 @@ try {
     exact: true,
   });
   const expand = editor.locator("#expand-body");
+  const helperToggle = editor.getByRole("button", {
+    name: "参数助手",
+    exact: true,
+  });
+  const helperRailChevron = helperToggle.locator(".helper-rail-chevron");
+  const helperPanel = editor.locator("#body-parameter-helper");
+  const railFill = () =>
+    helperToggle.evaluate((button) => getComputedStyle(button).backgroundColor);
+  const measureClosedHelper = async () => {
+    assert.equal(await helperToggle.getAttribute("aria-expanded"), "false");
+    assert.equal(await helperPanel.count(), 0);
+    assert(await helperRailChevron.isVisible());
+    const rail = await helperToggle.boundingBox();
+    const arrow = await helperRailChevron.boundingBox();
+    const captions = await helperToggle
+      .locator(".helper-label > span:not(.helper-rail-chevron)")
+      .evaluateAll((spans) =>
+        spans.map((span) => {
+          const { x, y, width, height } = span.getBoundingClientRect();
+          return { text: span.textContent, x, y, width, height };
+        }),
+      );
+    assert.equal(await railFill(), "rgb(243, 235, 216)");
+    assert.equal(
+      await helperToggle.evaluate((button) => getComputedStyle(button).color),
+      "rgb(111, 99, 82)",
+    );
+    near(rail.x, 1305, 2, "helper rail left");
+    near(rail.y, 315, 2, "helper rail top");
+    near(rail.width, 42, 1, "helper rail width");
+    near(rail.y + rail.height, 569, 3, "helper rail bottom");
+    near(arrow.x + arrow.width / 2, 1326, 2, "helper arrow center x");
+    near(arrow.y, 395, 2, "helper arrow top");
+    assert.deepEqual(
+      captions.map(({ text }) => text),
+      ["参", "数", "助", "手"],
+    );
+    for (const [index, caption] of captions.entries()) {
+      near(caption.x + caption.width / 2, 1328, 2, "helper caption center x");
+      near(
+        caption.y + caption.height / 2,
+        424 + 18 * index,
+        2,
+        "helper caption center y",
+      );
+      near(caption.height, 18, 0.5, "helper caption height");
+    }
+    return { rail, arrow, captions };
+  };
+  async function assertLegacyHelper() {
+    assert.equal(await helperRailChevron.isVisible(), false);
+    assert.notEqual(await railFill(), "rgb(243, 235, 216)");
+  }
   const rawFormat = editor.getByRole("combobox", { name: "Raw格式" });
   const actions = editor.locator(".http-debug-raw-actions");
   const prefix = process.env.HTTP_DEBUG_RAW_CAPTURE_PREFIX;
@@ -153,6 +206,7 @@ try {
       ),
     ["16px", "16px", "16px"],
   );
+  measurements.closedHelperEmpty = await measureClosedHelper();
   await capture("empty");
 
   await body.focus();
@@ -213,7 +267,52 @@ try {
     near(offset, 29, 3, "calibrated native PNG indentation");
   }
   measurements.indent = { ...indent, offset, columns, compareNativePNG };
+  measurements.closedHelperFormatted = await measureClosedHelper();
   await capture("formatted");
+
+  await helperToggle.press("Enter");
+  assert.equal(await helperToggle.getAttribute("aria-expanded"), "true");
+  assert.equal(
+    await helperToggle.getAttribute("aria-controls"),
+    "body-parameter-helper",
+  );
+  assert(await helperPanel.isVisible());
+  assert(
+    await helperToggle.evaluate((button) => button === document.activeElement),
+  );
+  assert(
+    await helperToggle.evaluate(
+      (button) => getComputedStyle(button).outlineWidth === "2px",
+    ),
+  );
+  for (const name of [
+    "动态值",
+    "插入环境变量",
+    "内置动态变量",
+    "参数字典 · 插入 JSON 字段",
+    "共享函数",
+    "请求结构",
+  ])
+    assert.equal(
+      await helperPanel.getByRole("heading", { name, exact: true }).count(),
+      1,
+    );
+  await assertLegacyHelper();
+  assert.equal(await body.inputValue(), formatted);
+  await helperToggle.press("Space");
+  assert.equal(await helperToggle.getAttribute("aria-expanded"), "false");
+  assert.equal(await helperPanel.count(), 0);
+  assert(
+    await helperToggle.evaluate((button) => button === document.activeElement),
+  );
+  assert(await helperRailChevron.isVisible());
+  assert.equal(await body.inputValue(), formatted);
+
+  await page.locator("#theme").click();
+  assert(await page.locator("body.dark").count());
+  await assertLegacyHelper();
+  await page.locator("#theme").click();
+  assert(await helperRailChevron.isVisible());
 
   await body.fill(invalid);
   await format.press("Space");
@@ -259,9 +358,11 @@ try {
   await body.fill(original);
   await page.locator("#response-layout").click();
   assert.equal(await ink(editor, "key"), "rgb(155, 89, 101)");
+  await assertLegacyHelper();
   await page.locator("#response-layout").click();
   await page.setViewportSize({ width: 430, height: 760 });
   assert.equal(await ink(editor, "key"), "rgb(155, 89, 101)");
+  await assertLegacyHelper();
   const compactToolbar = await actions.boundingBox();
   const surfaceWidth = await page.evaluate(
     () => document.documentElement.clientWidth,
@@ -285,7 +386,7 @@ try {
       JSON.stringify(measurements, null, 2) + "\n",
     );
   console.log(
-    "HTTP_DEBUG_BODY_RAW_UI_PASS geometry/beautify/invalid/copy/expand/narrow/no-dispatch",
+    "HTTP_DEBUG_BODY_RAW_UI_PASS geometry/beautify/invalid/copy/expand/helper/narrow/no-dispatch",
   );
 } finally {
   await browser?.close();
