@@ -4683,6 +4683,28 @@ body:not(.dark) .plans-heading {
   .pair-description-heading {
   width: 33.333%;
 }
+.design-parameter-panel .design-pair-composer > td {
+  height: 36px;
+  padding: 2px 4px;
+}
+.design-parameter-panel .design-pair-composer > td:first-child {
+  text-align: center;
+}
+.design-parameter-panel .design-pair-composer input {
+  width: 100%;
+  min-width: 0;
+  min-height: 27px;
+  border-color: transparent;
+  background: transparent;
+}
+.design-parameter-panel .design-pair-composer input:is(:hover, :focus-visible) {
+  border-color: var(--line);
+}
+.design-parameter-panel .design-pair-composer .design-empty-pair {
+  min-height: 25px;
+  padding: 1px 3px;
+  color: var(--accent-text, var(--accent));
+}
 .design-parameter-panel .header-common-parameters button {
   padding-inline: 10px;
 }
