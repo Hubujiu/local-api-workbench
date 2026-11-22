@@ -61,6 +61,7 @@ jobs:
       - run: node tests/workspace-global-parameters-ui.mjs
       - run: node tests/http-design-pane-ui.mjs
       - run: node tests/debug-pair-composer-ui.mjs
+      - run: node tests/http-debug-body-empty-ui.mjs
       - run: node tests/plan-step-picker-ui.mjs
       - run: node tests/api-sidebar-tree-ui.mjs
       - run: node tests/workspace-document-ui.mjs
