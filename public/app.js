@@ -6427,8 +6427,23 @@ function bind() {
       restorePlanHistoryFocus(target, button, replacedFocus);
     }
   });
-  bindRecentHistoryFilter($(".recent-http-history"));
   on("#history-project-reload", "click", () => openProject(project.id));
+  const historyRoot = $(".recent-http-history");
+  if (historyRoot) {
+    const owner = project,
+      openedVersion = projectOpenSequence;
+    bindRecentHistoryFilter(historyRoot, {
+      projectId: owner.id,
+      active: () =>
+        page === "history" &&
+        project === owner &&
+        projectOpenSequence === openedVersion,
+      loadSaved: (id) =>
+        api(
+          "/projects/" + encodeURIComponent(id) + "/recent-saved-definitions",
+        ),
+    });
+  }
   on("#protocol-history-filter", "submit", (event) => {
     event.preventDefault();
     applyProtocolHistoryFilters($("#protocol-history"), project);

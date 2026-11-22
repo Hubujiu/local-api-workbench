@@ -90,6 +90,7 @@ jobs:
       - run: node tests/load-result-ownership-ui.mjs
       - run: node tests/mcp-off-summary-ui.mjs
       - run: node tests/recent-history-ui.mjs
+      - run: node tests/recent-saved-versions-ui.mjs
       - run: node tests/ui-smoke.mjs
         env:
           HTTP_WORKBENCH_CHECKOUT_COMMIT: ${{ steps.browser_checkout.outputs.commit }}

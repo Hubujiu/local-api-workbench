@@ -22,8 +22,9 @@ try {
   });
   project.requests = [request];
   await app.store.save(project);
-  const append = (id, name, hour, status) => {
+  const append = (id, name, hour, status, daysAgo = 0) => {
     const createdAt = new Date();
+    createdAt.setDate(createdAt.getDate() - daysAgo);
     createdAt.setHours(hour, 30, 0, 0);
     return app.store.append(project.id, "history", {
       id,
@@ -38,7 +39,7 @@ try {
       source: "manual",
     });
   };
-  await append("first", "Verification", 7, 200);
+  await append("first", "Verification", 7, 200, 1);
   await append("second", "Verification", 10, 201);
   await append("case-label", "新建用例", 20, 204);
   const before = await app.store.get(project.id);
@@ -74,10 +75,7 @@ try {
   await page.goto(app.launchUrl);
   await page.locator('.rail [data-page="history"]').press("Enter");
   const workspace = page.locator(".recent-workspace");
-  const http = workspace.getByRole("region", {
-    name: "历史发送记录",
-    exact: true,
-  });
+  const http = workspace.getByRole("region", { name: "最近", exact: true });
   const search = http.getByRole("searchbox", { name: "按发送记录名称筛选" });
   const count = http.getByRole("status");
   const timeline = http.locator(".recent-history-timeline");
@@ -87,7 +85,14 @@ try {
         "[data-recent-history-row]:not([hidden]) [data-recent-history-name]",
       )
       .allTextContents();
-  const group = timeline.locator(".recent-history-day");
+  const latestRow = timeline.locator('[data-history="second"]');
+  const olderRow = timeline.locator('[data-history="first"]');
+  const group = timeline
+    .locator(".recent-history-day")
+    .filter({ has: page.locator('[data-history="second"]') });
+  const olderGroup = timeline
+    .locator(".recent-history-day")
+    .filter({ has: page.locator('[data-history="first"]') });
   await timeline.getByText("今天", { exact: true }).waitFor();
   assert(await page.locator(".shell > .sidebar").isHidden());
   assert.equal(await count.textContent(), "匹配 3 / 3 条记录");
@@ -106,7 +111,7 @@ try {
       return [x, y, width, height].map(Math.round);
     };
     return {
-      heading: box("h1"),
+      heading: box("#recent-sent-tab"),
       query: box("#recent-history-query"),
       day: box(".recent-history-day > summary"),
       row: box(".recent-history-row"),
@@ -119,10 +124,19 @@ try {
   assert.deepEqual(metrics.day, [66, 108, 1281, 36]);
   assert.equal(metrics.row[3], 60);
 
+  // A collapsed matching day must be revealed, not merely counted.
+  await group.locator("summary").press("Enter");
+  assert(await latestRow.isHidden());
+  assert(await olderRow.isVisible());
   await search.fill("Verification");
+  assert(await latestRow.isVisible());
+  assert(await olderRow.isVisible());
   assert.equal(await count.textContent(), "匹配 2 / 3 条记录");
   assert.deepEqual(await rowNames(), ["Verification", "Verification"]);
   await capture("history-filter");
+  await search.fill("新建用例");
+  assert(await olderGroup.isHidden());
+  assert(await timeline.locator('[data-history="case-label"]').isVisible());
   await search.fill("url-only-diagnostic");
   assert.equal(await count.textContent(), "匹配 0 / 3 条记录");
   assert(
@@ -131,9 +145,17 @@ try {
   await search.fill("  vErIfIcAtIoN ");
   assert.deepEqual(await rowNames(), ["Verification", "Verification"]);
   assert(await search.evaluate((input) => document.activeElement === input));
+  assert(await latestRow.isVisible());
+  // Clearing by whitespace restores independently open/collapsed groups.
+  await search.fill("   ");
+  assert.equal(await count.textContent(), "匹配 3 / 3 条记录");
+  assert(await latestRow.isHidden());
+  assert(await olderRow.isVisible());
   await group.locator("summary").press("Enter");
-  assert(await http.locator('[data-history="second"]').isHidden());
-  await group.locator("summary").press("Enter");
+  assert(await latestRow.isVisible());
+  await search.fill("Verification");
+  await search.clear();
+  assert(await latestRow.isVisible(), "new search must capture new disclosure");
 
   await page.setViewportSize({ width: 430, height: 760 });
   await http.locator('[data-history="second"]').press("Enter");

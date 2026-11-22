@@ -138,6 +138,7 @@ import {
   listRequestDefinitionHistory,
   getRequestDefinitionVersion,
 } from "./request-definition-history.mjs";
+import { recentSavedDefinitions } from "./recent-saved-definitions.mjs";
 import { OAuthManager } from "./oauth.mjs";
 import { ProtocolSessions } from "./protocol-sessions.mjs";
 import { queryRemoteDatabase } from "./remote-database.mjs";
@@ -1190,6 +1191,18 @@ export async function createApp({
                     ["cancel", "reconcile"].includes(parts[5])))));
           const p = evidenceOnly ? { id: parts[2] } : await store.get(parts[2]);
           ownerPutOutcome?.validatedRead();
+          if (action === "recent-saved-definitions") {
+            res.setHeader("Cache-Control", "no-store");
+            if (parts.length !== 4 || u.search)
+              return json(res, 400, { error: "已保存版本查询路径无效" });
+            if (req.method !== "GET") {
+              res.setHeader("Allow", "GET");
+              return json(res, 405, { error: "已保存版本仅支持读取" });
+            }
+            if (p.archived)
+              return json(res, 409, { error: "归档项目没有活动接口版本" });
+            return json(res, 200, recentSavedDefinitions(p));
+          }
           if (action === "load-reports") {
             if (req.method !== "GET" || parts.length > 5 || u.search)
               return json(res, 400, {
