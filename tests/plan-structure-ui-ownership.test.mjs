@@ -145,9 +145,7 @@ test("explicit inline add freezes the selected steps in one saved plan", async (
       ],
     },
     planId: "plan",
-    document: {
-      querySelectorAll: () => [{ value: "r1" }, { value: "r2" }],
-    },
+    selectedPlanStepIds: () => ["r1", "r2"],
     on(selector, event, fn) {
       assert.equal(selector, "#add-step");
       assert.equal(event, "click");
@@ -175,10 +173,7 @@ test("explicit inline add freezes the selected steps in one saved plan", async (
     },
   ]);
   assert.deepEqual(environment.project.plans[0].steps, [{ id: "previous" }]);
-  environment.document.querySelectorAll = () => [
-    { value: "r1" },
-    { value: "deleted" },
-  ];
+  environment.selectedPlanStepIds = () => ["r1", "deleted"];
   await assert.rejects(add, /所选接口已变化/);
   assert.equal(saved.length, 1);
 });

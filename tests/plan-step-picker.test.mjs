@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  createPlanPickerSelection,
   planPickerEntries,
   renderStepPicker,
 } from "../public/plan-step-picker.js";
@@ -49,11 +50,36 @@ test("picker renders nested disclosure controls, per-request checks and escaped 
   assert.doesNotMatch(output, / style=/);
   assert.match(output, /value="a&quot;b"/);
   assert.match(output, /GET &lt;test&gt;/);
-  assert.equal(output.match(/type="checkbox"/g)?.length, 1);
+  assert.equal(output.match(/type="checkbox"/g)?.length, 3);
+  assert.match(output, /aria-label="选择 &lt;Accounts&gt; 中的全部接口"/);
   assert.match(output, /id="plan-step-picker-empty"[^>]* hidden>/);
   assert.match(output, /id="add-step"[^>]* disabled>/);
   assert.match(
     renderStepPicker([]),
     /id="plan-step-picker-empty" class="muted" role="status" >没有匹配接口/,
   );
+});
+
+test("folder selection keeps outside IDs and adds only missing descendants in order", () => {
+  const selection = createPlanPickerSelection();
+  const ids = ["create", "read", "nested", "delete"];
+  assert.deepEqual(selection.state(ids), { checked: false, mixed: false });
+  selection.set("outside", true);
+  selection.toggleFolder(ids);
+  assert.deepEqual(selection.ids(), ["outside", ...ids]);
+  assert.deepEqual(selection.state(ids), { checked: true, mixed: false });
+  selection.set("create", false);
+  assert.deepEqual(selection.state(ids), { checked: false, mixed: true });
+  selection.toggleFolder(ids);
+  assert.deepEqual(selection.ids(), [
+    "outside",
+    "read",
+    "nested",
+    "delete",
+    "create",
+  ]);
+  selection.toggleFolder(ids);
+  assert.deepEqual(selection.ids(), ["outside"]);
+  assert.deepEqual(selection.state(ids), { checked: false, mixed: false });
+  assert.deepEqual(createPlanPickerSelection().ids(), []);
 });
