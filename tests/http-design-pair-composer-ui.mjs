@@ -97,6 +97,22 @@ try {
     });
   };
 
+  const emptySurface = () =>
+    panel.locator(".design-pairs-empty").evaluate((table) => {
+      const { borderCollapse, borderTopLeftRadius } = getComputedStyle(table);
+      const { fontSize } = getComputedStyle(table.tHead.rows[0].cells[1]);
+      const { borderBottomWidth } = getComputedStyle(
+        table.tBodies[0].rows[0].cells[1],
+      );
+      const bottom = table.getBoundingClientRect().bottom;
+      return {
+        borderCollapse,
+        borderTopLeftRadius,
+        fontSize,
+        borderBottomWidth,
+        bottom,
+      };
+    });
   const measureEmptyHead = () =>
     panel.locator(".design-pairs-empty").evaluate((table) => {
       const cells = table.tHead.rows[0].cells;
@@ -164,6 +180,10 @@ try {
   ]);
   console.log("DESIGN_PAIR_HEADER_GEOMETRY", JSON.stringify(geometry));
   await capture("header-empty-desktop");
+  assert.equal(await panel.locator(".design-pairs-query-empty").count(), 0);
+  const headerSurface = await emptySurface();
+  assert.equal(headerSurface.borderCollapse, "collapse");
+  assert.equal(headerSurface.fontSize, "12px");
   const headerHead = await measureEmptyHead();
   console.log("DESIGN_PAIR_HEADER_HEAD", JSON.stringify(headerHead));
   assertEmptyHeading(headerHead, false);
@@ -230,6 +250,22 @@ try {
   console.log("DESIGN_PAIR_QUERY_HEAD", JSON.stringify(queryHead));
   assertEmptyHeading(queryHead, true);
   near(queryHead.box.y, 577, 3);
+  assert.equal(await panel.locator(".design-pairs-query-empty").count(), 1);
+  const querySurface = await emptySurface();
+  console.log("DESIGN_QUERY_EMPTY_SURFACE", JSON.stringify(querySurface));
+  assert.equal(querySurface.borderCollapse, "separate");
+  assert.equal(querySurface.borderTopLeftRadius, "4px");
+  assert.equal(querySurface.fontSize, "14px");
+  assert.equal(querySurface.borderBottomWidth, "0px");
+  near(querySurface.bottom, 651, 1);
+  near(queryHead.value, 712, 3);
+  await tab("Query").blur();
+  await capture("query-empty-desktop-neutral");
+  await page.locator("#theme").press("Enter");
+  const darkSurface = await emptySurface();
+  assert.equal(darkSurface.borderCollapse, "collapse");
+  assert.equal(darkSurface.fontSize, "12px");
+  await page.locator("#theme").press("Enter");
   const equals = panel.getByRole("checkbox", {
     name: "空值 Query 参数添加等号",
     exact: true,
@@ -242,6 +278,7 @@ try {
   assert.equal(await all("query").count(), 0);
   assert.deepEqual(writes, []);
   await compose("Query").fill(" filter+raw ");
+  assert.equal(await panel.locator(".design-pairs-query-empty").count(), 0);
   assert.equal(await key("query").inputValue(), " filter+raw ");
   await value("query").fill("a+b");
   await panel
@@ -279,6 +316,9 @@ try {
     "none",
   );
   assert.equal(await all("query").count(), 0);
+  const narrowEmpty = await emptySurface();
+  assert.equal(narrowEmpty.borderCollapse, "collapse");
+  assert.equal(narrowEmpty.fontSize, "12px");
   assert.equal(
     await page.evaluate(() => document.documentElement.scrollWidth),
     430,
