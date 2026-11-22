@@ -32,7 +32,10 @@ export function documentCounts(content) {
   return `字数: ${Array.from(text).length}　行数: ${text.split(/\r\n?|\n/).length}`;
 }
 
-export function workspaceDocumentHTML(doc, { editing, saving, status }) {
+export function workspaceDocumentHTML(
+  doc,
+  { editing, saving, status, synchronized = true },
+) {
   const title = doc.title || "未命名文档";
   const content = String(doc.content ?? "");
   const preview = `<article class="markdown-content workspace-document-preview" id="workspace-document-preview" aria-label="文档预览" tabindex="0">${renderMarkdown(content)}</article>`;
@@ -48,7 +51,7 @@ export function workspaceDocumentHTML(doc, { editing, saving, status }) {
     </header>
     ${
       editing
-        ? `<div class="workspace-document-editor"><div class="workspace-document-toolbar" role="group" aria-label="文档格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-workspace-markdown="${key}" aria-label="${esc(label)}" title="${esc(label)}">${esc(glyph)}</button>`).join("")}</div><div class="workspace-document-panes"><textarea id="workspace-document-text" aria-label="Markdown 正文" spellcheck="false">\n${esc(content)}</textarea>${preview}</div><small id="workspace-document-count">${documentCounts(content)}</small></div>`
+        ? `<div class="workspace-document-editor"><div class="workspace-document-toolbar" role="group" aria-label="文档格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-workspace-markdown="${key}" aria-label="${esc(label)}" title="${esc(label)}">${esc(glyph)}</button>`).join("")}</div><div class="workspace-document-panes"><textarea id="workspace-document-text" aria-label="Markdown 正文" spellcheck="false">\n${esc(content)}</textarea>${preview}</div><footer class="workspace-document-footer"><small id="workspace-document-count">${documentCounts(content)}</small><div class="workspace-document-scroll-actions"><label><input id="workspace-document-sync" type="checkbox" ${synchronized ? "checked" : ""}> 同步滚动</label><button type="button" class="ghost" id="workspace-document-top">回到顶部</button></div></footer></div>`
         : preview
     }
   </section>`;

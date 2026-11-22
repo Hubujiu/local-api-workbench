@@ -4611,11 +4611,46 @@ body:not(.dark) .plans-heading {
   border-bottom: 1px solid var(--line);
   font-size: 27px;
 }
-#workspace-document-count {
-  display: block;
-  padding: 4px 16px;
+#workspace-document-text,
+.workspace-document-panes > .workspace-document-preview {
+  overscroll-behavior: contain;
+  scroll-behavior: auto;
+}
+.workspace-document-footer,
+.workspace-document-scroll-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+}
+.workspace-document-footer {
+  min-height: 26px;
+  justify-content: space-between;
+  padding: 2px 12px 2px 16px;
   border-top: 1px solid var(--line);
   color: var(--muted);
+  font-size: 12px;
+}
+#workspace-document-count {
+  font-size: inherit;
+}
+.workspace-document-scroll-actions label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+#workspace-document-sync {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+#workspace-document-top {
+  min-height: 20px;
+  padding: 1px 4px;
+  color: inherit;
+  font-size: inherit;
 }
 @media (min-width: 1240px) {
   .shell:has(.workspace-document) > .sidebar {
