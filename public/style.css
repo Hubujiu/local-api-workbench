@@ -3874,6 +3874,20 @@ body:not(.dark) .plans-heading {
     clip-path: inset(50%);
     overflow: hidden;
   }
+  body:not(.dark)
+    .editor:not(.split-layout)
+    > .request-panel:not(.body-expanded)
+    .debug-raw-json-highlight {
+    & .syntax-key {
+      color: #b01e32;
+    }
+    & :is(.syntax-string, .syntax-literal) {
+      color: #0059b3;
+    }
+    & .syntax-number {
+      color: #087a52;
+    }
+  }
   .editor[data-editor-mode="debug"]:not(.split-layout)
     > .request-panel:not(.body-expanded):has(> .http-debug-raw-actions)
     > .body-editor-shell

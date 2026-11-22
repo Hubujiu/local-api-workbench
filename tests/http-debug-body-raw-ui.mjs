@@ -12,11 +12,18 @@ const root = await mkdtemp(join(tmpdir(), "workbench-debug-raw-body-"));
 const original = '{"message":"local synthetic draft","enabled":true,"count":2}';
 const formatted = [
   "{",
-  '  "message": "local synthetic draft",',
-  '  "enabled": true,',
-  '  "count": 2',
+  '    "message": "local synthetic draft",',
+  '    "enabled": true,',
+  '    "count": 2',
   "}",
 ].join("\n");
+const formattedTwoColumns = formatted.replace(/^ {4}/gm, "  ");
+const palette = {
+  key: "rgb(176, 30, 50)",
+  string: "rgb(0, 89, 179)",
+  literal: "rgb(0, 89, 179)",
+  number: "rgb(8, 122, 82)",
+};
 const invalid = '{"message":}';
 const near = (found, expected, delta, name) =>
   assert(
@@ -161,6 +168,34 @@ try {
   assert.equal(await detail(gutter), "1\n2\n3\n4\n5");
   assert(await format.evaluate((el) => el === document.activeElement));
   assert.deepEqual(await page.evaluate(() => window.__bodyCopyEvents), []);
+  const ink = (surface, type) =>
+    surface
+      .locator(`#code-highlight .syntax-${type}`)
+      .first()
+      .evaluate((el) => getComputedStyle(el).color);
+  for (const [type, color] of Object.entries(palette))
+    assert.equal(await ink(editor, type), color);
+  const indent = await editor
+    .locator("#code-highlight")
+    .evaluate((highlight) => {
+      const key = highlight.querySelector(".syntax-key");
+      const style = getComputedStyle(highlight);
+      const context = document.createElement("canvas").getContext("2d");
+      context.font = `${style.fontSize} ${style.fontFamily}`;
+      return {
+        keyX: key.getBoundingClientRect().x,
+        editorX: highlight.getBoundingClientRect().x,
+        charWidth: context.measureText(" ").width,
+      };
+    });
+  near(
+    indent.keyX - indent.editorX,
+    4 * indent.charWidth,
+    1,
+    "four-column ruler",
+  );
+  near(indent.keyX - indent.editorX, 29, 3, "native indentation");
+  measurements.indent = indent;
   await capture("formatted");
 
   await body.fill(invalid);
@@ -185,13 +220,31 @@ try {
 
   await rawFormat.selectOption("raw");
   assert.equal(await actions.count(), 0);
+  await body.fill(original);
+  await format.press("Enter");
+  assert.equal(await body.inputValue(), formattedTwoColumns);
+  assert.equal(await ink(editor, "key"), "rgb(155, 89, 101)");
   const plain = 'not JSON — "local draft"';
   await body.fill(plain);
   assert.equal(await body.inputValue(), plain);
   await rawFormat.selectOption("json");
   assert.equal(await body.inputValue(), plain);
+  await editor.locator('[data-mode="design"]').click();
+  const design = page.locator('.editor[data-editor-mode="design"]');
+  await design.locator('[data-design-parameter="body"]').click();
+  const designBody = design.locator("#body-code");
+  await designBody.fill(original);
+  await design.locator("#format-json").press("Enter");
+  assert.equal(await designBody.inputValue(), formattedTwoColumns);
+  assert.equal(await ink(design, "key"), "rgb(155, 89, 101)");
+  await design.locator('[data-mode="debug"]').click();
+  await bodyTab.click();
   await body.fill(original);
+  await page.locator("#response-layout").click();
+  assert.equal(await ink(editor, "key"), "rgb(155, 89, 101)");
+  await page.locator("#response-layout").click();
   await page.setViewportSize({ width: 430, height: 760 });
+  assert.equal(await ink(editor, "key"), "rgb(155, 89, 101)");
   const compactToolbar = await actions.boundingBox();
   const surfaceWidth = await page.evaluate(
     () => document.documentElement.clientWidth,
