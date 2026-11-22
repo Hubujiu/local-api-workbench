@@ -1,3 +1,4 @@
+import { bindPlanPickerTree } from "./plan-step-picker.js";
 import { unsentResponseData } from "./http-response-empty.js";
 import {
   httpResponseTabs,
@@ -5581,31 +5582,13 @@ function bind() {
     });
     await savePlan({ ...plan, steps: [...plan.steps, ...steps] });
   });
-  on("#plan-step-search", "input", (_, input) => {
-    const query = input.value.trim().toLocaleLowerCase();
-    let matches = 0;
-    for (const group of $("#plan-step-picker").querySelectorAll(
-      ".plan-picker-group",
-    )) {
-      const folder =
-        group.querySelector(".plan-picker-folder")?.textContent || "";
-      let groupMatches = 0;
-      for (const option of group.querySelectorAll(".plan-picker-option")) {
-        option.hidden = !(folder + " " + option.textContent)
-          .toLocaleLowerCase()
-          .includes(query);
-        if (!option.hidden) groupMatches++;
-      }
-      group.hidden = !groupMatches;
-      matches += groupMatches;
-    }
-    $("#plan-step-picker-empty").hidden = !!matches;
-  });
+  const stepPicker = $("#plan-step-picker");
+  if (stepPicker) bindPlanPickerTree(stepPicker);
   on('#plan-step-picker input[name="plan-picker-api"]', "change", () => {
     const count =
       $("#plan-step-picker").querySelectorAll("input:checked").length;
     $("#add-step").disabled = !count;
-    $("#plan-step-picker summary").textContent = count
+    $("#plan-step-picker > summary").textContent = count
       ? "已选 " + count + " 个接口"
       : "选择要执行的接口";
   });
