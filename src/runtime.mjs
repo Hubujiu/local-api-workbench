@@ -2,6 +2,7 @@ import {
   validateLoadRuns,
   transitionLoadRun,
 } from "./load-report-evidence.mjs";
+import { graphQLEditorVersion } from "../public/graphql-editor.js";
 import { rejectGraphQLVariableTemplate } from "./graphql-variable-template.mjs";
 import { assertActiveFormFileEncoding } from "./form-wire-guard.mjs";
 import { loadNetworkBudget } from "./load-network-budget.mjs";
@@ -940,6 +941,7 @@ export class Store {
       );
     }
     for (const request of p.requests || []) {
+      graphQLEditorVersion(request);
       validateRequestTaskSource(request);
       validateAuth(request.auth);
       validateMockRules(request.mockRules || []);

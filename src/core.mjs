@@ -147,6 +147,7 @@ import {
 } from "./openapi-query-arrays.mjs";
 import { openAPIAuthDefinition } from "./openapi-auth-definition.mjs";
 import { importPostmanResponseExamples } from "./postman-response-examples.mjs";
+import { graphQLEditorVersion } from "../public/graphql-editor.js";
 import { assertActiveFormFileEncoding } from "./form-wire-guard.mjs";
 import {
   validateMultipartPartMedia,
@@ -377,6 +378,7 @@ export async function extractResponse(response, extraction) {
 }
 export function normalizeRequest(r = {}) {
   const rawPolicy = postmanRawBodyPolicy(r);
+  const editorVersion = graphQLEditorVersion(r);
   rejectHTTPProtocolScripts(r);
   validatePostmanOAuth2Project({ requests: [r] });
   validatePathSerialization(r);
@@ -512,6 +514,9 @@ export function normalizeRequest(r = {}) {
         ? { type: "oauth2", postmanOAuth2: postmanOAuth2Definition(r.auth) }
         : { ...(r.auth || {}), type: r.auth?.type ?? "none" },
     bodyType: r.bodyType || "none",
+    ...(editorVersion === undefined
+      ? {}
+      : { graphqlEditorVersion: editorVersion }),
     ...(rawPolicy ? { postmanRawBody: rawPolicy } : {}),
     body:
       typeof r.body === "string"
