@@ -866,7 +866,9 @@ try {
   await examplesView.click();
   await exampleButton.waitFor();
   assert.equal(
-    await responseRegion.locator(".design-example-row pre").innerText(),
+    await responseRegion
+      .getByRole("textbox", { name: "JSON 示例正文", exact: true })
+      .inputValue(),
     '{"reason":"not-found"}',
   );
   await headerView.click();
@@ -911,7 +913,9 @@ try {
   await genericButton.waitFor();
   assert.deepEqual(
     JSON.parse(
-      await responseRegion.locator(".design-example-row pre").innerText(),
+      await responseRegion
+        .getByRole("textbox", { name: "JSON 示例正文", exact: true })
+        .inputValue(),
     ),
     { profile: false },
   );
@@ -932,7 +936,9 @@ try {
   await openProfile();
   await profiledButton.waitFor();
   assert.equal(
-    await responseRegion.locator(".design-example-row pre").innerText(),
+    await responseRegion
+      .getByRole("textbox", { name: "JSON 示例正文", exact: true })
+      .inputValue(),
     '{"profile":"edited"}',
   );
   const stored = await app.store.get(project.id);
