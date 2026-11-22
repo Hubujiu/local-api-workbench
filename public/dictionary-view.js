@@ -35,6 +35,17 @@ export function dictionaryPanel(project, temporary = []) {
   return `<section class="dictionary-surface" aria-labelledby="dictionary-surface-heading"><header class="dictionary-title-strip"><h1 id="dictionary-surface-heading" tabindex="-1">${dictionaryIcon}数据字典</h1><button type="button" class="ghost dictionary-model-shortcut" data-dictionary-jump="dictionary-models-heading">数据模型</button></header><div class="dictionary-content"><div class="dictionary-tabs" role="tablist" aria-label="数据字典">${dictionaryTabs.map(([key, label], index) => `<button type="button" id="dictionary-tab-${key}" data-dictionary-tab="${key}" role="tab" aria-selected="${!index}" aria-controls="dictionary-panel-${key}" tabindex="${index ? -1 : 0}">${label}</button>`).join("")}</div>${dictionaryTabs.map(([key, label]) => panel(key, label)).join("")}</div></section>`;
 }
 
+export function dictionaryEntryEditor(entry) {
+  const extras = Object.fromEntries(
+    ["default", "example", "enum"]
+      .filter((key) => entry[key] !== undefined)
+      .map((key) => [key, entry[key]]),
+  );
+  const types = ["string", "integer", "number", "boolean", "object", "array"];
+  return `<div class="dictionary-entry-editor"><div class="dictionary-entry-core"><div><label for="dict-key">参数名称</label><input id="dict-key" value="${esc(entry.key)}"></div><div><label for="dict-note">备注名</label><input id="dict-note" value="${esc(entry.note)}"></div></div><select id="dict-type" aria-label="参数类型">${types.map((type) => `<option value="${type}"${type === entry.type ? " selected" : ""}>${type}</option>`).join("")}</select><div class="dictionary-entry-extras"><label for="modal-json">默认值 / 示例 / 枚举（JSON 对象）</label><textarea id="modal-json" rows="4" spellcheck="false">${esc(JSON.stringify(extras, null, 2))}</textarea></div><div><label for="dict-description">字段描述</label><textarea id="dict-description" rows="2">
+${esc(entry.description)}</textarea></div></div>`;
+}
+
 export function matchesDictionarySearch(entry, query) {
   const text = query.trim().toLowerCase();
   return [entry.key, entry.description].some((value) =>
