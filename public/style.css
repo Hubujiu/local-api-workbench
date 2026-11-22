@@ -4707,6 +4707,12 @@ body:not(.dark) .plans-heading {
     border-inline-end: 0;
   }
   .design-parameter-panel
+    .request-pairs-table.design-pairs-empty
+    thead
+    .pair-description-heading {
+    padding-inline-start: 15px;
+  }
+  .design-parameter-panel
     .design-pairs-empty
     th:nth-child(3):not(:has(.design-query-equality)) {
     padding-inline-start: 32px;
