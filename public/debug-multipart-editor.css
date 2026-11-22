@@ -1,0 +1,142 @@
+.debug-multipart-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+.debug-multipart-table {
+  table-layout: fixed;
+  min-width: 670px;
+  width: 100%;
+}
+.debug-multipart-check-column {
+  width: 43px;
+}
+.debug-multipart-name-column {
+  width: 23.4%;
+}
+.debug-multipart-value-column {
+  width: 24%;
+}
+.debug-multipart-media-column {
+  width: 28.5%;
+}
+.debug-multipart-table th,
+.debug-multipart-table td {
+  padding: 2px 4px;
+  height: 36px;
+  vertical-align: middle;
+  text-align: start;
+}
+.debug-multipart-table th {
+  font-weight: 500;
+  color: var(--muted);
+}
+.debug-multipart-table th:not(:first-child),
+.debug-multipart-table td:not(:first-child) {
+  border-inline-start: 1px solid var(--line);
+}
+.debug-multipart-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.debug-multipart-table .debug-multipart-check {
+  text-align: end;
+  padding-inline-end: 6px;
+}
+.debug-multipart-check input[type="checkbox"] {
+  display: inline-block;
+  appearance: auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  vertical-align: middle;
+  accent-color: var(--accent);
+}
+.debug-multipart-table :is(input:not([type="checkbox"]), select) {
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  padding: 2px 1px;
+  border-color: transparent;
+  border-radius: 3px;
+  background: transparent;
+}
+.debug-multipart-table
+  :is(input:not([type="checkbox"]), select):is(:hover, :focus-visible) {
+  border-color: var(--line);
+}
+.debug-multipart-name {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px;
+  column-gap: 3px;
+}
+.debug-multipart-name select,
+.debug-multipart-new-type {
+  color: #92551b;
+}
+body.dark .debug-multipart-name select,
+body.dark .debug-multipart-new-type {
+  color: #e4bb80;
+}
+.debug-multipart-new-type {
+  padding: 5px 2px;
+}
+.debug-multipart-media {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.debug-multipart-file {
+  position: relative;
+  display: flex;
+  min-height: 28px;
+  padding: 2px 1px;
+  align-items: center;
+  color: var(--muted);
+}
+.debug-multipart-file > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.debug-multipart-file input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.debug-multipart-file:is(:hover, :focus-within) {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.debug-multipart-table .pair-row-actions {
+  justify-content: flex-start;
+  gap: 2px;
+}
+.debug-multipart-table .pair-row-actions button,
+.debug-multipart-composer button {
+  min-height: 26px;
+  padding: 2px 4px;
+}
+.debug-multipart-composer button {
+  color: var(--muted);
+}
+.debug-multipart-tools {
+  padding-top: 8px;
+}
+.debug-multipart-tools button {
+  font-size: calc(11 * var(--app-type-unit));
+  color: var(--muted);
+}
+@media (max-width: 760px) {
+  .debug-multipart-table .debug-multipart-media-column {
+    width: 19%;
+  }
+  .debug-multipart-table .debug-multipart-value-column {
+    width: 22%;
+  }
+}

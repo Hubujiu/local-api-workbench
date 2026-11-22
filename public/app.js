@@ -1,3 +1,9 @@
+import {
+  debugMultipartEditor,
+  isDebugMultipart,
+  newMultipartTextRow,
+  syncMultipartAll,
+} from "./debug-multipart-editor.js";
 import { readNewHTTPTimeout } from "./send-settings.js";
 import {
   createManualResponseView,
@@ -48,6 +54,7 @@ import {
   restoreResponseTabsPosition,
 } from "./http-response-tabs.js";
 import {
+  namedMultipartRows,
   requestParameterTabs,
   revealParameterTab,
 } from "./http-request-parameter-tabs.js";
@@ -2157,21 +2164,25 @@ function paramPanel(r, param, design = false) {
     );
   if (param === "body") {
     const debugRawJSON = !design && r.bodyType === "json";
+    const multipart =
+      !design && isDebugMultipart(page, mode, param, r.bodyType);
     const expandLabel = bodyExpanded ? "收起编辑器" : "展开编辑器";
     const tabbedHelper = helperOpen && debugRawJSON && useTabbedRawHelper();
-    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${!design && (r.bodyType === "none" || debugRawJSON) ? `<span class="body-type-caption" title="${type}">${type}</span>` : type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" ? "" : `<div class="body-actions${debugRawJSON ? " http-debug-raw-actions" : ""}"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost"${debugRawJSON ? ' aria-label="格式化 JSON"' : ""}>${debugRawJSON ? "美化" : "格式化 JSON"}</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${debugRawJSON ? `<span class="debug-raw-expand-icon">${lineIcon("editor-expand")}</span><span class="debug-raw-expand-label">${expandLabel}</span>` : expandLabel}</button>`}</div>`}${
-      ["form-data", "urlencoded"].includes(r.bodyType)
-        ? pairs(r.form, "form")
-        : r.bodyType === "none"
-          ? `<div class="body-none"><span class="body-none-icon">${lineIcon("body-empty")}</span><p>当前请求未包含 Body</p>${design ? "" : '<button id="generate-body" class="ghost">基于数据结构生成</button>'}</div>`
-          : `<div class="body-editor-shell"><div class="code-editor"><pre id="code-gutter" aria-hidden="true">${r.body
-              .split("\n")
-              .map((_, i) => i + 1)
-              .join(
-                "\n",
-              )}</pre><pre id="code-highlight" aria-hidden="true"${debugRawJSON ? ' class="debug-raw-json-highlight"' : ""}>${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle${debugRawJSON ? " debug-raw-helper" : ""}" aria-label="参数助手" aria-expanded="${helperOpen}"${helperOpen ? ' aria-controls="body-parameter-helper"' : ""}><span class="helper-label" aria-hidden="true">${debugRawJSON ? `<span class="helper-rail-chevron">${lineIcon("helper-rail-left")}</span>` : ""}${tabbedHelper ? `<span class="helper-pane-chevron">${lineIcon("helper-pane-right")}</span>` : ""}<span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
-              helperOpen ? bodyParameterHelper(r, tabbedHelper) : ""
-            }</div>`
+    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${!design && (r.bodyType === "none" || debugRawJSON || multipart) ? `<span class="body-type-caption" title="${type}">${type}</span>` : type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" || multipart ? "" : `<div class="body-actions${debugRawJSON ? " http-debug-raw-actions" : ""}"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost"${debugRawJSON ? ' aria-label="格式化 JSON"' : ""}>${debugRawJSON ? "美化" : "格式化 JSON"}</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${debugRawJSON ? `<span class="debug-raw-expand-icon">${lineIcon("editor-expand")}</span><span class="debug-raw-expand-label">${expandLabel}</span>` : expandLabel}</button>`}</div>`}${
+      multipart
+        ? debugMultipartEditor(r.form, esc)
+        : ["form-data", "urlencoded"].includes(r.bodyType)
+          ? pairs(r.form, "form")
+          : r.bodyType === "none"
+            ? `<div class="body-none"><span class="body-none-icon">${lineIcon("body-empty")}</span><p>当前请求未包含 Body</p>${design ? "" : '<button id="generate-body" class="ghost">基于数据结构生成</button>'}</div>`
+            : `<div class="body-editor-shell"><div class="code-editor"><pre id="code-gutter" aria-hidden="true">${r.body
+                .split("\n")
+                .map((_, i) => i + 1)
+                .join(
+                  "\n",
+                )}</pre><pre id="code-highlight" aria-hidden="true"${debugRawJSON ? ' class="debug-raw-json-highlight"' : ""}>${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle${debugRawJSON ? " debug-raw-helper" : ""}" aria-label="参数助手" aria-expanded="${helperOpen}"${helperOpen ? ' aria-controls="body-parameter-helper"' : ""}><span class="helper-label" aria-hidden="true">${debugRawJSON ? `<span class="helper-rail-chevron">${lineIcon("helper-rail-left")}</span>` : ""}${tabbedHelper ? `<span class="helper-pane-chevron">${lineIcon("helper-pane-right")}</span>` : ""}<span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
+                helperOpen ? bodyParameterHelper(r, tabbedHelper) : ""
+              }</div>`
     }`;
   }
   if (param === "auth")
@@ -4326,7 +4337,10 @@ function bind() {
       e.name === "body-type" &&
       e.matches(":focus-visible") &&
       (e.value === "none" ||
-        e.closest(".request-panel")?.querySelector(":scope > .body-none"));
+        e.value === "form-data" ||
+        e
+          .closest(".request-panel")
+          ?.querySelector(":scope > :is(.body-none, .debug-multipart-editor)"));
     collect();
     if (["none", "form-data", "urlencoded"].includes(e.value))
       bodyExpanded = false;
@@ -4431,13 +4445,29 @@ function bind() {
     render();
     if (keepFocus) $("#format-json")?.focus({ preventScroll: true });
   });
+  const multipartProject = project,
+    multipartRequest = request();
+  const ownsMultipart = (element) =>
+    element.isConnected &&
+    project === multipartProject &&
+    request() === multipartRequest &&
+    isDebugMultipart(page, mode, param, multipartRequest?.bodyType);
+  const staleMultipartControl = (element) =>
+    Boolean(element.closest(".debug-multipart-editor")) &&
+    !ownsMultipart(element);
   on("[data-field-type]", "change", (_, e) => {
-    request().form[e.dataset.fieldType].type = e.value;
-    delete request().form[e.dataset.fieldType].schemaDefined;
+    if (staleMultipartControl(e)) return;
+    const keepMultipartFocus =
+      e.closest(".debug-multipart-editor") && document.activeElement === e;
+    const index = e.dataset.fieldType;
+    request().form[index].type = e.value;
+    delete request().form[index].schemaDefined;
     mark();
     render();
+    if (keepMultipartFocus) $(`[data-field-type="${index}"]`)?.focus();
   });
   on("[data-field-file]", "change", async (_, e) => {
+    if (staleMultipartControl(e)) return;
     const file = e.files[0];
     const selectedProject = project;
     const selectedRequest = request();
@@ -4461,16 +4491,57 @@ function bind() {
     );
   });
   on("[data-pair]", "input", (_, e) => {
+    if (staleMultipartControl(e)) return;
     const [k, i, f] = e.dataset.pair.split(":");
     request()[k][i][f] = e.value;
-    if (f === "key") delete request()[k][i].schemaDefined;
+    if (f === "key") {
+      delete request()[k][i].schemaDefined;
+      if (k === "form" && $(".debug-multipart-editor")) {
+        const bodyTab = $('.param-tabs [data-param="body"]');
+        const count = namedMultipartRows(request());
+        bodyTab.textContent = count ? `Body (${count})` : "Body";
+      }
+    }
     mark();
   });
   on("[data-pair-enabled]", "change", (_, e) => {
+    if (staleMultipartControl(e)) return;
     const [k, i] = e.dataset.pairEnabled.split(":");
     request()[k][i].enabled = e.checked;
+    if (k === "form")
+      syncMultipartAll($("#debug-multipart-enable-all"), request().form);
     mark();
   });
+  syncMultipartAll(
+    $("#debug-multipart-enable-all"),
+    multipartRequest?.form || [],
+  );
+  on("#debug-multipart-enable-all", "change", (_, element) => {
+    if (!ownsMultipart(element) || !multipartRequest.form.length) return;
+    for (const row of multipartRequest.form) row.enabled = element.checked;
+    for (const checkbox of document.querySelectorAll(
+      ".debug-multipart-editor [data-pair-enabled]",
+    ))
+      checkbox.checked = element.checked;
+    syncMultipartAll(element, multipartRequest.form);
+    mark();
+  });
+  const commitMultipartRow = (event, element) => {
+    if (event.isComposing || !ownsMultipart(element)) return;
+    const row = newMultipartTextRow(element.value);
+    if (!row) return;
+    const index = multipartRequest.form.length;
+    const { selectionStart, selectionEnd, selectionDirection } = element;
+    multipartRequest.form.push(row);
+    mark();
+    render();
+    const key = $(`[data-pair="form:${index}:key"]`);
+    key?.focus();
+    if (selectionStart !== null && selectionEnd !== null)
+      key?.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+  };
+  on("#debug-multipart-new-key", "input", commitMultipartRow);
+  on("#debug-multipart-new-key", "compositionend", commitMultipartRow);
   const composerProject = project;
   const composerRequest = request();
   const commitDebugPair = (event, input) => {
@@ -4499,6 +4570,7 @@ function bind() {
   on("[data-debug-pair-name]", "input", commitDebugPair);
   on("[data-debug-pair-name]", "compositionend", commitDebugPair);
   on("[data-add-pair]", "click", (_, e) => {
+    if (staleMultipartControl(e)) return;
     if (mode === "design") collect();
     const key = e.dataset.addPair;
     if (ownsDebugPairComposer(key, page, mode, param)) {
@@ -4509,9 +4581,11 @@ function bind() {
     request()[key].push({ key: "", value: "", enabled: true });
     mark();
     render();
-    if (mode === "design") $(`[data-pair="${key}:${index}:key"]`)?.focus();
+    if (mode === "design" || (key === "form" && $(".debug-multipart-editor")))
+      $(`[data-pair="${key}:${index}:key"]`)?.focus();
   });
   on("[data-remove-pair]", "click", (_, e) => {
+    if (staleMultipartControl(e)) return;
     if (mode === "design") collect();
     const [k, i] = e.dataset.removePair.split(":");
     request()[k].splice(Number(i), 1);
