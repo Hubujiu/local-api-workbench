@@ -10,6 +10,7 @@
 @import url("./load-workspace.css");
 @import url("./recent-history.css");
 @import url("./appearance-settings.css");
+@import url("./api-welcome.css");
 :root {
   --app-type-unit: 1px;
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;

@@ -1,3 +1,4 @@
+import { apiWelcome } from "./api-welcome.js";
 import {
   applyFontScale,
   fontScaleKey,
@@ -1905,7 +1906,7 @@ function render(preserveEditingFocus = false) {
             })
             .join(
               "",
-            )}${documentWorkspaceTabs(project, openedDocuments, doc?.id)}<button id="tab-add" class="ghost" aria-label="新建接口标签页">＋</button></div><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button id="open-environment-settings" type="button" class="ghost" title="环境设置" aria-label="环境设置" aria-haspopup="dialog">☷</button></div></div>${doc ? workspaceDocumentHTML(doc, { editing: documentModes.get(doc.id)?.view === "edit", saving, synchronized: documentModes.get(doc.id)?.synchronized !== false, status: (project.settings?.statuses || []).find((item) => item.id === doc.statusId)?.name }) : r ? editor(r) : '<div class="empty"><span class="empty-symbol">↗</span><p>从一个请求开始</p><small>创建或导入接口，所有数据只留在本机。</small><button id="welcome-add" class="primary">＋ 新建接口</button></div>'}`
+            )}${documentWorkspaceTabs(project, openedDocuments, doc?.id)}<button id="tab-add" class="ghost" aria-label="新建接口标签页">＋</button></div><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button id="open-environment-settings" type="button" class="ghost" title="环境设置" aria-label="环境设置" aria-haspopup="dialog">☷</button></div></div>${doc ? workspaceDocumentHTML(doc, { editing: documentModes.get(doc.id)?.view === "edit", saving, synchronized: documentModes.get(doc.id)?.synchronized !== false, status: (project.settings?.statuses || []).find((item) => item.id === doc.statusId)?.name }) : r ? editor(r) : apiWelcome()}`
         : renderPage()
     }</main></div><footer class="statusbar"><span>◈ 本地工作空间 &nbsp; / &nbsp; ${esc(project?.name || "")} &nbsp; <span id="saved-state">${dirty ? "● 未保存" : "✓ 已保存"}</span></span><span class="status-actions"><button id="compact-ui" aria-pressed="${compactUI}" title="隐藏项目树，保留导航和工作区">${compactUI ? "完整模式" : "精简模式"}</button><button id="response-layout" ${page !== "apis" || doc || mode !== "debug" ? "disabled" : ""} aria-pressed="${responseLayout === "split"}">${responseLayout === "split" ? "上下布局" : "左右布局"}</button><span>Local API 0.1.0</span></span></footer>`;
   bind();
@@ -2620,7 +2621,13 @@ function bind() {
       const target = document.getElementById(e.dataset.dictionaryTarget);
       target?.scrollIntoView({ block: "start" });
     }
-    if (event.detail === 0 && page === "database-manager")
+    if (e.id === "welcome-mcp") {
+      const heading = $(".settings-mcp-page .page-head h1");
+      if (heading) {
+        heading.tabIndex = -1;
+        heading.focus({ preventScroll: true });
+      }
+    } else if (event.detail === 0 && page === "database-manager")
       $("#database-manager-heading")?.focus({ preventScroll: true });
     else if (fromRailKeyboard) $(".rail [aria-current='page']")?.focus();
   });
@@ -2799,7 +2806,11 @@ function bind() {
       },
     ),
   );
-  on("#add-request,#new-request,#tab-add,#welcome-add", "click", addRequest);
+  on("#add-request,#new-request,#tab-add", "click", addRequest);
+  on("#welcome-add", "click", () => {
+    addRequest();
+    $("#request-name")?.focus({ preventScroll: true });
+  });
   on("#save,#save-project", "click", save);
   on("#request-name,#url,#body-code,#description", "input", (_, element) => {
     collect();
@@ -4559,7 +4570,8 @@ function bind() {
       "复制",
     );
   });
-  on("#import", "click", () => {
+  on("#import,#welcome-import", "click", (_, opener) => {
+    const owner = project;
     modal(
       "导入项目（手动）",
       localProjectImportMarkup(),
@@ -4679,6 +4691,12 @@ function bind() {
         }
       },
       "导入",
+      opener.id === "welcome-import"
+        ? () => {
+            if (project === owner && opener.isConnected)
+              opener.focus({ preventScroll: true });
+          }
+        : undefined,
     );
     const shell = $(".local-project-import");
     if (shell) {
