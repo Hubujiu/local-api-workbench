@@ -1,3 +1,4 @@
+import { revealDebugPostSettings } from "./helpers/http-post-actions-ui.mjs";
 import {
   observeDesktopProcess,
   observeDesktopElectron,
@@ -166,10 +167,12 @@ try {
   phase = "script";
   console.log("DESKTOP_PHASE", phase);
   await window.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(window);
   window.once("dialog", (dialog) => dialog.accept());
   await window.locator("#script-dialect").selectOption("apipost8");
   const packagedRequestURL = await window.locator("#url").inputValue();
   await window.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(window);
   await window
     .locator("#script-code")
     .fill(
@@ -291,6 +294,7 @@ try {
   phase = "sdk-url";
   console.log("DESKTOP_PHASE", phase);
   await window.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(window);
   const sdkOriginalAfter = await window.locator("#script-code").inputValue();
   window.once("dialog", (dialog) => dialog.accept());
   await window.locator("#script-url-mode").selectOption("sdk");
@@ -325,6 +329,7 @@ try {
   window.once("dialog", (dialog) => dialog.accept());
   await window.locator("#script-url-mode").selectOption("string");
   await window.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(window);
   await window.locator("#script-code").fill(sdkOriginalAfter);
   phase = "final-body";
   console.log("DESKTOP_PHASE", phase);
@@ -348,6 +353,7 @@ try {
       "pm.variables.set('payload','{{literal}}+&');const bytes=pm.getFinalRequestRawBody();pm.setRequestHeader('x-final-signature',CryptoJS.HmacSHA256(bytes,'fixture-key').toString());",
     );
   await window.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(window);
   await window
     .locator("#script-code")
     .fill(
@@ -455,6 +461,7 @@ try {
   phase = "json-body-assertions";
   console.log("DESKTOP_PHASE", phase);
   await window.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(window);
   await window
     .locator("#script-code")
     .fill(

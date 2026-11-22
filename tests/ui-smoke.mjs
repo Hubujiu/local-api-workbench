@@ -1,5 +1,6 @@
 import { openProjectCreateUI } from "./helpers/open-project-create-ui.mjs";
 import { pickProjectUI } from "./helpers/pick-project-ui.mjs";
+import { revealDebugPostSettings } from "./helpers/http-post-actions-ui.mjs";
 import { exerciseHTTPResponseTabs } from "./helpers/http-response-tabs-ui.mjs";
 import { exerciseRequestParameterTabs } from "./helpers/http-request-parameter-tabs-ui.mjs";
 import { exerciseHTTPRequestActions } from "./helpers/http-request-actions-ui.mjs";
@@ -1111,6 +1112,7 @@ try {
   // Exercise editable scripts, response evidence and repeated modal dismissal.
   await page.locator('[data-page="apis"]').click();
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   assert.equal(await page.locator("#script-dialect").inputValue(), "legacy");
   page.once("dialog", (dialog) => dialog.dismiss());
   await page.locator("#script-dialect").selectOption("apipost8");
@@ -1138,6 +1140,7 @@ try {
     '/visualizer-leak.css");</style>';
   await page.locator('[data-page="apis"]').click();
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   await page
     .locator("#script-code")
     .fill(
@@ -1606,6 +1609,7 @@ try {
   const awsSavedScripts = {};
   for (const phase of ["before", "after"]) {
     await page.locator(`[data-param="${phase}"]`).click();
+    if (phase === "after") await revealDebugPostSettings(page);
     awsSavedScripts[phase] = await page.locator("#script-code").inputValue();
     await page.locator("#script-code").fill("");
   }
@@ -1655,6 +1659,7 @@ try {
   await page.locator('[data-param="auth"]').click();
   for (const phase of ["before", "after"]) {
     await page.locator(`[data-param="${phase}"]`).click();
+    if (phase === "after") await revealDebugPostSettings(page);
     await page.locator("#script-code").fill(awsSavedScripts[phase]);
   }
   await page.locator('[data-param="auth"]').click();
@@ -1728,6 +1733,7 @@ try {
   await page.locator('[data-auth="iss"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/local-api-asap-auth.png" });
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   for (const expected of [61, 60]) {
     await page
       .locator("#script-code")
@@ -5571,6 +5577,7 @@ try {
   await page.locator('[data-mode="debug"]').click();
   await page.locator("#url").fill(fixtureURL + "/script-response-wire");
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   const derivedBody = {
     value: 0,
     html: '<img src="' + fixtureURL + '/response-mutation-leak">',
@@ -5722,6 +5729,7 @@ try {
   );
   await page.keyboard.press("Escape");
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   await page.locator("#expand-script").click();
   assert.equal(await page.locator("#expanded-script-code").inputValue(), "");
   await page
@@ -6069,6 +6077,7 @@ try {
       "pm.request.url.variables.upsert({key:'id',value:'42'});pm.request.url.query.one('x').value='changed';",
     );
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   await page
     .locator("#script-code")
     .fill(
@@ -6083,6 +6092,7 @@ try {
   await page.locator(`[data-request="${sdkRequestId}"]`).click();
   await page.locator('[data-mode="debug"]').click();
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   assert.equal(await page.locator("#script-url-mode").inputValue(), "sdk");
   const sdkReply = page.waitForResponse(
     (response) =>
@@ -6185,6 +6195,7 @@ try {
       "pm.variables.set('payload','{{literal}}+&');const bytes=pm.getFinalRequestRawBody();pm.setRequestHeader('x-final-signature',CryptoJS.HmacSHA256(bytes,'fixture-key').toString());",
     );
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   await page
     .locator("#script-code")
     .fill(

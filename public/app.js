@@ -107,6 +107,10 @@ import {
   requestParameterOverflowHTML,
 } from "./http-request-parameter-overflow.js";
 import {
+  bindHTTPPostActions,
+  httpPostActionsHTML,
+} from "./http-post-actions.js";
+import {
   debugPairComposer,
   debugPairFromKey,
   debugQueryEquality,
@@ -522,7 +526,11 @@ let opened = [],
   compactUI = false,
   settingsSection = "settings-basic";
 const httpResponseLayoutMedia = globalThis.matchMedia?.(responseLayoutMedia);
-let releaseHTTPResponseLayout, releaseHTTPRequestOverflow;
+let releaseHTTPResponseLayout,
+  releaseHTTPRequestOverflow,
+  releaseHTTPPostActions;
+const httpPostAdvanced = new Set();
+const httpPostAdvancedKey = (r) => JSON.stringify([project?.id, r.id]);
 const activeHTTPResponseLayout = () =>
   effectiveResponseLayout(
     responseLayout,
@@ -1969,6 +1977,8 @@ function render(preserveEditingFocus = false) {
   releaseHTTPResponseLayout = undefined;
   releaseHTTPRequestOverflow?.();
   releaseHTTPRequestOverflow = undefined;
+  releaseHTTPPostActions?.();
+  releaseHTTPPostActions = undefined;
   rememberDesignDescriptionScroll?.();
   rememberDesignDescriptionScroll = undefined;
   const namedDelete = $("#graphql-named-delete-confirm");
@@ -2449,8 +2459,23 @@ function paramPanel(r, param, design = false) {
       .join(
         "",
       )}</tbody></table><p><button id="add-extract">＋ 提取变量</button><button id="edit-operations">JSON 高级编辑</button></p><div class="notice">默认运行时变量可传递给后续步骤；本请求变量不跨请求。环境/全局目的层会保存到项目，同名并发变更报错。响应时间与完整文本不需要路径；正则在隔离 VM 执行，文本上限 256 KiB，捕获组 0 为完整匹配；XML/XPath 上限 1 MiB，禁止 DTD；索引从 1 开始，多节点取首个，可使用 /root/item[1]/text()。命名空间映射可在高级 JSON 中设置 namespaces。</div>`;
-  if (param === "before" || param === "after")
-    return `<div class="script-mode-controls"><label>脚本兼容模式<select id="script-dialect">${scriptDialectOptions(r.scriptDialect)}</select></label><label>URL脚本模式<select id="script-url-mode">${scriptURLModeOptions(r.scriptURLMode)}</select></label></div><p class="script-actions"><button id="expand-script" aria-haspopup="dialog">展开脚本编辑器</button> <button id="edit-operations">声明式操作（高级）</button> <button id="add-db-operation">添加数据库查询</button></p><textarea id="script-code" class="full-code" aria-label="接口脚本" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p class="muted">${scriptDialectNotice}</p><label class="notice"><input id="inherit-shared-scripts" type="checkbox" ${r.inheritSharedScripts !== false ? "checked" : ""}>调试继承项目/当前目录脚本；执行计划不自动继承。</label><details class="notice script-policy"><summary>JavaScript 沙箱 · 无文件访问 · 250ms计算 / 2s总截止</summary><p>JavaScript 在独立 QuickJS 沙箱中执行，无文件/Node或任意模块访问。支持Promise/await、有界定时器及pm.sendRequest(config[, callback]) HTTP子请求（最多10次/并发4次、总计仍限2秒），以及 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test/Chai断言、CryptoJS（含受限安全随机数）、lodash（_）、moment、uuid、JSON5（输入/输出各64KiB）、有界 csv2array(text) / xml2Json(text) 和 console.log；累计250ms脚本运行预算（墙钟时间，不含HTTP等待）、2秒worker总截止、16MiB VM 内存限制。前置 getFinalRequestRawBody() 支持至多64KiB的 raw/JSON正文及已有变量替换，写回后避免发送时重复替换；暂不支持表单和声明式动态正文。后置脚本可用 apt.visualizer.set(template, data) 生成隔离的静态表格/列表；数据库操作须单独授权会话连接。</p><p>表单支持 pm.request.body.update 和 urlencoded/formdata 集合；one/all/each 的文本项可赋值或 update。最多1000项，单值64KiB、文本合计256KiB；文件仅提供已选择的元数据，不接受路径或新增文件。后置 setBody/setCode 仅生成独立脚本视图，不改写网络证据。</p></details>${r[param]?.length ? `<details class="operation-summary" open><summary>${r[param].length} 条声明式操作（先于本阶段 JavaScript）</summary>${r[param].map((operation, index) => `<div class="operation-card" data-operation-index="${index}"><div class="row"><strong class="grow">${index + 1}. ${esc(operation.name || operation.type)} · ${operation.type === "database" ? "数据库只读" : esc(operation.type)}${operation.enabled === false && operation.type === "database" ? "（停用）" : ""}</strong>${operation.type === "database" ? `<button data-edit-db-operation="${index}">编辑 / 重新绑定</button><button data-toggle-db-operation="${index}" title="启停查询不会清除已有运行时变量">${operation.enabled === false ? "启用" : "停用"}</button>` : ""}<button data-move-operation="${index}:-1" ${index === 0 ? "disabled" : ""}>上移</button><button data-move-operation="${index}:1" ${index === r[param].length - 1 ? "disabled" : ""}>下移</button><button data-remove-operation="${index}">移除</button></div><pre>${esc(operation.type === "database" ? operation.sql : JSON.stringify(operation))}</pre></div>`).join("")}</details>` : ""}`;
+  if (param === "before" || param === "after") {
+    const advanced = `<div class="script-mode-controls"><label>脚本兼容模式<select id="script-dialect">${scriptDialectOptions(r.scriptDialect)}</select></label><label>URL脚本模式<select id="script-url-mode">${scriptURLModeOptions(r.scriptURLMode)}</select></label></div><p class="script-actions"><button id="expand-script" aria-haspopup="dialog">展开脚本编辑器</button> <button id="edit-operations">声明式操作（高级）</button> <button id="add-db-operation">添加数据库查询</button></p><textarea id="script-code" class="full-code" aria-label="接口脚本" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p class="muted">${scriptDialectNotice}</p><label class="notice"><input id="inherit-shared-scripts" type="checkbox" ${r.inheritSharedScripts !== false ? "checked" : ""}>调试继承项目/当前目录脚本；执行计划不自动继承。</label><details class="notice script-policy"><summary>JavaScript 沙箱 · 无文件访问 · 250ms计算 / 2s总截止</summary><p>JavaScript 在独立 QuickJS 沙箱中执行，无文件/Node或任意模块访问。支持Promise/await、有界定时器及pm.sendRequest(config[, callback]) HTTP子请求（最多10次/并发4次、总计仍限2秒），以及 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test/Chai断言、CryptoJS（含受限安全随机数）、lodash（_）、moment、uuid、JSON5（输入/输出各64KiB）、有界 csv2array(text) / xml2Json(text) 和 console.log；累计250ms脚本运行预算（墙钟时间，不含HTTP等待）、2秒worker总截止、16MiB VM 内存限制。前置 getFinalRequestRawBody() 支持至多64KiB的 raw/JSON正文及已有变量替换，写回后避免发送时重复替换；暂不支持表单和声明式动态正文。后置脚本可用 apt.visualizer.set(template, data) 生成隔离的静态表格/列表；数据库操作须单独授权会话连接。</p><p>表单支持 pm.request.body.update 和 urlencoded/formdata 集合；one/all/each 的文本项可赋值或 update。最多1000项，单值64KiB、文本合计256KiB；文件仅提供已选择的元数据，不接受路径或新增文件。后置 setBody/setCode 仅生成独立脚本视图，不改写网络证据。</p></details>`;
+    const configured = r[param]?.length
+      ? `<details class="operation-summary" open><summary>${r[param].length} 条声明式操作（先于本阶段 JavaScript）</summary>${r[param].map((operation, index) => `<div class="operation-card" data-operation-index="${index}"><div class="row"><strong class="grow">${index + 1}. ${esc(operation.name || operation.type)} · ${operation.type === "database" ? "数据库只读" : esc(operation.type)}${operation.enabled === false && operation.type === "database" ? "（停用）" : ""}</strong>${operation.type === "database" ? `<button data-edit-db-operation="${index}">编辑 / 重新绑定</button><button data-toggle-db-operation="${index}" title="启停查询不会清除已有运行时变量">${operation.enabled === false ? "启用" : "停用"}</button>` : ""}<button data-move-operation="${index}:-1" ${index === 0 ? "disabled" : ""}>上移</button><button data-move-operation="${index}:1" ${index === r[param].length - 1 ? "disabled" : ""}>下移</button><button data-remove-operation="${index}">移除</button></div><pre>${esc(operation.type === "database" ? operation.sql : JSON.stringify(operation))}</pre></div>`).join("")}</details>`
+      : "";
+    return !design &&
+      mode === "debug" &&
+      param === "after" &&
+      r.graphqlEditorVersion !== 1
+      ? httpPostActionsHTML({
+          configured,
+          advanced,
+          open: httpPostAdvanced.has(httpPostAdvancedKey(r)),
+          hasScript: Boolean(r.afterScript),
+        })
+      : advanced + configured;
+  }
   const descriptions = {
     assertions:
       "状态码 / JSON 路径 / 响应时间断言。支持 eq、neq、contains、exists、lt、gt。",
@@ -5753,7 +5778,7 @@ function bind() {
     request().auth[e.dataset.auth] = e.value;
     mark();
   });
-  on("#expand-script", "click", () => {
+  const openScriptEditor = (fromPostMenu = false) => {
     collect();
     const draft = createScriptDraft(project, request(), param);
     modal(
@@ -5774,8 +5799,21 @@ function bind() {
         }
       },
       "应用到接口",
+      fromPostMenu
+        ? () => {
+            if (
+              project === draft.project &&
+              request() === draft.request &&
+              page === "apis" &&
+              mode === "debug" &&
+              param === draft.stage
+            )
+              $("#http-post-add")?.focus({ preventScroll: true });
+          }
+        : undefined,
     );
     $("#expanded-script-code").focus();
+    if (fromPostMenu) return;
     $("#dialog").addEventListener(
       "close",
       () => {
@@ -5788,7 +5826,38 @@ function bind() {
       },
       { once: true },
     );
-  });
+  };
+  on("#expand-script", "click", () => openScriptEditor());
+  const postWorkspace = $(".http-post-actions");
+  if (postWorkspace) {
+    const owner = project,
+      target = request();
+    const owns = () =>
+      postWorkspace.isConnected &&
+      project === owner &&
+      request() === target &&
+      page === "apis" &&
+      mode === "debug" &&
+      param === "after";
+    on("#http-post-advanced", "toggle", (_, disclosure) => {
+      if (!owns()) return;
+      const key = httpPostAdvancedKey(target);
+      if (disclosure.open) {
+        if (httpPostAdvanced.size >= 128 && !httpPostAdvanced.has(key))
+          httpPostAdvanced.delete(httpPostAdvanced.values().next().value);
+        httpPostAdvanced.add(key);
+      } else httpPostAdvanced.delete(key);
+    });
+    releaseHTTPPostActions = bindHTTPPostActions(postWorkspace, {
+      choose(key) {
+        if (!owns()) return;
+        if (key === "script") openScriptEditor(true);
+        else if (key === "assertions" || key === "extract")
+          selectDebugParameter(key, true);
+      },
+      onError: (error) => toast(error.message),
+    });
+  }
   on("#script-code", "input", (_, element) => {
     request()[param + "Script"] = element.value;
     mark();

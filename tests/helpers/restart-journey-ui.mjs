@@ -1,3 +1,4 @@
+import { revealDebugPostSettings } from "./http-post-actions-ui.mjs";
 import { openProjectCreateUI } from "./open-project-create-ui.mjs";
 import assert from "node:assert/strict";
 import { assertRestartedProject } from "./restart-project-receipt.mjs";
@@ -195,6 +196,7 @@ export async function exerciseRestartJourney({
   await page.locator("#auth-type").selectOption("bearer");
   await page.locator('[data-auth="token"]').fill("fictional-journey-token");
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   await page
     .locator("#script-code")
     .fill(
