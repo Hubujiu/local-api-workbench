@@ -1,0 +1,67 @@
+.after-send-settings {
+  padding-top: 24px;
+}
+.after-send-setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 20px;
+  margin-top: 20px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+.after-send-setting-row label {
+  font-size: calc(14 * var(--app-type-unit));
+  line-height: 20px;
+}
+.after-send-setting-row p {
+  margin: 5px 0 0;
+  color: var(--after-send-secondary, #6d6252);
+  font-size: calc(12 * var(--app-type-unit));
+  line-height: 19px;
+}
+body.dark .after-send-settings {
+  --after-send-secondary: var(--muted);
+}
+#after-send-open-response {
+  justify-self: end;
+  width: 40px;
+  height: 20px;
+  margin: 2px 0 0;
+  padding: 0;
+}
+@media (forced-colors: none) {
+  #after-send-open-response {
+    --after-send-track: #9c9080;
+    --after-send-dot-start: 10px;
+    appearance: none;
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    background: radial-gradient(
+        circle at var(--after-send-dot-start) 50%,
+        #fff 0 7.5px,
+        transparent 8px
+      )
+      var(--after-send-track);
+  }
+  #after-send-open-response:checked {
+    --after-send-track: #8b6c3b;
+    --after-send-dot-start: 30px;
+  }
+}
+#after-send-open-response:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+#after-send-reset {
+  width: fit-content;
+  margin: auto auto 0;
+  color: var(--text);
+}
+@media (max-width: 600px) {
+  #after-send-reset {
+    margin: 0;
+  }
+}

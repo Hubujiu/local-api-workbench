@@ -1,3 +1,7 @@
+import {
+  createManualResponseView,
+  readAfterSendResponse,
+} from "./after-send-settings.js";
 import { productBuild, updateProductVersion } from "./product-version.js";
 import { projectTopMenu, bindProjectTopMenu } from "./project-top-menu.js";
 import { projectCreateForm } from "./project-create-form.js";
@@ -426,6 +430,7 @@ const rawHelperMedia = globalThis.matchMedia?.(
   "(min-width: 1000px) and (min-height: 720px)",
 );
 let currentBuild = productBuild();
+const manualResponseView = createManualResponseView();
 let rawHelperOwner = null;
 let rawHelperState = { tab: "dictionary", query: "" };
 const useTabbedRawHelper = () =>
@@ -1845,6 +1850,12 @@ function tree() {
 }
 
 function render(preserveEditingFocus = false) {
+  manualResponseView.observe(
+    page === "apis" && mode === "debug" && !workspaceDocument()
+      ? project
+      : null,
+    current,
+  );
   syncGrpcWorkbench();
   syncSocketIOWorkbench();
   syncGrpcStreamWorkbench();
@@ -2774,6 +2785,7 @@ function bind() {
       apply: chooseTheme,
       readScale: () => readFontScale(localStorage),
       readBuild: () => currentBuild,
+      storage: localStorage,
       applyScale(scale) {
         localStorage.setItem(fontScaleKey, String(scale));
         applyFontScale(document.documentElement, scale);
@@ -4286,6 +4298,7 @@ function bind() {
     render();
   });
   on("[data-response]", "click", (_, e) => {
+    manualResponseView.selected();
     responseTab = e.dataset.response;
     render();
   });
@@ -7422,6 +7435,11 @@ async function send() {
     revision = project.revision;
   const snapshot = structuredClone(request());
   const environmentId = env();
+  const reveal = manualResponseView.capture(
+    readAfterSendResponse(localStorage),
+    project,
+    targetId,
+  );
   busy = true;
   runId = uid();
   render();
@@ -7449,7 +7467,17 @@ async function send() {
     result = { error: error.message };
   } finally {
     responses.set(projectId + ":" + targetId, result);
-    if (project.id === projectId && current === targetId) response = result;
+    if (project.id === projectId && current === targetId) {
+      response = result;
+      if (
+        manualResponseView.shouldReveal(
+          reveal,
+          readAfterSendResponse(localStorage),
+          result,
+        )
+      )
+        responseTab = "body";
+    }
     busy = false;
     render(true);
   }
