@@ -3,6 +3,7 @@ import {
   transitionLoadRun,
 } from "./load-report-evidence.mjs";
 import { rejectGraphQLVariableTemplate } from "./graphql-variable-template.mjs";
+import { assertActiveFormFileEncoding } from "./form-wire-guard.mjs";
 import { loadNetworkBudget } from "./load-network-budget.mjs";
 import { validateCookieObjectRequest } from "./openapi-cookie-objects.mjs";
 import { validateHeaderObjectRequest } from "./openapi-header-objects.mjs";
@@ -1346,6 +1347,7 @@ export async function executeRequest(
 
   rejectGraphQLVariableTemplate(input);
   const r = normalizeRequest(input);
+  assertActiveFormFileEncoding(r);
   const admittedNetworkBudget = loadNetworkBudget(networkBudget);
   if (admittedNetworkBudget)
     validateRedirectAdmission({ ...r, redirect: true }, {});
