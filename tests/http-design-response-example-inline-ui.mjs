@@ -327,9 +327,21 @@ try {
     original.openapiExampleSources,
   );
   assert.deepEqual(stored.requests[1], baseline.requests[1]);
-  const exported = exportOpenAPI({ ...stored, requests: [result] }).paths[
-    "/verification"
-  ].get.responses[404].content;
+  const exportProject = { ...stored, requests: [result] };
+  assert.throws(
+    () => exportOpenAPI(exportProject),
+    /OpenAPI 3\.0 不支持该 Schema type/,
+    "3.1 unions stay intact in storage and must not be silently downleveled",
+  );
+  // Exercise the unchanged binding exporter with a separate, representable
+  // project snapshot. Never rewrite or re-save the actual 3.1 fixture.
+  const exportable = structuredClone(exportProject);
+  const exportableSchema = exportable.requests[0].responses.find(
+    (definition) => String(definition.status) === "404",
+  ).content[json].schema;
+  exportableSchema.type = "object";
+  const exported =
+    exportOpenAPI(exportable).paths["/verification"].get.responses[404].content;
   assert.deepEqual(exported[json].examples.bound, {
     summary: "Verification example",
     "x-fixture": "original",
