@@ -119,7 +119,10 @@ body:not(.dark) .model-workspace-raw {
 }
 @media (min-width: 1000px) and (min-height: 720px) {
   #dialog:has(.model-workspace-raw) > form > header {
-    padding-block-end: 9px;
+    /* Keep the first code row independent of host title/button font metrics. */
+    box-sizing: border-box;
+    block-size: 56px;
+    padding-block: 0;
   }
   #dialog-content:has(.model-workspace-raw) {
     padding-block-start: 0;

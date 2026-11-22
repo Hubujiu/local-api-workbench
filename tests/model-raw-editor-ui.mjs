@@ -112,12 +112,15 @@ try {
     await Promise.all(
       [
         ["dialog", dialog],
+        ["header", dialog.locator("header")],
         ["editor", layers],
         ["gutter", gutter],
         ["field", raw],
       ].map(async ([name, element]) => [name, await element.boundingBox()]),
     ),
   );
+  console.log("MODEL_RAW_BOXES", JSON.stringify(boxes));
+  assert.equal(boxes.header.height, 56);
   near(boxes.dialog.x, 242, 2, "dialog left");
   near(boxes.dialog.y, 252, 5, "dialog top");
   near(boxes.editor.x, 261, 3, "editor left");
@@ -157,6 +160,54 @@ try {
   );
   assert.equal(boxes.firstRow.focusOutline, "solid");
   assert.equal(boxes.firstRow.fieldPadding, "0px");
+  // Simulate compact and tall host fonts without requiring those faces to be
+  // installed. The different computed line boxes are the actual test input.
+  const fontContexts = await dialog.locator("header").evaluate((header) => {
+    const controls = [...header.children];
+    const editor = header.parentNode.querySelector(".model-workspace-raw");
+    return [
+      ["monospace", 18],
+      ["serif", 40],
+    ].map(([family, pitch]) => {
+      try {
+        for (const control of controls) {
+          control.style.fontFamily = family;
+          control.style.lineHeight = pitch + "px";
+        }
+        const { top, bottom, height } = header.getBoundingClientRect();
+        return {
+          editorY: editor.getBoundingClientRect().y,
+          headerHeight: height,
+          controlMetrics: controls.map((control) => {
+            const style = getComputedStyle(control);
+            const rect = control.getBoundingClientRect();
+            return {
+              font: style.fontFamily,
+              pitch: style.lineHeight,
+              contained: rect.top >= top && rect.bottom <= bottom,
+              centered:
+                Math.abs((rect.top + rect.bottom - top - bottom) / 2) <= 1,
+            };
+          }),
+        };
+      } finally {
+        for (const control of controls) {
+          control.style.removeProperty("font-family");
+          control.style.removeProperty("line-height");
+        }
+      }
+    });
+  });
+  console.log("MODEL_RAW_FONT_CONTEXTS", JSON.stringify(fontContexts));
+  for (const [index, font] of fontContexts.entries()) {
+    assert.equal(font.headerHeight, 56);
+    near(font.editorY, boxes.editor.y, 0.25, "font-independent editor top");
+    for (const control of font.controlMetrics) {
+      assert.equal(control.font, index ? "serif" : "monospace");
+      assert.equal(control.pitch, index ? "40px" : "18px");
+      assert(control.contained && control.centered);
+    }
+  }
   await cspStage("capture");
   await capture("uncommitted");
   await cspStage("edit-and-cancel");
