@@ -31,6 +31,10 @@ else
         )
           throw Error("Untrusted renderer");
       }
+      ipcMain.handle("read-app-version", (event) => {
+        validateSender(event);
+        return app.getVersion();
+      });
       ipcMain.handle("choose-directory", async (event) => {
         validateSender(event);
         const result = await dialog.showOpenDialog({
