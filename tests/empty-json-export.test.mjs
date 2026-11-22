@@ -19,7 +19,7 @@ import {
   buildGoFixtures,
   createWireObservations,
   fixtureToolAvailable,
-  goFixtureEnvironment,
+  goFixtureTool,
 } from "./helpers/codegen-fixture-process.mjs";
 
 const targets = [
@@ -151,12 +151,9 @@ test(
       { method: "POST", bodyType: "urlencoded", body: "", form: [] },
     ];
     // Version probes are bounded and timeout/error is failure, never a skip.
+    const goTool = goFixtureTool();
     const available = {
-      go: fixtureToolAvailable("go", ["version"], {
-        fixture: "tool-go",
-        pattern: /^go version go/,
-        env: goFixtureEnvironment(),
-      }),
+      go: fixtureToolAvailable(goTool.binary, ["version"], goTool.options),
       python: fixtureToolAvailable("python3", ["--version"], {
         fixture: "tool-python",
         pattern: /^Python 3/,
@@ -180,6 +177,7 @@ test(
     assert.equal(observations.count, 0, "generation must not send requests");
     const binaries = goAvailable
       ? await buildGoFixtures(dir, goSources, {
+          binary: goTool.binary,
           signal: t.signal,
           run: runOwned,
         })

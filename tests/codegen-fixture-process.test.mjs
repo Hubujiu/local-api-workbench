@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { runFixtureProcess } from "./helpers/codegen-fixture-process.mjs";
+import {
+  fixtureToolAvailable,
+  goFixtureTool,
+  runFixtureProcess,
+} from "./helpers/codegen-fixture-process.mjs";
 import { formatFixtureReceipt } from "./helpers/codegen-fixture-receipt.mjs";
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -132,13 +136,15 @@ test("Go build planner writes every original source and invokes one bounded mult
     (_, index) => `package main\n// source-${index}\nfunc main() {}\n`,
   );
   const calls = [];
+  const binary = join(dir, "pinned-go.exe");
   const binaries = await buildGoFixtures(dir, sources, {
+    binary,
     run: async (...args) => {
       calls.push(args);
     },
   });
   assert.equal(calls.length, 1);
-  assert.equal(calls[0][0], "go");
+  assert.equal(calls[0][0], binary);
   assert.deepEqual(calls[0][1], [
     "build",
     "-o",
@@ -247,10 +253,7 @@ test(
   },
 );
 
-test("bounded version probe timeout is failure rather than unavailable-tool skip", async () => {
-  const { fixtureToolAvailable } = await import(
-    "./helpers/codegen-fixture-process.mjs"
-  );
+test("bounded version probe timeout is failure rather than unavailable-tool skip", () => {
   assert.equal(
     fixtureToolAvailable("missing-codegen-tool", [], {
       fixture: "tool-missing",
@@ -264,18 +267,78 @@ test("bounded version probe timeout is failure rather than unavailable-tool skip
     }),
     true,
   );
+  for (const required of [false, true])
+    assert.throws(
+      () =>
+        fixtureToolAvailable(
+          process.execPath,
+          ["-e", "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],
+          { fixture: "tool-stuck", timeoutMs: 200, required },
+        ),
+      (error) => {
+        assert.equal(error.receipt.phase, "probe");
+        assert.equal(error.receipt.timedOut, true);
+        return true;
+      },
+    );
+});
+
+test("Windows hosted Go fixtures require pinned x64 toolchain setup; local discovery is unchanged", () => {
+  for (const { platform, env } of [
+    { platform: "win32", env: {} },
+    { platform: "linux", env: { GITHUB_ACTIONS: "true" } },
+  ]) {
+    const local = goFixtureTool({ platform, env });
+    assert.equal(local.binary, "go");
+    assert.equal(local.options.required, false);
+    assert.equal(local.options.timeoutMs, 5000);
+  }
+  const platform = "win32";
+  const env = {
+    GITHUB_ACTIONS: "true",
+    WORKBENCH_FIXTURE_GO_ROOT: String.raw`C:\hosted toolcache\go\1.26.11\x64`,
+    WORKBENCH_FIXTURE_GO_VERSION: "1.26.11",
+  };
+  for (const overrides of [
+    { WORKBENCH_FIXTURE_GO_ROOT: "" },
+    { WORKBENCH_FIXTURE_GO_ROOT: String.raw`\relative-to-drive` },
+    { WORKBENCH_FIXTURE_GO_VERSION: "" },
+    { WORKBENCH_FIXTURE_GO_VERSION: "1.26.x" },
+  ])
+    assert.throws(
+      () => goFixtureTool({ platform, env: { ...env, ...overrides } }),
+      /Missing pinned Windows Go fixture setup/,
+    );
+  const hosted = goFixtureTool({ platform, env });
+  assert.equal(
+    hosted.binary,
+    String.raw`C:\hosted toolcache\go\1.26.11\x64\bin\go.exe`,
+  );
+  assert.equal(hosted.options.required, true);
+  assert.equal(hosted.options.timeoutMs, 20000);
+  assert.equal(hosted.options.env.GOTOOLCHAIN, "local");
+  assert.equal(hosted.options.env.GOPROXY, "off");
+  assert.match(
+    "go version go1.26.11 windows/amd64\r\n",
+    hosted.options.pattern,
+  );
+  for (const value of [
+    "go version go1x26x11 windows/amd64",
+    "go version go1.26.12 windows/amd64",
+    "go version go1.26.11 windows/arm64",
+  ])
+    assert.doesNotMatch(value, hosted.options.pattern);
+  const options = { ...hosted.options, timeoutMs: 5000 };
   assert.throws(
-    () =>
-      fixtureToolAvailable(
-        process.execPath,
-        ["-e", "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],
-        { fixture: "tool-stuck", timeoutMs: 200 },
-      ),
-    (error) => {
-      assert.equal(error.receipt.phase, "probe");
-      assert.equal(error.receipt.timedOut, true);
-      return true;
-    },
+    () => fixtureToolAvailable("missing-required-codegen-tool", [], options),
+    (error) =>
+      error.receipt?.phase === "probe" &&
+      error.receipt.fixture === "tool-go" &&
+      error.receipt.timedOut === false,
+  );
+  assert.throws(
+    () => fixtureToolAvailable(process.execPath, ["--version"], options),
+    /Required fixture tool did not report its expected version: tool-go/,
   );
 });
 
