@@ -35,7 +35,9 @@ import {
 import { markdownEdit, markdownTools } from "./design-markdown.js";
 import { emptyCasePanel } from "./case-empty-view.js";
 import {
+  cookieManagerHTML,
   environmentDialogHTML,
+  environmentDialogShell,
   mountEnvironmentDialog,
 } from "./environment-dialog.js";
 import { bindMCPDatabase } from "./mcp-database-view.js";
@@ -1486,7 +1488,7 @@ function render(preserveEditingFocus = false) {
             })
             .join(
               "",
-            )}<button id="tab-add" class="ghost" aria-label="新建接口标签页">＋</button></div><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button data-page="settings" data-settings-target="settings-environments" class="ghost" title="环境设置" aria-label="环境设置">☷</button></div></div>${r ? editor(r) : '<div class="empty"><span class="empty-symbol">↗</span><p>从一个请求开始</p><small>创建或导入接口，所有数据只留在本机。</small><button id="welcome-add" class="primary">＋ 新建接口</button></div>'}`
+            )}<button id="tab-add" class="ghost" aria-label="新建接口标签页">＋</button></div><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button id="open-environment-settings" type="button" class="ghost" title="环境设置" aria-label="环境设置" aria-haspopup="dialog">☷</button></div></div>${r ? editor(r) : '<div class="empty"><span class="empty-symbol">↗</span><p>从一个请求开始</p><small>创建或导入接口，所有数据只留在本机。</small><button id="welcome-add" class="primary">＋ 新建接口</button></div>'}`
         : renderPage()
     }</main></div><footer class="statusbar"><span>◈ 本地工作空间 &nbsp; / &nbsp; ${esc(project?.name || "")} &nbsp; <span id="saved-state">${dirty ? "● 未保存" : "✓ 已保存"}</span></span><span class="status-actions"><button id="compact-ui" aria-pressed="${compactUI}" title="隐藏项目树，保留导航和工作区">${compactUI ? "完整模式" : "精简模式"}</button><button id="response-layout" ${page !== "apis" || mode !== "debug" ? "disabled" : ""} aria-pressed="${responseLayout === "split"}">${responseLayout === "split" ? "上下布局" : "左右布局"}</button><span>Local API 0.1.0</span></span></footer>`;
   bind();
@@ -2130,7 +2132,7 @@ function bind() {
       visualizationFrame.replaceWith(document.createTextNode(error.message));
     }
   }
-  on("#cookie-manager", "click", openCookieManager);
+  on("#cookie-manager", "click", () => openCookieManager());
   on("#compact-ui", "click", () => {
     collect();
     compactUI = !compactUI;
@@ -4814,7 +4816,7 @@ function bind() {
     mark();
     render();
   });
-  function editEnvironment(id) {
+  function editEnvironment(id, workspace = null) {
     const owner = project;
     let item = project.environments.find((value) => value.id === id);
     let editor;
@@ -4834,7 +4836,7 @@ function bind() {
     };
     modal(
       "环境设置",
-      environmentDialogHTML(project, item),
+      environmentDialogHTML(project, item, { workspace: Boolean(workspace) }),
       apply,
       "保存并关闭",
     );
@@ -4842,42 +4844,68 @@ function bind() {
     $("#environment-save-stay").onclick = () => {
       try {
         apply();
-        editEnvironment(item.id);
+        editEnvironment(item.id, workspace);
       } catch (error) {
         toast(error.message);
       }
     };
-    const leave = (action) => {
-      if (editor.changed && !confirm("放弃尚未保存的环境修改？")) return;
-      action();
-    };
-    for (const button of $("#dialog-content").querySelectorAll(
-      "[data-env-open]",
-    ))
-      button.onclick = () =>
-        leave(() => editEnvironment(button.dataset.envOpen));
-    $("#dialog-content [data-env-new]").onclick = () =>
-      leave(() => editEnvironment());
-    $("#dialog-content [data-env-current]")?.addEventListener("click", () =>
+    bindEnvironmentNavigation(workspace, editor);
+    $("#dialog-content [data-env-services]").onclick = () =>
+      leaveEnvironmentDraft(editor, () => editService());
+  }
+  function leaveEnvironmentDraft(editor, action) {
+    if (editor?.changed && !confirm("放弃尚未保存的环境修改？")) return;
+    return action();
+  }
+  function switchEnvironmentSection(section, workspace) {
+    if (section === "cookies") return openCookieManager(workspace);
+    if (section === "globals") return editVariableDefinitions();
+    $("#dialog").close();
+    page = "settings";
+    settingsSection = "settings-global-parameters";
+    render();
+  }
+  function bindEnvironmentNavigation(workspace, editor) {
+    const navigate = (action) => leaveEnvironmentDraft(editor, action);
+    on("#dialog-content [data-env-open]", "click", (_, button) =>
+      navigate(() => editEnvironment(button.dataset.envOpen, workspace)),
+    );
+    on("#dialog-content [data-env-new]", "click", () =>
+      navigate(() => editEnvironment(undefined, workspace)),
+    );
+    on("#dialog-content [data-env-current]", "click", () =>
       $("#env-name").focus(),
     );
-    $("#dialog-content [data-env-services]").onclick = () =>
-      leave(() => editService());
-    for (const button of $("#dialog-content").querySelectorAll(
-      "[data-env-section]",
-    ))
-      button.onclick = () =>
-        leave(() => {
-          if (button.dataset.envSection === "cookies")
-            return openCookieManager();
-          if (button.dataset.envSection === "globals")
-            return editVariableDefinitions();
-          $("#dialog").close();
-          page = "settings";
-          settingsSection = "settings-global-parameters";
-          render();
-        });
+    on("#dialog-content [data-env-section]", "click", (_, button) => {
+      if (button.getAttribute("aria-current") === "page") return;
+      return navigate(() =>
+        switchEnvironmentSection(button.dataset.envSection, workspace),
+      );
+    });
   }
+  on("#open-environment-settings", "click", () => {
+    const owner = project,
+      requestId = current,
+      dialog = $("#dialog");
+    const opening = openCookieManager({
+      bindNavigation: bindEnvironmentNavigation,
+    });
+    if (dialog.open && dialog.querySelector(".environment-dialog--workspace"))
+      dialog.addEventListener(
+        "close",
+        () => {
+          if (
+            !dialog.open &&
+            project === owner &&
+            page === "apis" &&
+            current === requestId
+          )
+            $("#open-environment-settings")?.focus({ preventScroll: true });
+        },
+        { once: true },
+      );
+    return opening;
+  });
   on("#add-env", "click", () => editEnvironment());
   on("[data-edit-env]", "click", (_, e) => editEnvironment(e.dataset.editEnv));
   on("[data-delete-env]", "click", (_, e) => {
@@ -6708,43 +6736,57 @@ function editDynamicValue(group, index) {
   };
 }
 
-async function openCookieManager() {
+async function openCookieManager(workspace = null) {
   collect();
-  const environmentId = env(),
-    endpoint = "/projects/" + project.id + "/cookies";
-  const dialog = $("#dialog"),
-    marker = {};
-  dialog.cookieManagerRequest = marker;
-  const active = () =>
-    dialog.open &&
-    dialog.cookieManagerRequest === marker &&
-    $("#dialog-title").textContent === "Cookie管理器";
+  const owner = project,
+    environmentId = env(),
+    endpoint = "/projects/" + owner.id + "/cookies";
+  const dialog = $("#dialog");
+  const loading = '<p role="status">正在读取Cookie…</p>';
   modal(
     "Cookie管理器",
-    '<p role="status">正在读取Cookie…</p>',
+    workspace
+      ? environmentDialogShell(owner, {
+          workspace: true,
+          section: "cookies",
+          content: `<section class="environment-dialog-main environment-cookie-content" aria-label="当前执行环境的Cookie">${loading}</section>`,
+        })
+      : loading,
     () => {},
     "完成",
   );
+  const revision = modalRevision;
+  const content = workspace
+    ? $(".environment-cookie-content")
+    : $("#dialog-content");
+  const active = () =>
+    dialog.open &&
+    modalRevision === revision &&
+    owner === project &&
+    environmentId === env() &&
+    content.isConnected;
+  if (workspace) {
+    workspace.bindNavigation(workspace);
+    $('[data-env-section="cookies"]')?.focus();
+  }
   let state;
   try {
     state = await api(
       endpoint + "?environmentId=" + encodeURIComponent(environmentId),
     );
   } catch (error) {
-    if (active())
-      $("#dialog-content").textContent = "读取Cookie失败：" + error.message;
+    if (active()) content.textContent = "读取Cookie失败：" + error.message;
     return;
   }
   if (!active()) return;
-  const view = () =>
-    `<p class="notice">Cookie明文仅存当前电脑，按项目与环境隔离，Cookie库不进入项目备份，但请求/响应历史可能含Cookie，分享前请检查。开启后自动保存/发送匹配Cookie，并覆盖请求里手工填写的Cookie。此处操作立即生效，关闭窗口不撤销。</p><p id="cookie-error" class="failed" role="alert"></p><button id="cookie-toggle">${state.enabled ? "关闭自动Cookie" : "开启自动Cookie"}</button><button id="cookie-refresh">重新加载</button><button id="cookie-clear">清空当前环境Cookie</button><p>状态：${state.enabled ? "已开启" : "已关闭"} · ${state.cookies.length}/500</p><div class="cookie-table"><table><thead><tr><th>名称</th><th>值</th><th>域 / 路径</th><th>属性</th><th></th></tr></thead><tbody>${state.cookies.map((c, i) => `<tr><td>${esc(c.key)}</td><td><input type="password" readonly value="${esc(c.value)}" aria-label="Cookie值"></td><td>${esc(c.domain)}<br>${esc(c.path)}</td><td>${c.secure ? "Secure " : ""}${c.httpOnly ? "HttpOnly " : ""}${c.hostOnly ? "HostOnly" : ""}</td><td><button data-cookie-edit="${i}">编辑</button><button data-cookie-remove="${i}">删除</button></td></tr>`).join("")}</tbody></table></div><label>来源URL（HTTP/HTTPS）</label><input id="cookie-url" placeholder="https://api.example.test/"><label>Set-Cookie（同域、同路径、同名会覆盖；更改身份会新增）</label><textarea id="cookie-line" placeholder="name=value; Path=/; Secure"></textarea><button id="cookie-set">保存Cookie</button>`;
   const attempt = (fn) => async () => {
+    if (!active()) return;
     try {
       await fn();
     } catch (error) {
       if (!active()) return;
       $("#cookie-error").textContent = error.message;
-      $("#dialog-content").scrollTop = 0;
+      content.scrollTop = 0;
     }
   };
   const change = async (data) => {
@@ -6757,9 +6799,11 @@ async function openCookieManager() {
   };
   const draw = () => {
     if (!active()) return;
-    $("#dialog-content").innerHTML = view();
-    $("#dialog-content").scrollTop = 0;
-    for (const button of $("#dialog-content").querySelectorAll("button"))
+    content.innerHTML = cookieManagerHTML(state, {
+      workspace: Boolean(workspace),
+    });
+    content.scrollTop = 0;
+    for (const button of content.querySelectorAll("button"))
       button.type = "button";
     $("#cookie-toggle").onclick = attempt(() =>
       change({ operation: "configure", enabled: !state.enabled }),
@@ -6781,9 +6825,7 @@ async function openCookieManager() {
         cookie: $("#cookie-line").value,
       }),
     );
-    for (const button of $("#dialog-content").querySelectorAll(
-      "[data-cookie-remove]",
-    ))
+    for (const button of content.querySelectorAll("[data-cookie-remove]"))
       button.onclick = attempt(async () => {
         const c = state.cookies[Number(button.dataset.cookieRemove)];
         if (confirm("删除此Cookie？"))
@@ -6794,10 +6836,11 @@ async function openCookieManager() {
             key: c.key,
           });
       });
-    for (const button of $("#dialog-content").querySelectorAll(
-      "[data-cookie-edit]",
-    ))
+    for (const button of content.querySelectorAll("[data-cookie-edit]"))
       button.onclick = () => {
+        if (!active()) return;
+        const editor = content.querySelector("#environment-cookie-add");
+        if (editor) editor.open = true;
         const c = state.cookies[Number(button.dataset.cookieEdit)];
         $("#cookie-url").value =
           "https://" +

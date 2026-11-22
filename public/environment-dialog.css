@@ -356,3 +356,68 @@ body.dark #dialog:has(.environment-dialog) > form > footer .primary {
   background: var(--panel);
   color: var(--text);
 }
+
+#dialog:has(.environment-dialog--workspace) {
+  width: 955px;
+}
+#dialog:has(.environment-dialog--workspace.environment-dialog--cookies) > form {
+  grid-template-rows: 63px minmax(0, 1fr);
+}
+#dialog:has(.environment-dialog--workspace.environment-dialog--cookies)
+  > form
+  > footer {
+  display: none;
+}
+.environment-dialog--workspace.environment-dialog--cookies
+  > .environment-dialog-nav {
+  grid-row: 1 / -1;
+}
+.environment-cookie-content .notice {
+  margin-top: 0;
+  padding: 8px 10px;
+}
+.environment-cookie-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.environment-dialog--workspace .cookie-table table {
+  min-width: 510px;
+}
+.environment-cookie-empty {
+  display: grid;
+  place-items: center;
+  min-height: 150px;
+  color: var(--muted);
+}
+#environment-cookie-add {
+  padding-bottom: 8px;
+}
+#environment-cookie-add > summary {
+  width: fit-content;
+  cursor: pointer;
+}
+#environment-cookie-add > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+#environment-cookie-add > :is(input, button) {
+  margin-bottom: 8px;
+}
+#dialog:has(.environment-dialog--workspace) #cookie-line {
+  height: 32px;
+  min-height: 32px;
+}
+@media (min-width: 681px) {
+  .environment-dialog--workspace .environment-service-table th:first-child {
+    width: 53.8%;
+  }
+  .environment-dialog--workspace .environment-value-table th:nth-child(-n + 2) {
+    width: 23.5%;
+  }
+}
+@media (max-width: 680px) {
+  #dialog:has(.environment-dialog--workspace) > form {
+    grid-template-columns: 128px minmax(0, 1fr);
+  }
+}
