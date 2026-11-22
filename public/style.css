@@ -1103,6 +1103,9 @@ body.dark button.primary {
   height: 18px;
   line-height: 18px;
 }
+.helper-label > .helper-rail-chevron {
+  display: none;
+}
 .parameter-helper {
   width: 230px;
   overflow: auto;
@@ -3894,6 +3897,35 @@ body:not(.dark) .plans-heading {
     > .helper-toggle {
     width: 42px;
     flex-basis: 42px;
+  }
+  body:not(.dark)
+    .editor[data-editor-mode="debug"]:not(.split-layout)
+    > .request-panel:not(.body-expanded)
+    > .body-editor-shell
+    > .debug-raw-helper[aria-expanded="false"] {
+    background: #f3ebd8;
+    color: #6f6352;
+    &:hover {
+      background: color-mix(in srgb, #f3ebd8 90%, var(--accent));
+    }
+    & .helper-label {
+      align-items: center;
+      gap: 0;
+      font-size: 14px;
+      transform: translate(2px, -2px);
+    }
+    & .helper-rail-chevron {
+      display: block;
+      width: 14px;
+      height: 14px;
+      margin-block-end: 6px;
+      margin-inline-end: 4px;
+    }
+    & .helper-rail-chevron svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
   }
   .editor[data-editor-mode="debug"]:not(.split-layout)
     > .request-panel

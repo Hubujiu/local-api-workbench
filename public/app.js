@@ -1722,9 +1722,9 @@ function paramPanel(r, param, design = false) {
               .map((_, i) => i + 1)
               .join(
                 "\n",
-              )}</pre><pre id="code-highlight" aria-hidden="true"${debugRawJSON ? ' class="debug-raw-json-highlight"' : ""}>${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle" aria-label="参数助手" aria-expanded="${helperOpen}"><span class="helper-label" aria-hidden="true"><span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
+              )}</pre><pre id="code-highlight" aria-hidden="true"${debugRawJSON ? ' class="debug-raw-json-highlight"' : ""}>${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle${debugRawJSON ? " debug-raw-helper" : ""}" aria-label="参数助手" aria-expanded="${helperOpen}"${helperOpen ? ' aria-controls="body-parameter-helper"' : ""}><span class="helper-label" aria-hidden="true">${debugRawJSON ? `<span class="helper-rail-chevron">${lineIcon("helper-rail-left")}</span>` : ""}<span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
               helperOpen
-                ? `<aside class="parameter-helper"><h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
+                ? `<aside id="body-parameter-helper" class="parameter-helper"><h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
                     r.bodyDynamic || {},
                   )
                     .map(
@@ -3659,10 +3659,16 @@ function bind() {
     render();
     $("#body-code")?.focus();
   });
-  on("#toggle-parameter-helper", "click", () => {
+  on("#toggle-parameter-helper", "click", (event, button) => {
+    const keepFocus =
+      button.classList.contains("debug-raw-helper") &&
+      event.detail === 0 &&
+      button === document.activeElement;
     collect();
     helperOpen = !helperOpen;
     render();
+    if (keepFocus)
+      $("#toggle-parameter-helper")?.focus({ preventScroll: true });
   });
   on("#new-body-dynamic", "click", () => editDynamicValue("body"));
   on("[data-edit-body-dynamic]", "click", (_, element) =>
