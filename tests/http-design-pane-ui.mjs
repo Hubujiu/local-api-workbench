@@ -219,8 +219,8 @@ try {
     name: "期望设置",
     exact: true,
   });
-  const editSettings = responseRegion.getByRole("button", {
-    name: "编辑响应定义",
+  const applySettings = responseRegion.getByRole("button", {
+    name: "应用响应设置",
     exact: true,
   });
   const settingsStatus = page.locator("#design-settings-status");
@@ -566,21 +566,19 @@ try {
     .getByText("Missing JSON：0 ms", { exact: true })
     .waitFor();
   const settingsBefore = JSON.parse(await rawResponses.inputValue());
-  await editSettings.click();
   await settingsDescription.fill("未提交");
-  await page.locator("#dialog").press("Escape");
-  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await settingsDescription.press("Escape");
+  assert.equal(await applySettings.isDisabled(), true);
   assert.deepEqual(JSON.parse(await rawResponses.inputValue()), settingsBefore);
-  await editSettings.click();
   await settingsStatus.fill("200");
-  await page.locator("#dialog-save").click();
+  await applySettings.click();
   await page
     .getByText("此响应状态已存在，请编辑已有响应", { exact: true })
     .waitFor();
   assert.deepEqual(JSON.parse(await rawResponses.inputValue()), settingsBefore);
   await settingsStatus.fill("404");
   await settingsDescription.fill("保留响应结构");
-  await page.locator("#dialog-save").click();
+  await applySettings.click();
   await responseTab(/保留响应结构.*404/).waitFor();
   assert.deepEqual(JSON.parse(await rawResponses.inputValue())[1], {
     ...settingsBefore[1],
@@ -902,10 +900,9 @@ try {
   assert.equal(await profiledButton.count(), 0);
   assert.deepEqual(put, ["PUT"]);
   await settingsView.click();
-  await editSettings.click();
   await settingsStatus.fill("410");
   await settingsDescription.fill("Profiled migrated");
-  await page.locator("#dialog-save").click();
+  await applySettings.click();
   await responseTab(/Profiled migrated.*410/).waitFor();
   assert.deepEqual(put, ["PUT"]);
   await page.locator("#save").click();

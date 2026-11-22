@@ -60,6 +60,7 @@
 
 | SSE：修改目标后的未知回执 | [#421](https://github.com/Hubujiu/local-api-workbench/pull/421) Workbench 合成浏览器验证：不明回执出现后编辑同一已保存定义的 URL，仍可显式核对原采集；按原始目标 URL 和运行标识匹配记录，不将旧结果显示为新地址的结果；不同项目／定义不会接管该回执。[精确托管浏览器任务](https://github.com/Hubujiu/local-api-workbench/actions/runs/45025922602/job/137218813358)（专项与完整冒烟）通过。 | 浏览器回执受控，未向外部地址采集；没有同态的原生修改目标、未知回执或重新连接证明，也不意味着原生实时流已验收。 |
 | HTTP Design Query：标量类型菜单和必填 | [#422](https://github.com/Hubujiu/local-api-workbench/pull/422) 原生 Apipost Offline 2.0.1/Linux 观察未保存 Query 的 1363 × 1023 窗口（保留裁图起点 x355/y358）。Workbench [精确托管截图](https://github.com/Hubujiu/local-api-workbench/actions/runs/45026376861/artifacts/14756346600)与[浏览器任务](https://github.com/Hubujiu/local-api-workbench/actions/runs/45026376861/job/137220195686)覆盖桌面／430 px、键盘和类型／必填／启用互不混同、一次显式合成本机 PUT 后重开；没有发送业务请求。 | 仅是 Query 常见标量快捷项（string、number、integer、boolean），有不能保留的约束、复杂类型或序列化时走原「定义」路径；不代表原生保存或全部类型菜单、其他编辑器、整屏像素通过。 |
+| HTTP Design：所选响应的期望设置 | [#423](https://github.com/Hubujiu/local-api-workbench/pull/423) 原生 Apipost Offline 2.0.1/Linux 仅查看选中 404 的设置界面。Workbench [精确托管截图](https://github.com/Hubujiu/local-api-workbench/actions/runs/45031572733/artifacts/14758760707)记录 1363 × 1023／430 px；[托管浏览器任务](https://github.com/Hubujiu/local-api-workbench/actions/runs/45031572733/job/137236099226)验证直接编辑响应状态与说明、取消与冲突保护、一次显式合成本机保存及重开，原有 Design 专项和完整冒烟亦通过。 | 未验证原生编辑、保存和重开，也未发送业务请求。格式仍在 Body 编辑，延迟仍属独立 Mock 示例，不作为响应定义字段；不宣称整屏像素或 Windows 实机通过。 |
 
 **优先剩余验收**
 

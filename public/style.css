@@ -5043,13 +5043,16 @@ body:not(.dark) .plans-heading {
   border-radius: 4px;
   background: var(--panel);
 }
-.design-response-settings > div {
+.design-response-settings > :is(div, label) {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 10px;
 }
-.design-response-settings output {
+.design-response-settings :is(output, input, textarea) {
+  display: block;
+  width: 100%;
+  min-width: 0;
   min-height: 31px;
   padding: 6px 9px;
   overflow-wrap: anywhere;
@@ -5057,6 +5060,11 @@ body:not(.dark) .plans-heading {
   border-radius: 4px;
   background: var(--bg);
   color: var(--text);
+}
+.design-response-settings textarea {
+  height: 32px;
+  min-height: 32px;
+  resize: vertical;
 }
 .design-response-settings-actions {
   display: flex;
@@ -5068,6 +5076,9 @@ body:not(.dark) .plans-heading {
 @media (max-width: 760px) {
   .design-response-settings {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .design-response-settings-actions > .muted {
+    flex-basis: 100%;
   }
 }
 
