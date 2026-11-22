@@ -9,7 +9,7 @@ const esc = (value) =>
   );
 const object = (value) =>
   value && typeof value === "object" && !Array.isArray(value);
-const types = [
+export const schemaTypes = Object.freeze([
   "string",
   "integer",
   "number",
@@ -17,7 +17,8 @@ const types = [
   "object",
   "array",
   "null",
-];
+]);
+const types = schemaTypes;
 const combinations = ["allOf", "anyOf", "oneOf"];
 const constraintFields = {
   minimum: "数值下限",

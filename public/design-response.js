@@ -1,5 +1,10 @@
 import { isJsonResponseType } from "./response-media.js";
-import { schemaRows } from "./schema-editor.js";
+import {
+  addSchemaProperty,
+  editSchemaNode,
+  schemaRows,
+  schemaTypes,
+} from "./schema-editor.js";
 
 const esc = (value) =>
   String(value ?? "").replace(
@@ -23,33 +28,142 @@ export function responseSelection(definitions, selection = {}) {
   return { index: current, definition, media, mediaTypes };
 }
 
-function schemaPreview(schema) {
+const record = (value) =>
+  value && typeof value === "object" && !Array.isArray(value);
+
+function editableRoot(schema) {
+  return (
+    record(schema) &&
+    !Object.hasOwn(schema, "$ref") &&
+    !Object.hasOwn(schema, "$dynamicRef") &&
+    !Object.hasOwn(schema, "$recursiveRef")
+  );
+}
+
+const rootTypeMetadata = new Set([
+  "type",
+  "description",
+  "title",
+  "$comment",
+  "deprecated",
+  "readOnly",
+  "writeOnly",
+]);
+
+const quickRootTypes = schemaTypes.filter(
+  (type) => type !== "array" && type !== "null",
+);
+
+function simpleRootType(schema, content) {
+  return (
+    (schema.type === undefined || schemaTypes.includes(schema.type)) &&
+    !Object.hasOwn(content, "example") &&
+    !Object.hasOwn(content, "examples") &&
+    Object.entries(schema).every(
+      ([key, value]) =>
+        rootTypeMetadata.has(key) ||
+        (key === "properties" && record(value) && !Object.keys(value).length) ||
+        (key === "required" && Array.isArray(value) && !value.length),
+    )
+  );
+}
+
+export function editDesignResponseRoot(definition, media, action, value) {
+  const content = definition?.content;
+  if (
+    !media ||
+    !record(content) ||
+    !Object.hasOwn(content, media) ||
+    !record(content[media]) ||
+    !editableRoot(content[media].schema)
+  )
+    throw Error("当前状态或媒体类型没有可编辑的 Schema 根节点");
+  const entry = content[media];
+  const original = entry.schema;
+  let schema;
+  if (action === "description") {
+    if (value === (original.description ?? "")) return definition;
+    schema = editSchemaNode(original, [], { description: value });
+  } else if (action === "type") {
+    if (value === original.type || (!value && original.type === undefined))
+      return definition;
+    if (!simpleRootType(original, entry) || !quickRootTypes.includes(value))
+      throw Error(
+        "此根类型变更可能影响现有字段、约束或示例，请使用响应定义 JSON",
+      );
+    schema = editSchemaNode(original, [], { type: value });
+  } else if (action === "add") {
+    if (original.type !== "object") throw Error("只有对象根节点可以添加字段");
+    schema = addSchemaProperty(original, [], value);
+  } else {
+    throw Error("不支持的 Schema 根节点操作");
+  }
+  return {
+    ...definition,
+    content: { ...content, [media]: { ...entry, schema } },
+  };
+}
+
+function schemaKind(node) {
+  return node?.$ref
+    ? "$ref"
+    : Array.isArray(node?.type)
+      ? node.type.join(" | ")
+      : (node?.type ?? (typeof node === "boolean" ? String(node) : "未指定"));
+}
+
+export function responseRootTypeFields(schema) {
+  return `<label for="design-response-root-type-value">根类型</label><select id="design-response-root-type-value">${schema.type === undefined ? '<option value="">未指定</option>' : ""}${schemaTypes
+    .filter((type) => type === schema.type || quickRootTypes.includes(type))
+    .map(
+      (type) =>
+        `<option${schema.type === type ? " selected" : ""}>${type}</option>`,
+    )
+    .join("")}</select>`;
+}
+
+function schemaPreview(definition, index, media, collapsed, hasExamples) {
+  const entry = definition?.content?.[media];
+  const schema = entry?.schema;
   if (schema === undefined)
     return '<p class="design-response-empty">此响应尚未定义 Body 结构。</p>';
   try {
-    return (
-      '<div class="design-response-tree">' +
-      schemaRows(schema)
-        .map((row, index) => {
-          const node = row.schema;
-          const kind = node?.$ref
-            ? "$ref"
-            : Array.isArray(node?.type)
-              ? node.type.join(" | ")
-              : (node?.type ??
-                (typeof node === "boolean" ? String(node) : "未指定"));
-          return `<div class="design-response-node"><span style="padding-inline-start:${Math.min(140, row.depth * 14)}px">${index === 0 ? "根节点" : esc(row.name)}</span><span class="design-response-kind">${esc(kind)}${row.required ? " <small>必填</small>" : ""}</span><span>${esc(node?.description || "")}</span></div>`;
-        })
-        .join("") +
-      "</div>"
+    const children = schemaRows(schema).slice(1);
+    const editable = editableRoot(schema);
+    const scope = esc(
+      JSON.stringify([index, String(definition.status), media]),
     );
+    const kind = schemaKind(schema);
+    const description = schema?.description || "";
+    const title = children.length
+      ? `<button type="button" class="ghost" id="design-response-root-toggle" aria-label="根节点" aria-controls="design-response-root-children" aria-expanded="${!collapsed}"><span aria-hidden="true"></span>根节点</button>`
+      : '<span class="design-response-root-label">根节点</span>';
+    const type =
+      editable && !hasExamples && simpleRootType(schema, entry)
+        ? `<button type="button" class="ghost design-response-root-type" id="design-response-root-type" aria-label="编辑根节点类型：${esc(kind)}">${esc(kind)}</button>`
+        : `<span class="design-response-kind">${esc(kind)}</span>`;
+    const add =
+      editable && schema.type === "object"
+        ? '<button type="button" class="ghost design-response-root-add" id="design-response-root-add" aria-label="添加根字段">＋</button>'
+        : "";
+    return `<div class="design-response-tree" data-design-response-root="${scope}"><div class="design-response-node design-response-root">${title}<span class="design-response-root-actions">${add}${type}</span>${
+      editable
+        ? `<button type="button" class="ghost design-response-root-description${description ? "" : " muted"}" id="design-response-root-description" aria-label="编辑根节点描述" aria-expanded="false" aria-controls="design-response-root-form">${esc(description || "描述")}</button>`
+        : `<span>${esc(description)}</span>`
+    }</div>${
+      editable
+        ? `<form id="design-response-root-form" hidden><label for="design-response-root-description-value">根节点描述</label><textarea id="design-response-root-description-value" aria-describedby="design-response-root-description-note" rows="2" maxlength="8192" spellcheck="false">${esc(description)}</textarea><small class="muted" id="design-response-root-description-note">切换响应前，请先应用描述。</small><div class="design-response-root-form-actions"><button type="submit">应用到草稿</button><button type="button" class="ghost" id="design-response-root-cancel">取消</button></div></form>`
+        : ""
+    }<div id="design-response-root-children"${collapsed ? " hidden" : ""}>${children
+      .map(
+        (row) =>
+          `<div class="design-response-node"><span style="padding-inline-start:${Math.min(140, row.depth * 14)}px">${esc(row.name)}</span><span class="design-response-kind">${esc(schemaKind(row.schema))}${row.required ? " <small>必填</small>" : ""}</span><span>${esc(row.schema?.description || "")}</span></div>`,
+      )
+      .join("")}</div></div>`;
   } catch {
     return '<p class="notice">此结构不能用图形视图显示，请在响应定义 JSON 中编辑。</p>';
   }
 }
-
-const record = (value) =>
-  value && typeof value === "object" && !Array.isArray(value);
 
 export function editDesignResponseHeader(definition, source, name, header) {
   name = String(name).trim();
@@ -163,11 +277,13 @@ export function designResponsePanel(
   selection,
   bindingNotice,
   examples = [],
+  collapsedRootScopes = null,
 ) {
   const { index, definition, media, mediaTypes } = responseSelection(
     definitions,
     selection,
   );
+  const showingExamples = selection?.bodyView === "examples";
   const edit =
     index < 0
       ? ""
@@ -198,7 +314,7 @@ export function designResponsePanel(
             ? headerPreview(definition)
             : selection?.view === "settings"
               ? responseSettings(definition, mediaTypes, examples)
-              : `<div class="design-response-tools"><div class="design-response-body-views" role="group" aria-label="Body 视图">${[
+              : `<div class="${showingExamples ? "" : "design-response-schema-pane"}"><div class="design-response-tools"><div class="design-response-body-views" role="group" aria-label="Body 视图">${[
                   ["schema", "数据结构"],
                   ["examples", "示例"],
                 ]
@@ -208,7 +324,7 @@ export function designResponsePanel(
                   )
                   .join(
                     "",
-                  )}</div>${mediaTypes.length > 1 ? `<label>Content-Type <select id="design-response-media" aria-label="响应 Content-Type">${mediaTypes.map((key) => `<option value="${esc(key)}" ${key === media ? "selected" : ""}>${esc(key)}</option>`).join("")}</select></label>` : media ? `<small>${esc(media)}</small>` : ""}${selection?.bodyView === "examples" ? "" : edit}</div>${selection?.bodyView === "examples" ? examplesPreview(definition, media, examples, bindingNotice) : schemaPreview(definition?.content?.[media]?.schema)}`
+                  )}</div>${mediaTypes.length > 1 ? `<label>Content-Type <select id="design-response-media" aria-label="响应 Content-Type">${mediaTypes.map((key) => `<option value="${esc(key)}" ${key === media ? "selected" : ""}>${esc(key)}</option>`).join("")}</select></label>` : media ? `<small>${esc(media)}</small>` : ""}${showingExamples ? "" : edit}</div>${showingExamples ? examplesPreview(definition, media, examples, bindingNotice) : schemaPreview(definition, index, media, collapsedRootScopes?.has(JSON.stringify([String(definition?.status), media])), scopedResponseExamples(examples, definition.status, media).length > 0)}</div>`
         }`
   }</div>${raw}</div>`;
 }

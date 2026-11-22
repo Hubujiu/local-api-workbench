@@ -23,6 +23,8 @@ import {
   designResponsePanel,
   responseSelection,
   editDesignResponseHeader,
+  editDesignResponseRoot,
+  responseRootTypeFields,
   headerEditorFields,
   exampleMedia,
   scopedResponseExamples,
@@ -205,6 +207,7 @@ const designParameterTabs = [
 ];
 let designParameter = "headers";
 const designResponseSelections = new Map();
+const collapsedDesignResponseRoots = new WeakMap();
 const designResponseKey = (r) => JSON.stringify([project?.id, r.id]);
 const caseResults = createCaseResultStore();
 const caseSelections = new Map();
@@ -1820,7 +1823,7 @@ function modePanel(r) {
     return `<div class="page http-design-canvas">${r.importNotes?.length ? `<div class="notice import-notes" role="region" aria-label="导入兼容性提示" tabindex="0">导入提示：${r.importNotes.map(esc).join("<br>")}</div>` : ""}${importedScriptTasksHTML(r.importedScriptTasks)}<div class="design-meta"><label for="folder">目录<input id="folder" value="${esc(r.folder)}" placeholder="根目录"></label><label for="request-service">绑定服务<select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select></label></div>
     <section class="request-description-section" aria-label="详细说明"><h2><span>${lineIcon("▧")}</span>详细说明</h2><details id="design-description" ${descriptionOpen ? "open" : ""}><summary><span class="design-description-closed">＋ 添加详细说明</span><span class="design-description-open">收起</span></summary><div class="design-description-toolbar" role="group" aria-label="说明格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-design-markdown="${key}" aria-label="${label}" title="${label}">${esc(glyph)}</button>`).join("")}</div><div class="design-description-editor"><textarea id="description" aria-label="接口详细说明" spellcheck="false">${esc(r.description)}</textarea><div id="design-description-preview" class="markdown-content" role="region" aria-label="说明预览">${descriptionOpen ? renderMarkdown(r.description) : ""}</div></div><small id="design-description-count">字数: ${Array.from(r.description || "").length}　行数: ${(r.description || "").split("\n").length}</small></details></section>
     <section class="design-request-parameters" aria-label="设计请求参数"><h2><span>${lineIcon("☷")}</span>设计请求参数</h2>${designParameterPanel(r)}</section>
-    <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2>${designResponsePanel(r.responses || [], designResponseSelections.get(designResponseKey(r)), r.openapiExampleBindingsVersion === 1, r.examples)}</section>
+    <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2>${designResponsePanel(r.responses || [], designResponseSelections.get(designResponseKey(r)), r.openapiExampleBindingsVersion === 1, r.examples, collapsedDesignResponseRoots.get(r))}</section>
     <section class="design-request-structure" aria-label="请求数据结构"><h2><span>${lineIcon("☷")}</span>请求数据结构</h2><div><button id="visual-schema" type="button">可视化编辑结构</button>${designParameter === "body" && r.bodyType !== "none" ? "" : '<button id="generate-body" type="button" class="ghost">基于数据结构生成</button>'}<textarea id="schema" aria-label="请求 JSON Schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div></section>
     <section class="design-advanced" aria-label="请求选项"><h2><span>${lineIcon("⚙")}</span>请求选项</h2><div class="form-grid"><label>全局请求参数</label><label><input id="inherit-global-parameters" type="checkbox" ${r.inheritGlobalParameters !== false ? "checked" : ""}>继承项目及目录 Header / Query / Cookie / 表单参数</label><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>HTTPS代理 CA（PEM，与目标站点CA分开）</label><textarea data-tls="proxyCa">${esc(r.tls?.proxyCa || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}">${attributeFields(project.settings?.attributes || [], r.attributes)}</div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div></section></div>`;
   }
@@ -2462,6 +2465,167 @@ function bind() {
     $(".http-design-canvas").scrollTop = top;
     $("#design-body-view-" + e.dataset.responseBodyView)?.focus();
   });
+  const rootSelector = "[data-design-response-root]";
+  const rootState = (root) => {
+    const r = request();
+    const raw = $("#response-definitions");
+    let rawDraft;
+    try {
+      rawDraft = JSON.parse(raw.value);
+    } catch {
+      throw Error("响应定义必须是有效JSON数组");
+    }
+    if (JSON.stringify(rawDraft) !== JSON.stringify(r.responses))
+      throw Error(
+        "响应定义 JSON 有未应用的修改，请先保存或切换响应后再编辑根节点",
+      );
+    collect();
+    const selection = designResponseSelections.get(designResponseKey(r));
+    const { definition, index, media } = responseSelection(
+      r.responses,
+      selection,
+    );
+    const scope = [index, String(definition?.status), media];
+    if (JSON.stringify(scope) !== root.dataset.designResponseRoot)
+      throw Error("响应根节点已变化，请重新打开");
+    const snapshot = raw.value;
+    const owner = project;
+    return {
+      definition,
+      media,
+      apply(action, value, focus, deferFocus = false) {
+        if (
+          project !== owner ||
+          request() !== r ||
+          !root.isConnected ||
+          raw.value !== snapshot ||
+          r.responses[index] !== definition
+        )
+          throw Error("响应草稿已变化，请重新打开");
+        if (
+          action === "type" &&
+          value !== definition.content[media].schema.type &&
+          scopedResponseExamples(r.examples, definition.status, media).length
+        )
+          throw Error("此根类型变更可能影响现有示例，请使用响应定义 JSON");
+        const next = editDesignResponseRoot(definition, media, action, value);
+        if (next === definition) return false;
+        r.responses[index] = next;
+        if (action === "add")
+          collapsedDesignResponseRoots
+            .get(r)
+            ?.delete(JSON.stringify(scope.slice(1)));
+        const top = $(".http-design-canvas").scrollTop;
+        mark();
+        render();
+        $(".http-design-canvas").scrollTop = top;
+        if (!deferFocus) $(focus)?.focus({ preventScroll: true });
+        return true;
+      },
+    };
+  };
+  on("#design-response-root-toggle", "click", (_, button) => {
+    const r = request();
+    const root = button.closest(rootSelector);
+    const [, status, media] = JSON.parse(root.dataset.designResponseRoot);
+    const key = JSON.stringify([status, media]);
+    const scopes = collapsedDesignResponseRoots.get(r) || new Set();
+    const collapse = button.getAttribute("aria-expanded") === "true";
+    if (collapse) scopes.add(key);
+    else scopes.delete(key);
+    collapsedDesignResponseRoots.set(r, scopes);
+    button.setAttribute("aria-expanded", String(!collapse));
+    $("#design-response-root-children").hidden = collapse;
+  });
+  let descriptionEdit;
+  let originalRootDescription;
+  const disableOtherRootEdits = (disabled) => {
+    for (const control of document.querySelectorAll(
+      "#design-response-root-add,#design-response-root-type",
+    ))
+      control.disabled = disabled;
+  };
+  const closeRootDescription = () => {
+    const button = $("#design-response-root-description");
+    $("#design-response-root-form").hidden = true;
+    button.setAttribute("aria-expanded", "false");
+    disableOtherRootEdits(false);
+    button.focus();
+    descriptionEdit = undefined;
+  };
+  on("#design-response-root-description", "click", (_, button) => {
+    if (descriptionEdit) return closeRootDescription();
+    descriptionEdit = rootState(button.closest(rootSelector));
+    const description = $("#design-response-root-description-value");
+    description.value =
+      descriptionEdit.definition.content[descriptionEdit.media].schema
+        .description ?? "";
+    originalRootDescription = description.value;
+    $("#design-response-root-form").hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    disableOtherRootEdits(true);
+    description.focus();
+  });
+  on("#design-response-root-form", "submit", (event) => {
+    event.preventDefault();
+    const value = $("#design-response-root-description-value").value;
+    if (value === originalRootDescription) return closeRootDescription();
+    const changed = descriptionEdit?.apply(
+      "description",
+      value,
+      "#design-response-root-description",
+    );
+    if (!changed) closeRootDescription();
+  });
+  on("#design-response-root-form", "keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    closeRootDescription();
+  });
+  on("#design-response-root-cancel", "click", closeRootDescription);
+
+  const editRootInModal = (button, action) => {
+    const edit = rootState(button.closest(rootSelector));
+    const schema = edit.definition.content[edit.media].schema;
+    const type = action === "type";
+    const focus = "#" + button.id;
+    modal(
+      type ? "编辑根节点类型" : "添加根字段",
+      type
+        ? responseRootTypeFields(schema)
+        : '<label for="design-response-root-field">根字段名称</label><input id="design-response-root-field" maxlength="200" autocomplete="off">',
+      () =>
+        edit.apply(
+          action,
+          $(
+            type
+              ? "#design-response-root-type-value"
+              : "#design-response-root-field",
+          ).value,
+          focus,
+          true,
+        ),
+      "应用到草稿",
+    );
+    const revision = modalRevision;
+    $("#dialog").addEventListener(
+      "close",
+      () => {
+        if (revision === modalRevision)
+          ($(focus) || $("#design-body-view-schema"))?.focus({
+            preventScroll: true,
+          });
+      },
+      { once: true },
+    );
+    if (type) $("#design-response-root-type-value").focus();
+  };
+  on("#design-response-root-type", "click", (_, button) =>
+    editRootInModal(button, "type"),
+  );
+  on("#design-response-root-add", "click", (_, button) =>
+    editRootInModal(button, "add"),
+  );
   const openDesignExample = (index) => {
     const r = request();
     collect();

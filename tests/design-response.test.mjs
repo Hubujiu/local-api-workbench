@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   designResponsePanel,
   editDesignResponseHeader,
+  editDesignResponseRoot,
   scopedResponseExamples,
   supportsDesignExamples,
   responseSelection,
@@ -186,4 +187,133 @@ test("JSON recognition does not flatten parameterized profile identity", () => {
     scopedResponseExamples(examples, 404, profile).map((x) => x.index),
     [1],
   );
+});
+
+test("root description and field edits preserve media, examples, constraints and sibling responses", () => {
+  const json = {
+    schema: {
+      type: "object",
+      description: "old",
+      properties: { first: { type: "string", minLength: 4 } },
+      required: ["first"],
+      additionalProperties: false,
+      "x-opaque": { sample: 1 },
+    },
+    example: { first: "safe" },
+  };
+  const response = {
+    status: "404",
+    description: "response-level",
+    headers: { "X-Trace": { schema: { type: "string" } } },
+    content: { "application/json": json, "text/plain": { schema: false } },
+  };
+  const saved = structuredClone(response);
+  const described = editDesignResponseRoot(
+    response,
+    "application/json",
+    "description",
+    "<svg>\n各媒体独立",
+  );
+  const added = editDesignResponseRoot(
+    described,
+    "application/json",
+    "add",
+    "__proto__",
+  );
+  assert.deepEqual(added, {
+    ...response,
+    content: {
+      ...response.content,
+      "application/json": {
+        ...json,
+        schema: {
+          ...json.schema,
+          description: "<svg>\n各媒体独立",
+          properties: {
+            ...json.schema.properties,
+            ["__proto__"]: { type: "string" },
+          },
+        },
+      },
+    },
+  });
+  assert.deepEqual(response, saved);
+  assert.equal(
+    editDesignResponseRoot(response, "application/json", "description", "old"),
+    response,
+  );
+  assert.throws(
+    () => editDesignResponseRoot(added, "application/json", "add", "first"),
+    /已存在/,
+  );
+  assert.throws(
+    () => editDesignResponseRoot(response, "text/plain", "description", "no"),
+    /没有可编辑/,
+  );
+  assert.throws(
+    () =>
+      editDesignResponseRoot(response, "Application/JSON", "description", "no"),
+    /没有可编辑/,
+  );
+  const html = designResponsePanel([added], {
+    status: "404",
+    media: "application/json",
+  });
+  assert.match(html, /&lt;svg&gt;/);
+  assert.doesNotMatch(html, /<svg>/);
+  assert.match(html, /aria-expanded="true"/);
+  assert.doesNotMatch(html, /id="design-response-root-type"/);
+});
+
+test("root type editing is explicit and only converts simple portable schemas", () => {
+  const response = definitions[0];
+  assert.equal(
+    editDesignResponseRoot(response, "application/json", "type", "object"),
+    response,
+  );
+  assert.deepEqual(
+    editDesignResponseRoot(response, "application/json", "type", "number")
+      .content["application/json"].schema,
+    { type: "number" },
+  );
+  for (const type of ["array", "null"])
+    assert.throws(
+      () => editDesignResponseRoot(response, "application/json", "type", type),
+      /响应定义 JSON/,
+    );
+  for (const content of [
+    { schema: { type: ["object", "null"] } },
+    { schema: { type: "object", additionalProperties: false } },
+    { schema: { type: "object", properties: { keep: false } } },
+    { schema: { type: "object", example: {} } },
+    { schema: { type: "object" }, examples: { original: { value: {} } } },
+  ])
+    assert.throws(
+      () =>
+        editDesignResponseRoot(
+          { status: "200", content: { "application/json": content } },
+          "application/json",
+          "type",
+          "array",
+        ),
+      /可能影响/,
+    );
+  for (const schema of [
+    false,
+    { $ref: "#/$defs/Original" },
+    { $dynamicRef: "#meta" },
+  ]) {
+    const definition = {
+      status: "200",
+      content: { "application/json": { schema } },
+    };
+    assert.doesNotMatch(
+      designResponsePanel([definition]),
+      /id="design-response-root-(type|description|add)"/,
+    );
+  }
+  const withManagedExample = designResponsePanel([response], {}, true, [
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  ]);
+  assert.doesNotMatch(withManagedExample, /id="design-response-root-type"/);
 });
