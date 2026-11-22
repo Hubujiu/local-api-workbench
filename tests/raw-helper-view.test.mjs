@@ -4,6 +4,8 @@ import { effectiveParameterDictionary } from "../public/dictionary-view.js";
 import {
   matchesRawHelperEntry,
   rawHelperTabs,
+  rawHelperVariableChooser,
+  rawHelperVariableNames,
 } from "../public/raw-helper-view.js";
 
 const entry = {
@@ -58,4 +60,47 @@ test("Raw helper escapes project-owned text and omits sample/default values from
     /data-insert-dictionary="id&quot; data-test=&quot;escape"/,
   );
   assert.match(html, /没有匹配的字典参数/);
+});
+
+test("variable options read only names and prioritize the active environment", () => {
+  const neverRead = () => {
+    throw Error("secret value accessor invoked");
+  };
+  const globals = { duplicate: "private global", globalName: "private value" };
+  Object.defineProperty(globals, "privateName", {
+    enumerable: true,
+    get: neverRead,
+  });
+  const selected = { duplicate: "private env", activeName: "private value" };
+  Object.defineProperty(selected, "quoted'Name", {
+    enumerable: true,
+    get: neverRead,
+  });
+  const entries = rawHelperVariableNames(
+    {
+      globalVariables: globals,
+      environments: [
+        { id: "active", variables: selected },
+        { id: "other", variables: { unrelatedName: "private value" } },
+      ],
+    },
+    "active",
+  );
+  assert.deepEqual(
+    entries.map((entry) => [entry.name, entry.scope]),
+    [
+      ["duplicate", "环境变量"],
+      ["globalName", "全局变量"],
+      ["privateName", "全局变量"],
+      ["activeName", "环境变量"],
+      ["quoted'Name", "环境变量"],
+    ],
+  );
+  const html = rawHelperVariableChooser(entries);
+  assert.doesNotMatch(
+    html,
+    /private value|private env|unrelatedName|telephone/,
+  );
+  assert.match(html, /quoted&#39;Name/);
+  assert.match(rawHelperVariableChooser([]), /当前项目没有可引用的变量/);
 });

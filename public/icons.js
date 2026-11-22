@@ -1,5 +1,7 @@
 // Original line icons. No external image, font, or icon CDN dependency.
 const paths = {
+  "helper-variable":
+    '<path d="M8 5H7a2 2 0 0 0-2 2v2a3 3 0 0 1-2 3 3 3 0 0 1 2 3v2a2 2 0 0 0 2 2h1m8-14h1a2 2 0 0 1 2 2v2a3 3 0 0 0 2 3 3 3 0 0 0-2 3v2a2 2 0 0 1-2 2h-1m-6-9 4 4m0-4-4 4"/>',
   "helper-pane-right": '<path d="m9 5 7 7-7 7"/>',
   "helper-rail-left": '<path d="m12 4-7 8 7 8m7-16-7 8 7 8"/>',
   "editor-expand": '<path d="M14 4h6v6m0-6-6 6M10 20H4v-6m0 6 6-6"/>',

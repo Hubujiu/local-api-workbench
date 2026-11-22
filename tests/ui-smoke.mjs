@@ -486,7 +486,19 @@ try {
   );
   assert.equal(await page.locator("#body-code").inputValue(), originalBody);
   await openBodyHelperTab("动态值");
-  await page.getByText("插入环境变量", { exact: true }).waitFor();
+  const referenceVariable = page.getByRole("button", {
+    name: "引用变量",
+    exact: true,
+  });
+  if (await referenceVariable.isVisible()) {
+    await referenceVariable.press("Enter");
+    await page.locator(".raw-helper-variable-chooser").waitFor();
+    await page.keyboard.press("Escape");
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    assert.equal(await page.locator("#body-code").inputValue(), originalBody);
+  } else {
+    await page.getByText("插入环境变量", { exact: true }).waitFor();
+  }
   await page.locator("#body-code").fill('{"name":""}');
   await page
     .locator("#body-code")

@@ -53,6 +53,19 @@ try {
   });
   dictionaryProject.requests.push(dictionaryRequest);
   dictionaryProject.settings.builtinDictionary = false;
+  dictionaryProject.globalVariables = {
+    fixtureGlobalName: "synthetic-global-secret-value",
+    duplicatedName: "synthetic-duplicate-global-secret",
+  };
+  Object.assign(dictionaryProject.environments[0].variables, {
+    fixtureEnvironmentName: "synthetic-environment-secret-value",
+    duplicatedName: "synthetic-duplicate-environment-secret",
+  });
+  dictionaryProject.environments.push({
+    id: "unselected-helper-env",
+    name: "Unselected fixture environment",
+    variables: { unrelatedEnvironmentName: "synthetic-unselected-secret" },
+  });
   dictionaryProject.parameterDictionary = [
     {
       id: "request-id",
@@ -332,17 +345,16 @@ try {
   assert.equal(await dynamicTab.getAttribute("aria-selected"), "true");
   assert(await dynamicTab.evaluate((tab) => tab === document.activeElement));
   assert.equal(await helperPanel.getByRole("searchbox").count(), 0);
-  for (const name of [
-    "动态值",
-    "插入环境变量",
-    "内置动态变量",
-    "共享函数",
-    "请求结构",
-  ])
+  for (const name of ["动态值", "内置动态变量", "共享函数", "请求结构"])
     assert.equal(
       await helperPanel.getByRole("heading", { name, exact: true }).count(),
       1,
     );
+  assert(
+    await helperPanel
+      .getByRole("button", { name: "引用变量", exact: true })
+      .isVisible(),
+  );
   await capture("open-dynamic");
   await dynamicTab.press("ArrowLeft");
   assert.equal(await dictionaryTab.getAttribute("aria-selected"), "true");
@@ -499,6 +511,108 @@ try {
   assert.equal(await filter.inputValue(), "");
   assert.equal(await rows.count(), 2);
   assert.equal(await body.inputValue(), insertedBody);
+
+  await helperPanel.getByRole("tab", { name: "字典库" }).press("ArrowRight");
+  const reference = helperPanel.getByRole("button", {
+    name: "引用变量",
+    exact: true,
+  });
+  const chooser = page.getByRole("dialog", { name: "引用变量" });
+  const waitChooserClosed = async () => {
+    await chooser.waitFor({ state: "hidden" });
+    assert.equal(
+      await page.locator("#dialog").evaluate((el) => el.open),
+      false,
+    );
+  };
+  const variableSearch = chooser.getByRole("searchbox", { name: "变量名" });
+  const confirmSelection = chooser.getByRole("button", {
+    name: "确定",
+    exact: true,
+  });
+  const variableRows = chooser.locator(
+    "button[data-raw-variable-name]:visible",
+  );
+
+  await reference.press("Enter");
+  assert(await variableSearch.evaluate((el) => el === document.activeElement));
+  assert(await confirmSelection.isDisabled());
+  assert.match(await chooser.textContent(), /fixtureGlobalName/);
+  assert.match(await chooser.textContent(), /fixtureEnvironmentName/);
+  assert.doesNotMatch(
+    await chooser.textContent(),
+    /synthetic-.*secret|unrelatedEnvironmentName|\$telephone/,
+  );
+  const duplicate = chooser.locator(
+    '[data-raw-variable-name="duplicatedName"]',
+  );
+  assert.equal(await duplicate.count(), 1);
+  assert.match(await duplicate.textContent(), /环境变量/);
+  const chooserBox = await chooser.boundingBox();
+  near(chooserBox.x, 696, 5, "variable chooser left");
+  near(chooserBox.y, 210, 5, "variable chooser top");
+  near(chooserBox.width, 360, 2, "variable chooser width");
+  near(chooserBox.height, 536, 3, "variable chooser height");
+  measurements.variableChooser = chooserBox;
+  // Capture the settled shell with synthetic names only.
+  await capture("open-variable");
+  await variableSearch.fill("unavailable variable");
+  assert.equal(await variableRows.count(), 0);
+  assert(await chooser.getByText("没有匹配的变量").isVisible());
+  await variableSearch.press("Enter");
+  assert(await chooser.isVisible());
+  assert(await confirmSelection.isDisabled());
+  await page.keyboard.press("Escape");
+  await waitChooserClosed();
+  assert(await reference.evaluate((el) => el === document.activeElement));
+  assert.equal(await body.inputValue(), insertedBody);
+
+  await reference.press("Enter");
+  await chooser.getByRole("button", { name: "取消", exact: true }).click();
+  await waitChooserClosed();
+  assert(await reference.evaluate((el) => el === document.activeElement));
+  assert.equal(await body.inputValue(), insertedBody);
+
+  await reference.press("Enter");
+  await variableSearch.fill("fixtureEnvironmentName");
+  await variableSearch.press("ArrowDown");
+  await page.keyboard.press("Space");
+  await page.setViewportSize({ width: 430, height: 760 });
+  await confirmSelection.click();
+  assert(await chooser.isVisible());
+  assert.match(
+    await page.locator("#toast").textContent(),
+    /接口、环境或草稿已变化/,
+  );
+  await page.keyboard.press("Escape");
+  await waitChooserClosed();
+  await page.setViewportSize({ width: 1363, height: 1023 });
+  await reference.waitFor();
+  assert.equal(await body.inputValue(), insertedBody);
+
+  const start = insertedBody.indexOf("local synthetic draft");
+  await body.evaluate(
+    (el, start) =>
+      el.setSelectionRange(start, start + "local synthetic draft".length),
+    start,
+  );
+  await reference.press("Enter");
+  await variableSearch.fill("fixtureENVIRONMENT");
+  assert.equal(await variableRows.count(), 1);
+  await variableSearch.press("ArrowDown");
+  assert(
+    await variableRows.first().evaluate((el) => el === document.activeElement),
+  );
+  await page.keyboard.press("Space");
+  assert.equal(await variableRows.first().getAttribute("aria-pressed"), "true");
+  assert(await confirmSelection.isEnabled());
+  await confirmSelection.press("Enter");
+  await waitChooserClosed();
+  assert.equal(
+    await body.inputValue(),
+    insertedBody.replace("local synthetic draft", "{{fixtureEnvironmentName}}"),
+  );
+  assert(await body.evaluate((el) => el === document.activeElement));
 
   assert.deepEqual(blocked, []);
   assert.deepEqual(errors, []);
