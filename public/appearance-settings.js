@@ -1,4 +1,9 @@
 import {
+  productBuild,
+  productVersionMarkup,
+  updateProductVersion,
+} from "./product-version.js";
+import {
   appearanceFontScaleHTML,
   baseFontScale,
   bindAppearanceFontScale,
@@ -17,17 +22,20 @@ export function applyAppearanceTheme(body, storage, theme) {
 
 export function openAppearanceSettings(
   dialog,
-  { opener, findOpener, read, apply, readScale, applyScale },
+  { opener, findOpener, read, apply, readScale, applyScale, readBuild },
 ) {
   if (dialog.open) return;
   dialog.innerHTML = `
     <div class="appearance-layout">
       <aside class="appearance-sidebar">
         <h2 id="appearance-settings-heading">应用设置</h2>
-        <p class="appearance-active">${icon("appearance")}外观</p>
+        <div role="tablist" aria-label="应用设置栏目" aria-orientation="vertical">
+          <button type="button" class="appearance-tab" id="appearance-main-tab" role="tab" aria-controls="appearance-main-panel" aria-selected="true">${icon("appearance")}外观</button>
+          <button type="button" class="appearance-tab" id="appearance-version-tab" role="tab" aria-controls="appearance-version-panel" aria-selected="false" tabindex="-1">${icon("☷")}版本信息</button>
+        </div>
         <button id="appearance-reset" type="button" class="ghost">恢复默认外观</button>
       </aside>
-      <div class="appearance-content">
+      <div class="appearance-content" id="appearance-main-panel" role="tabpanel" aria-labelledby="appearance-main-tab">
         <h3>外观</h3>
         <fieldset class="appearance-theme-field">
           <legend>背景</legend>
@@ -45,6 +53,7 @@ export function openAppearanceSettings(
         </fieldset>
         ${appearanceFontScaleHTML()}
       </div>
+      ${productVersionMarkup()}
       <button id="appearance-close" type="button" class="ghost" aria-label="关闭外观设置" autofocus>×</button>
     </div>`;
 
@@ -59,6 +68,44 @@ export function openAppearanceSettings(
   };
   const listeners = new AbortController();
   const options = { signal: listeners.signal };
+  const tabs = [...dialog.querySelectorAll("[role=tab]")];
+  const show = (selected) => {
+    tabs.forEach((tab, index) => {
+      const active = index === selected;
+      tab.setAttribute("aria-selected", String(active));
+      tab.tabIndex = active ? 0 : -1;
+      dialog.querySelector("#" + tab.getAttribute("aria-controls")).hidden =
+        !active;
+    });
+    reset.hidden = selected !== 0;
+  };
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => show(index), options);
+    tab.addEventListener(
+      "keydown",
+      (event) => {
+        if (
+          ![
+            "ArrowUp",
+            "ArrowDown",
+            "ArrowLeft",
+            "ArrowRight",
+            "Home",
+            "End",
+          ].includes(event.key)
+        )
+          return;
+        event.preventDefault();
+        const next =
+          event.key === "Home" ? 0 : event.key === "End" ? 1 : 1 - index;
+        show(next);
+        tabs[next].focus();
+      },
+      options,
+    );
+  });
+  updateProductVersion(dialog, readBuild?.() || productBuild());
+
   const syncScale = bindAppearanceFontScale(dialog, {
     read: readScale,
     apply(scale) {

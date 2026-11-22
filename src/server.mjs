@@ -1,3 +1,4 @@
+import { checkedProductVersion } from "../public/product-version.js";
 import { listenForWorkbench } from "./workbench-listener.mjs";
 import { GrpcOwnerOperations } from "./grpc-owner-operations.mjs";
 import { SessionCreationIntents } from "./grpc-creation-intents.mjs";
@@ -165,11 +166,22 @@ import {
   toCurl,
 } from "./core.mjs";
 const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
+async function runtimePackageVersion() {
+  try {
+    const manifest = new URL("../package.json", import.meta.url);
+    return checkedProductVersion(
+      JSON.parse(await readFile(manifest, "utf8")).version,
+    );
+  } catch {
+    return "";
+  }
+}
 export async function createApp({
   root = process.env.LOCAL_API_DATA || ".local-api",
   port = Number(process.env.PORT) || 4318,
 } = {}) {
   const requestedPort = port;
+  const version = await runtimePackageVersion();
   const store = new Store(path.resolve(root));
   await store.init();
   const autoImports = new ActiveProjectImports({
@@ -448,7 +460,7 @@ export async function createApp({
           });
         return json(res, 200, {
           token,
-          version: "0.1.0",
+          version,
           instanceId: protocolIntents.instanceId,
         });
       }
