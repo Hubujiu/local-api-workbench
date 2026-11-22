@@ -203,6 +203,7 @@ try {
   assert.deepEqual(await labels(), collapsed);
   await summary.press("Space");
   await child.click();
+  const owningTab = await child.getAttribute("data-request");
   assert.equal(await drafts.inputValue(), "创建用户");
   await drafts.fill("本地未保存草稿");
   await summary.press("Space");
@@ -255,8 +256,12 @@ try {
   );
   await page.locator("#tree-type").selectOption("document");
   await page.locator('#tree [data-document-index="0"]').click();
-  await page.getByText(title, { exact: true }).last().waitFor();
-  await page.locator('.rail [data-page="apis"]').click();
+  await page.getByRole("heading", { name: title, exact: true }).waitFor();
+  assert.equal(
+    await page.locator('.rail [data-page="apis"]').getAttribute("aria-current"),
+    "page",
+  );
+  await page.locator(`[data-open-tab="${owningTab}"]`).press("Enter");
   assert.equal(await drafts.inputValue(), "本地未保存草稿");
   assert.equal(await type.inputValue(), "document");
   await type.selectOption("all");

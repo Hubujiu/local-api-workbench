@@ -62,6 +62,7 @@ export function renderWorkspaceTree({
   searchType,
   page,
   current,
+  activeDocumentId,
   selectedProtocolId,
   collapsedFolders,
 }) {
@@ -76,7 +77,14 @@ export function renderWorkspaceTree({
   const renderItem = (item, depth = 0) => {
     const [selector, identifier] = item.attribute;
     const active =
-      (item.kind === "http" && item.id === current && isAPI) ||
+      (item.kind === "http" &&
+        !activeDocumentId &&
+        item.id === current &&
+        isAPI) ||
+      (item.kind === "document" &&
+        activeDocumentId &&
+        item.id === activeDocumentId &&
+        isAPI) ||
       (item.kind !== "http" &&
         item.id === selectedProtocolId &&
         page === "protocols");
