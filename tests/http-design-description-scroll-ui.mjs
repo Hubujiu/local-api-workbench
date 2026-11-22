@@ -134,10 +134,14 @@ try {
   };
 
   await tab("design").press("Enter");
+  assert.equal(await description.evaluate((node) => node.open), true);
+  assert.equal(await sync.isVisible(), true);
+  await summary.press("Enter");
+  assert.equal(await description.evaluate((node) => node.open), false);
   assert.equal(
-    await sync.count(),
-    0,
-    "closed details exposes no footer control",
+    await sync.isVisible(),
+    false,
+    "closed details hides the footer",
   );
   await summary.press("Enter");
   assert.equal(await sync.isChecked(), true);
@@ -196,7 +200,7 @@ try {
   );
 
   await request(1).click();
-  await summary.press("Enter");
+  assert.equal(await description.evaluate((node) => node.open), true);
   assert.equal(await sync.isChecked(), true);
   assert.equal(await editor.inputValue(), second);
   await allTop();
