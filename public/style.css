@@ -5209,6 +5209,10 @@ body:not(.dark) .workspace-document-toolbar {
 .raw-helper-variable-options > button[hidden] {
   display: none;
 }
+#raw-helper-variable-scope-note {
+  color: #786b57;
+  font-size: 12px;
+}
 #dialog-content:has(.raw-helper-fixed-chooser) {
   display: flex;
 }

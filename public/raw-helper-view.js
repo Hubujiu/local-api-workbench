@@ -97,7 +97,9 @@ export function bindRawHelper(panel, state) {
   });
 }
 
-export function rawHelperVariableNames(project, environmentId) {
+export function rawHelperVariableNames(project, environmentId, request) {
+  if (request !== undefined && !project.requests?.includes(request))
+    throw Error("当前请求不属于此项目，未读取变量");
   const environment = project.environments?.find(
     (item) => item.id === environmentId,
   );
@@ -107,6 +109,18 @@ export function rawHelperVariableNames(project, environmentId) {
       "全局变量",
     ]),
   );
+  const collectionId = request?.postmanCollectionId;
+  if (collectionId !== undefined) {
+    // Use only the current owned request's live collection entries, not its
+    // definitions/initial values or other collections. Debug precedence is
+    // global < owning collection < active environment.
+    const collection = project.postmanCollections?.items?.find(
+      (item) => item.id === collectionId,
+    );
+    if (!collection) throw Error("当前请求的 Postman 集合不可用");
+    for (const name of Object.keys(collection.variables))
+      names.set(name, "集合变量");
+  }
   for (const name of Object.keys(environment?.variables || {}))
     names.set(name, "环境变量");
   return Array.from(names, ([name, scope]) => ({ name, scope }));
@@ -115,11 +129,12 @@ export function rawHelperVariableNames(project, environmentId) {
 export function rawHelperVariableChooser(entries) {
   return `<div class="raw-helper-variable-chooser">
     <label for="raw-helper-variable-search">变量名</label>
-    <input id="raw-helper-variable-search" type="search" placeholder="请输入或选择变量名" autocomplete="off">
+    <input id="raw-helper-variable-search" type="search" placeholder="请输入或选择变量名" aria-describedby="raw-helper-variable-scope-note" autocomplete="off">
     <div class="raw-helper-variable-options" role="group" aria-label="可引用的变量">
       ${entries.map(({ name, scope }) => `<button type="button" data-raw-variable-name="${esc(name)}" aria-pressed="false"><span>${esc(name)}</span><small>${esc(scope)}</small></button>`).join("")}
       <p role="status"${entries.length ? " hidden" : ""}>当前项目没有可引用的变量</p>
     </div>
+    <p id="raw-helper-variable-scope-note">仅列出已配置的变量名；运行时作用域可能变化。</p>
   </div>`;
 }
 
