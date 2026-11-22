@@ -1,3 +1,4 @@
+import { pickProjectUI } from "./helpers/pick-project-ui.mjs";
 import { exerciseHTTPResponseTabs } from "./helpers/http-response-tabs-ui.mjs";
 import { exerciseRequestParameterTabs } from "./helpers/http-request-parameter-tabs-ui.mjs";
 import { exerciseHTTPRequestActions } from "./helpers/http-request-actions-ui.mjs";
@@ -4089,7 +4090,11 @@ try {
   ];
   await app.store.save(h2Project);
   await page.reload();
-  await page.locator("#project-select").selectOption(h2Project.id);
+  await pickProjectUI(page, h2Project.id);
+  await page
+    .locator("#tree [data-request]")
+    .getByText("HTTP2 proxy UI", { exact: true })
+    .click();
   await page.waitForFunction(
     () => document.querySelector("#request-name")?.value === "HTTP2 proxy UI",
   );
@@ -5242,7 +5247,11 @@ try {
   });
   await app.store.save(formSchemaProject);
   await page.reload();
-  await page.locator("#project-select").selectOption(formSchemaProject.id);
+  await pickProjectUI(page, formSchemaProject.id);
+  await page
+    .locator("#tree [data-request]")
+    .getByText("Form schema fidelity", { exact: true })
+    .click();
   await page.waitForFunction(
     () =>
       document.querySelector("#request-name")?.value === "Form schema fidelity",

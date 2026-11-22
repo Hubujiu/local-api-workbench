@@ -238,12 +238,16 @@ try {
     .locator('[data-request="load-a"]')
     .getByText("Same id, separate project", { exact: true })
     .waitFor();
+  await open("load-a");
+  await mode.click();
   await idle.waitFor();
   await projects.selectOption(project.id);
   await page
     .locator('[data-request="load-a"]')
     .getByText("Synthetic owner A", { exact: true })
     .waitFor();
+  await open("load-a");
+  await mode.click();
   await idle.waitFor();
 
   assert.equal(attempts.length, 1);

@@ -1068,7 +1068,7 @@ const methodOptions = [
   "OPTIONS",
 ];
 const env = () => {
-  const selected = $("#env")?.value || project?.currentEnvironmentId;
+  const selected = project?.currentEnvironmentId;
   return project?.environments.some((e) => e.id === selected)
     ? selected
     : project?.environments[0]?.id;
@@ -1331,7 +1331,7 @@ async function changeNativeRequestLifecycle(requestId, restore) {
     },
   });
 }
-async function openProject(id) {
+async function openProject(id, { fromPicker = false } = {}) {
   if (
     socketioWorkbenchState?.draftDirty &&
     socketioWorkbenchProject === project?.id &&
@@ -1385,10 +1385,27 @@ async function openProject(id) {
     );
   }
   socketioNavigationGeneration++;
+  const resetWorkspace =
+    fromPicker && previousProject && previousProject.id !== id;
   project = loaded;
   nativeRequestLifecycle.acknowledgeReload(id, reloadCheckpoint);
   projectImports.acknowledgeReload(id, importCheckpoint);
-  current = project.requests.find((r) => !r.deletedAt)?.id;
+  if (resetWorkspace) {
+    page = "apis";
+    search = "";
+    searchType = "all";
+    mode = "debug";
+    param = "body";
+    responseTab = "body";
+    helperOpen = false;
+    bodyExpanded = false;
+    rawHelperOwner = null;
+    planTab = "plans";
+    designParameter = "headers";
+  }
+  current = resetWorkspace
+    ? null
+    : project.requests.find((r) => !r.deletedAt)?.id;
   opened = current ? [current] : [];
   openedDocuments = [];
   activeDocumentId = null;
@@ -2715,18 +2732,32 @@ function bind() {
       },
     });
   });
-  on("#project-select", "change", (_, e) => openProject(e.value));
+  const openFromProjectPicker = (id) => openProject(id, { fromPicker: true });
+  on("#project-select", "change", (_, element) => {
+    if (!element.isConnected) return;
+    const target = element.value;
+    // Keep the control showing the actual owner until openProject adopts a receipt.
+    element.value = project.id;
+    return openFromProjectPicker(target);
+  });
   const switcherOwner = project;
   bindProjectSwitcher($(".project-group"), {
     projects,
     current: switcherOwner?.id,
     allowed: () =>
       project === switcherOwner && !busy && !saving && !$("#dialog").open,
-    open: openProject,
+    open: openFromProjectPicker,
     notify: toast,
   });
-  on("#env", "change", (_, e) => {
-    project.currentEnvironmentId = e.value;
+  const environmentOwner = project;
+  on("#env", "change", (_, element) => {
+    if (
+      !element.isConnected ||
+      project !== environmentOwner ||
+      !environmentOwner.environments.some(({ id }) => id === element.value)
+    )
+      return;
+    project.currentEnvironmentId = element.value;
     mark();
   });
   on("#search", "input", (_, e) => {
@@ -7201,6 +7232,8 @@ document.addEventListener("keydown", (e) => {
     (e.ctrlKey || e.metaKey) &&
     e.key === "Enter" &&
     page === "apis" &&
+    !workspaceDocument() &&
+    request() &&
     !busy
   ) {
     e.preventDefault();

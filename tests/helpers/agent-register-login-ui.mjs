@@ -1,3 +1,4 @@
+import { pickProjectUI } from "./pick-project-ui.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { registerLoginScenario } from "./agent-register-login-fixture.mjs";
@@ -16,7 +17,7 @@ export async function exerciseAgentRegisterLoginUI(browserContext) {
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));
       await page.goto(app.launchUrl);
-      await page.locator("#project-select").selectOption(project.id);
+      await pickProjectUI(page, project.id);
       await page.locator('header button[data-page="plans"]').click();
       await page.locator(`[data-plan="${plan.id}"]`).click();
       assert.equal(await page.locator("#plan-name").inputValue(), plan.name);

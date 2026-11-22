@@ -1,3 +1,4 @@
+import { pickProjectUI } from "./helpers/pick-project-ui.mjs";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -73,7 +74,8 @@ try {
   const enter = () =>
     page.locator('.rail [data-page="dictionary"]').press("Enter");
   const switchProject = async (id) => {
-    await page.locator("#project-select").selectOption(id);
+    await pickProjectUI(page, id);
+    await enter();
     await page.waitForFunction(
       (id) =>
         document.querySelector(".dictionary-page")?.dataset

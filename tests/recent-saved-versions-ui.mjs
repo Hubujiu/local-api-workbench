@@ -91,6 +91,7 @@ try {
     if (url.pathname.startsWith("/api/projects/"))
       requests.push([request.method(), url.pathname]);
   });
+  await page.locator('[data-request="verification"]').click();
   await page.locator("#request-name").fill("Only a local unsaved name");
   await page
     .locator("#saved-state")
@@ -213,6 +214,7 @@ try {
         }),
     ]);
     await adopt(stale, other.id);
+    await openRecent(stale);
     await saved(stale).press("Enter");
     const different = savedPanel(stale);
     await different.getByText("暂无已记录版本", { exact: true }).waitFor();
