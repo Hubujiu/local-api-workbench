@@ -12,10 +12,10 @@ const source = await readFile(
   new URL("../public/app.js", import.meta.url),
   "utf8",
 );
-const importSource = source.slice(
-  source.indexOf('  on("#import",'),
-  source.indexOf('  on("#export",'),
-);
+const importStart = source.indexOf('  on("#import,#welcome-import",');
+const importEnd = source.indexOf('  on("#export",', importStart);
+assert(importStart > 0 && importEnd > importStart);
+const importSource = source.slice(importStart, importEnd);
 const openSource = source.slice(
   source.indexOf("async function openProject("),
   source.indexOf("\nfunction modal("),
@@ -77,7 +77,7 @@ function harness({
     ${openSource}
     let click,submit;const on=(s,e,f)=>click=f;const modal=(t,h,cb)=>submit=cb;
     ${importSource}
-    click();
+    click(null, {id:"#import"});
     return {run:()=>submit(),state,edit,els,save,open:openProject,replace(p){project=p;},dirty(){dirty=true;},setBusy(){busy=true;},selectPending(){projectOpenSequence++;},replaceModal(){modalRevision++;}};
   `,
   );
