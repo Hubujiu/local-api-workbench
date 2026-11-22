@@ -268,6 +268,7 @@ const loadOptions = new Map();
 const parameterScopes = new Map();
 const pendingOAuth1 = new Set();
 let modalRevision = 0;
+let modalFocusHandlers;
 let opened = [],
   token = "",
   projects = [],
@@ -1344,10 +1345,42 @@ function openScopedDefinitionExport() {
   );
   context.bindDialog();
 }
-function modal(title, html, onSave, label = "确定") {
+function modal(title, html, onSave, label = "确定", afterClose) {
   const d = $("#dialog"),
     revision = ++modalRevision;
   let submitting = false;
+  modalFocusHandlers?.abort();
+  modalFocusHandlers = undefined;
+  let handlers;
+  const closeThisModal = (returnValue) => {
+    if (modalRevision !== revision || !d.open) return;
+    handlers?.abort();
+    if (returnValue === undefined) d.close();
+    else d.close(returnValue);
+    if (modalRevision === revision && !d.open) afterClose?.();
+  };
+  if (afterClose) {
+    // Native "close" is queued and can belong to the previous invocation of
+    // this shared element. Deliver focus only from this invocation's close.
+    handlers = modalFocusHandlers = new AbortController();
+    const options = { signal: handlers.signal };
+    d.addEventListener(
+      "cancel",
+      (event) => {
+        event.preventDefault();
+        closeThisModal();
+      },
+      options,
+    );
+    d.querySelector(":scope > form").addEventListener(
+      "submit",
+      (event) => {
+        event.preventDefault();
+        closeThisModal(event.submitter?.value);
+      },
+      options,
+    );
+  }
   $("#dialog-save").disabled = false;
   $("#dialog-title").textContent = title;
   $("#dialog-content").innerHTML = html;
@@ -1360,7 +1393,7 @@ function modal(title, html, onSave, label = "确定") {
     $("#dialog-save").disabled = true;
     try {
       await onSave();
-      if (modalRevision === revision) d.close();
+      closeThisModal();
     } catch (e) {
       if (modalRevision === revision) toast(e.message);
     } finally {
@@ -2558,7 +2591,11 @@ function bind() {
   on("#design-response-root-cancel", "click", closeRootDescription);
 
   const editRootInModal = (button, action) => {
-    const edit = rootState(button.closest(rootSelector));
+    const owner = project,
+      requestOwner = request();
+    const root = button.closest(rootSelector);
+    const scope = root.dataset.designResponseRoot;
+    const edit = rootState(root);
     const schema = edit.definition.content[edit.media].schema;
     const type = action === "type";
     const focus = "#" + button.id;
@@ -2579,17 +2616,16 @@ function bind() {
           true,
         ),
       "应用到草稿",
-    );
-    const revision = modalRevision;
-    $("#dialog").addEventListener(
-      "close",
       () => {
-        if (revision === modalRevision)
+        if (
+          owner === project &&
+          requestOwner === request() &&
+          $(rootSelector)?.dataset.designResponseRoot === scope
+        )
           ($(focus) || $("#design-body-view-schema"))?.focus({
             preventScroll: true,
           });
       },
-      { once: true },
     );
     if (type) $("#design-response-root-type-value").focus();
   };

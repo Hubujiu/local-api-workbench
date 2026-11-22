@@ -57,6 +57,7 @@ function harness(initial = fixture(), transport) {
     "api",
     "projectImports",
     `
+ const debugAuthDrafts = new WeakMap();
  let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
  let project=initial,projects=[{id:initial.id}],editVersion=0,dirty=true,saving=false,busy=false,projectOpenSequence=0,current='r',opened=[],response,lastRun,loadResult,planId,selectedProtocolId;
@@ -67,7 +68,7 @@ function harness(initial = fixture(), transport) {
  const document={querySelectorAll:()=>[]},sessionStorage={setItem(){}},collect=()=>{},render=()=>{rendered=structuredClone(project)},toast=()=>{},confirm=()=>true;
  const mark=()=>{dirty=true;editVersion++};
  ${saveCode}\n${openCode}\n${errorCode}
- return {save,open:openProject,editError(){editErrorCode(0);return modalCallback()},rendered:()=>rendered,edit(){project.name='new draft';mark()},replace(p){project=p;mark()},rollback:(e,fn)=>rollbackProjectSave(e,fn),state:()=>({project,dirty,saving}),mark};`,
+ return {save,open:openProject,debugAuthDrafts,editError(){editErrorCode(0);return modalCallback()},rendered:()=>rendered,edit(){project.name='new draft';mark()},replace(p){project=p;mark()},rollback:(e,fn)=>rollbackProjectSave(e,fn),state:()=>({project,dirty,saving}),mark};`,
   );
   return { ...build(initial, api, guard), guard, calls };
 }
@@ -88,6 +89,36 @@ test("current valid receipt replaces only owned draft", async () => {
   assert.equal(h.state().dirty, false);
   assert.equal(h.state().project.configRevision, 2);
 });
+test("owned save migrates only matching request and authentication drafts", async () => {
+  const initial = fixture();
+  const first = { id: "retained", auth: { type: "none" } };
+  const changed = { id: "changed", auth: { type: "none" } };
+  initial.requests = [first, changed];
+  const h = harness(initial);
+  const retainedDrafts = new Map([["bearer", { token: "{{synthetic-kept}}" }]]);
+  const changedDrafts = new Map([
+    ["bearer", { token: "{{synthetic-discarded}}" }],
+  ]);
+  h.debugAuthDrafts.set(first, retainedDrafts);
+  h.debugAuthDrafts.set(changed, changedDrafts);
+
+  const p = h.save();
+  const { data } = h.calls[0];
+  assert.deepEqual(data.requests, [first, changed]);
+  const response = saved(data);
+  response.requests = [
+    { ...response.requests[1], auth: { type: "basic" } },
+    ...response.requests.slice(0, 1),
+  ];
+  h.calls[0].resolve(response);
+  await p;
+
+  const [savedChanged, savedFirst] = h.state().project.requests;
+  assert.notEqual(savedFirst, first);
+  assert.equal(h.debugAuthDrafts.get(savedFirst), retainedDrafts);
+  assert.equal(h.debugAuthDrafts.has(savedChanged), false);
+  assert.equal(h.state().dirty, false);
+});
 test("valid late receipt advances metadata without erasing newer draft", async () => {
   const h = harness();
   const p = h.save();
@@ -100,6 +131,9 @@ test("valid late receipt advances metadata without erasing newer draft", async (
 });
 test("same-ID new project object is not owned by old receipt", async () => {
   const h = harness();
+  const [request] = h.state().project.requests;
+  const drafts = new Map([["bearer", { token: "{{synthetic-owner}}" }]]);
+  h.debugAuthDrafts.set(request, drafts);
   const p = h.save();
   const other = fixture();
   other.name = "other selection";
@@ -108,6 +142,8 @@ test("same-ID new project object is not owned by old receipt", async () => {
   await p;
   assert.equal(h.state().project, other);
   assert.equal(other.configRevision, 1);
+  assert.equal(h.debugAuthDrafts.has(other.requests[0]), false);
+  assert.equal(h.debugAuthDrafts.get(request), drafts);
 });
 for (const [name, mutate] of [
   ["only ID", () => ({ id: "a" })],
