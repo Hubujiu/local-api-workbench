@@ -2515,6 +2515,76 @@ dialog:has(#cookie-line) {
   height: 30px;
   padding: 0 8px 0 calc(28px + var(--api-tree-indent, 0px));
 }
+.api-tree-request-row {
+  position: relative;
+}
+.sidebar[data-sidebar-page="apis"] .api-tree-request-row > .tree-item {
+  padding-right: 32px;
+}
+.api-tree-row-menu-trigger {
+  position: absolute;
+  inset: 0 4px 0 auto;
+  width: 28px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--muted);
+}
+.api-tree-row-menu-trigger:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
+}
+.api-tree-row-menu-trigger[aria-expanded="true"] {
+  anchor-name: --api-row-menu-anchor;
+}
+@media (hover: hover) and (pointer: fine) {
+  .api-tree-request-row:not(:hover):not(:focus-within)
+    > .tree-item:not(.active)
+    + .api-tree-row-menu-trigger:not([aria-expanded="true"]) {
+    opacity: 0;
+  }
+}
+#api-tree-row-menu {
+  position: fixed;
+  position-anchor: --api-row-menu-anchor;
+  position-try-fallbacks:
+    flip-block,
+    flip-inline,
+    flip-block flip-inline;
+  inset: calc(anchor(center) + 4px) calc(anchor(center) + 2px) auto auto;
+  margin: 0;
+  box-sizing: border-box;
+  width: 133px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--bg);
+  box-shadow: 0 8px 20px #0002;
+}
+#api-tree-row-menu > button {
+  width: 100%;
+  height: 31px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: transparent;
+  border: 0;
+  text-align: start;
+  font-size: 13px;
+}
+#api-tree-row-menu > button:is(:hover, :focus-visible) {
+  background: var(--hover);
+}
+#api-tree-row-menu > button > svg {
+  width: 15px;
+  height: 15px;
+}
+#api-tree-row-menu > [role="separator"] {
+  margin: 3px 0;
+  border-top: 1px solid var(--line);
+}
 .sidebar[data-sidebar-page="apis"] .tree-item .method {
   min-width: 0;
   justify-self: start;

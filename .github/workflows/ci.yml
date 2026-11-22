@@ -65,6 +65,7 @@ jobs:
       - run: node tests/http-debug-body-raw-ui.mjs
       - run: node tests/plan-step-picker-ui.mjs
       - run: node tests/api-sidebar-tree-ui.mjs
+      - run: node tests/api-row-menu-ui.mjs
       - run: node tests/scoped-export-surface-ui.mjs
       - run: node tests/sse-workbench-ui.mjs
       - run: node tests/database-manager-ui.mjs
