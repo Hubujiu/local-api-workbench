@@ -1,5 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {
+  isMCPActivityReceipt,
+  updateMCPTopStatus,
+} from "../public/mcp-top-status.js";
 import { assertHistoryRequests } from "./helpers/history-request-evidence.mjs";
 const endpoint = "http://127.0.0.1:12345/api/projects/fixture";
 const save = { url: endpoint, method: "PUT" },
@@ -51,11 +55,15 @@ test("actual activity poll reads only config when visible and is scheduled indep
     document: { hidden: false },
     mcpPollSequence: 0,
     mcpState: null,
+    mcpTopStatusKnown: false,
+    mcpTopStatusUnavailable: false,
+    isMCPActivityReceipt,
+    updateMCPTopStatus,
     updateMCPPanel: null,
     $: () => null,
     api: async (...args) => {
       calls.push(args);
-      return { activities: [] };
+      return { enabled: false, activities: [] };
     },
     setInterval: (fn, interval) => schedules.push({ fn, interval }),
   });
@@ -67,4 +75,34 @@ test("actual activity poll reads only config when visible and is scheduled indep
   context.document.hidden = true;
   await schedules[0].fn();
   assert.equal(calls.length, 1);
+
+  context.document.hidden = false;
+  let rejectOld;
+  context.api = () => new Promise((resolve, reject) => (rejectOld = reject));
+  const old = schedules[0].fn();
+  const confirmed = { enabled: true, activities: [] };
+  context.api = async () => confirmed;
+  await schedules[0].fn();
+  rejectOld(new Error("late failure"));
+  await old;
+  assert.equal(context.mcpState, confirmed);
+  assert.equal(context.mcpTopStatusUnavailable, false);
+
+  for (const invalid of [
+    () => Promise.reject(Error("read failure")),
+    async () => ({ enabled: false }),
+  ]) {
+    context.api = invalid;
+    await schedules[0].fn();
+    assert.equal(
+      context.mcpState,
+      confirmed,
+      "failed read must retain confirmed permissions",
+    );
+    assert.equal(context.mcpTopStatusUnavailable, true);
+  }
+  context.api = async () => ({ enabled: false, activities: [] });
+  await schedules[0].fn();
+  assert.equal(context.mcpState.enabled, false);
+  assert.equal(context.mcpTopStatusUnavailable, false);
 });

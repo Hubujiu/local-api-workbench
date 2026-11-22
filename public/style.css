@@ -137,11 +137,57 @@ header.top {
   gap: 12px;
   align-items: center;
 }
-.offline {
-  background: #e0ebdc;
-  color: #58734e;
-  padding: 5px 9px;
-  border-radius: 5px;
+#mcp-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 30px;
+  padding-inline: 7px;
+  border-color: transparent;
+  background: transparent;
+  color: #675e51;
+}
+#mcp-top-announcer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+body.dark #mcp-status {
+  color: var(--muted);
+}
+#mcp-status:is(:hover, :focus-visible) {
+  background: var(--hover);
+}
+#mcp-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+#mcp-status[data-mcp-state="enabled"]::before,
+#mcp-status[data-mcp-state="running"]::before {
+  background: #42764f;
+}
+body.dark
+  #mcp-status:is(
+    [data-mcp-state="enabled"],
+    [data-mcp-state="running"]
+  )::before {
+  background: #8bb38f;
+}
+#mcp-status[data-mcp-state="loading"]::before {
+  border: 1px solid currentColor;
+  background: transparent;
+}
+#mcp-status[data-mcp-state="unavailable"]::before {
+  border-radius: 1px;
+  background: currentColor;
 }
 .shell {
   display: flex;
@@ -900,7 +946,7 @@ dialog footer {
   .brand {
     font-size: 13px;
   }
-  .offline {
+  #mcp-status {
     display: none;
   }
   .rail {
