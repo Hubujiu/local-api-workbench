@@ -326,3 +326,161 @@ body.compact-ui .dictionary-page .dictionary-model-shortcut {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.dictionary-side-nav .dictionary-model-create {
+  margin-top: 16px;
+}
+.dictionary-model-create summary {
+  cursor: pointer;
+  list-style: none;
+  text-align: center;
+  padding: 6px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+}
+.dictionary-model-create summary::-webkit-details-marker {
+  display: none;
+}
+.dictionary-model-create[open] > div {
+  padding: 4px;
+  margin-top: 4px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px #0001;
+}
+.dictionary-title-strip .model-draft-tab {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  height: 32px;
+  border-radius: 5px 5px 0 0;
+}
+.dictionary-title-strip .model-draft-tab[aria-current] {
+  background: var(--bg);
+}
+.dictionary-title-strip .model-draft-tab svg {
+  color: var(--green);
+}
+.dictionary-page .workspace-model-draft {
+  padding: 16px;
+}
+.workspace-model-draft .model-draft-header,
+.workspace-model-draft .model-draft-location,
+.model-draft-schema header,
+.model-draft-root {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.workspace-model-draft .model-draft-header input {
+  flex: 1;
+  min-width: 0;
+  border-color: transparent;
+  padding: 4px 2px;
+  font-size: 16px;
+}
+.workspace-model-draft .model-draft-header input:focus {
+  border-color: var(--accent);
+}
+.model-workspace-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.model-draft-location {
+  margin-top: 5px;
+  margin-bottom: 8px;
+}
+.model-draft-location > button {
+  height: 26px;
+  padding: 2px 8px;
+}
+.model-draft-location select {
+  padding: 3px;
+  max-width: min(40vw, 240px);
+}
+.model-draft-schema {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  min-height: 112px;
+}
+.model-draft-schema header,
+.model-draft-root {
+  min-height: 37px;
+  border-bottom: 1px solid var(--line);
+  padding: 0 12px;
+}
+.model-draft-schema h2 {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+}
+.model-draft-root {
+  justify-content: start;
+  gap: 16px;
+  min-height: 42px;
+}
+.model-draft-root > span:first-child {
+  min-width: min(25vw, 248px);
+}
+.model-draft-type {
+  border-radius: 999px;
+  padding: 3px 9px;
+  color: var(--accent);
+  background: var(--panel);
+}
+.model-draft-root .muted {
+  overflow-wrap: anywhere;
+}
+.model-draft-help {
+  margin: 12px 0;
+}
+#dialog:has(.model-workspace-raw) {
+  width: 880px;
+}
+#dialog:has(.model-workspace-raw) > form {
+  display: flex;
+  flex-direction: column;
+  max-height: min(516px, calc(100dvh - 24px));
+}
+#dialog:has(.model-workspace-raw) :is(header, footer) {
+  flex: none;
+  border: 0;
+}
+#dialog-content:has(.model-workspace-raw) {
+  min-height: 0;
+  padding-block: 6px 0;
+}
+#dialog-content .model-workspace-raw textarea {
+  height: 400px;
+  max-height: 58dvh;
+  min-height: 110px;
+  resize: none;
+  display: block;
+}
+@media (min-width: 1240px) {
+  .workspace-model-draft .model-draft-header {
+    min-height: 32px;
+  }
+  .workspace-model-draft .model-draft-header :is(input, button) {
+    min-height: 32px;
+    padding-block: 4px;
+  }
+  .workspace-model-draft .model-draft-location {
+    min-height: 28px;
+    margin-block: 4px 5px;
+  }
+}
+@media (max-width: 560px) {
+  .workspace-model-draft .model-draft-header {
+    flex-wrap: wrap;
+  }
+  .workspace-model-draft .model-draft-header input {
+    flex: 1 0 100%;
+  }
+  .dictionary-page .workspace-model-draft {
+    padding-inline: 12px;
+  }
+}
