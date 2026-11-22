@@ -1,3 +1,4 @@
+import { validateMockResponse } from "./response-example.js";
 import { isJsonResponseType } from "./response-media.js";
 import {
   addSchemaProperty,
@@ -275,20 +276,93 @@ export function supportsDesignExamples(definition, media, managed) {
   );
 }
 
-function examplesPreview(definition, media, examples, managed) {
+export function designExampleTarget(rows, choice) {
+  if (choice === "new" || !rows.length) return { key: "new" };
+  const picked =
+    rows.find(({ example }) => example === choice) ||
+    (rows.length === 1 ? rows[0] : null);
+  return picked ? { ...picked, key: String(picked.index) } : { key: "" };
+}
+
+export function prepareDesignExampleBody(
+  definition,
+  media,
+  managed,
+  example,
+  body,
+) {
+  if (
+    !supportsDesignExamples(definition, media, managed) ||
+    (example &&
+      (String(example.status) !== String(definition.status) ||
+        exampleMedia(example.headers) !== media))
+  )
+    throw Error("示例不属于当前响应状态和媒体类型");
+  const next = {
+    ...(example || {
+      name: "响应示例",
+      status: Number(definition.status),
+      headers: { "content-type": media },
+    }),
+    body,
+  };
+  validateMockResponse(next, { allowInformational: true });
+  try {
+    JSON.parse(body);
+  } catch {
+    throw Error("JSON 响应示例正文无效");
+  }
+  return next;
+}
+
+function examplesPreview(
+  definition,
+  index,
+  media,
+  examples,
+  managed,
+  choice,
+  draft,
+) {
   if (!supportsDesignExamples(definition, media, managed))
     return '<p class="design-response-empty">此处只编辑具体状态及 JSON 媒体的工作台示例。其他示例请用 Mock 示例编辑器或响应定义 JSON。</p>';
   const rows = scopedResponseExamples(examples, definition.status, media);
-  return `<div class="design-example-pane"><div class="design-example-bar"><button type="button" id="new-design-example" class="ghost">＋ 新建示例</button></div>${
-    rows.length
-      ? rows
-          .map(
-            ({ example, index }) =>
-              `<div class="design-example-row"><button type="button" class="ghost" data-edit-design-example="${index}">${esc(example.name || "未命名示例")}</button><pre>${esc(example.body)}</pre></div>`,
-          )
-          .join("")
-      : '<div class="design-example-empty"><span aria-hidden="true">1</span><p>当前状态和媒体类型还没有示例</p></div>'
-  }</div>`;
+  const target = designExampleTarget(rows, choice);
+  const pending =
+    draft?.kind === "example" &&
+    draft.definitionIndex === index &&
+    draft.status === String(definition.status) &&
+    draft.media === media &&
+    draft.example === target.example &&
+    draft.exampleIndex === target.index
+      ? draft
+      : null;
+  const picker = rows.length
+    ? `<label>当前示例 <select id="design-inline-example-choice">${target.key ? "" : '<option value="" selected disabled>选择要编辑的示例</option>'}${rows
+        .map(
+          ({ example, index }, ordinal) =>
+            `<option value="${index}"${target.key === String(index) ? " selected" : ""}>${ordinal + 1}. ${esc(example.name || "未命名示例")}</option>`,
+        )
+        .join(
+          "",
+        )}<option value="new"${target.key === "new" ? " selected" : ""}>新示例正文</option></select></label>`
+    : "";
+  const advanced = rows.length
+    ? `<div class="design-example-advanced" role="group" aria-label="示例详细设置">${rows
+        .map(
+          ({ example, index }) =>
+            `<button type="button" class="ghost" data-edit-design-example="${index}">${esc(example.name || "未命名示例")}</button>`,
+        )
+        .join("")}</div>`
+    : "";
+  const edit = target.key
+    ? `<form id="design-inline-example-form" aria-label="行内响应示例"><div class="design-inline-example-editor"><div class="design-inline-example-gutter" aria-hidden="true">1</div><textarea id="design-inline-example-body" aria-label="JSON 示例正文" wrap="off" rows="7" spellcheck="false" autocomplete="off">
+${esc(pending?.body ?? target.example?.body ?? "")}</textarea></div><div class="design-inline-example-actions">
+      <button type="button" class="ghost" id="design-inline-example-cancel"${pending ? "" : " disabled"}>取消</button>
+      <button type="submit" class="primary" id="design-inline-example-apply"${pending ? "" : " disabled"}>${target.example ? "应用示例正文" : "添加示例到草稿"}</button>
+    </div></form>`
+    : '<p class="design-response-empty">请选择一个真实示例，或写入新示例正文。</p>';
+  return `<div class="design-example-pane"><div class="design-example-bar">${picker}<button type="button" id="new-design-example" class="ghost">＋ 新建示例</button></div>${edit}${advanced}</div>`;
 }
 
 function responseSettings(definition, index, mediaTypes, examples, draft) {
@@ -377,7 +451,7 @@ ${esc(settingsDraft?.rawCurrent ?? JSON.stringify(definitions, null, 2))}</texta
                   )
                   .join(
                     "",
-                  )}</div>${mediaTypes.length > 1 ? `<label>Content-Type <select id="design-response-media" aria-label="响应 Content-Type">${mediaTypes.map((key) => `<option value="${esc(key)}" ${key === media ? "selected" : ""}>${esc(key)}</option>`).join("")}</select></label>` : media ? `<small>${esc(media)}</small>` : ""}${showingExamples ? "" : edit}</div>${showingExamples ? examplesPreview(definition, media, examples, bindingNotice) : schemaPreview(definition, index, media, collapsedRootScopes?.has(JSON.stringify([String(definition?.status), media])), scopedResponseExamples(examples, definition.status, media).length > 0)}</div>`
+                  )}</div>${mediaTypes.length > 1 ? `<label>Content-Type <select id="design-response-media" aria-label="响应 Content-Type">${mediaTypes.map((key) => `<option value="${esc(key)}" ${key === media ? "selected" : ""}>${esc(key)}</option>`).join("")}</select></label>` : media ? `<small>${esc(media)}</small>` : ""}${showingExamples ? "" : edit}</div>${showingExamples ? examplesPreview(definition, index, media, examples, bindingNotice, selection?.exampleChoice, settingsDraft) : schemaPreview(definition, index, media, collapsedRootScopes?.has(JSON.stringify([String(definition?.status), media])), scopedResponseExamples(examples, definition.status, media).length > 0)}</div>`
         }`
   }</div>${raw}</div>`;
 }

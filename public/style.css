@@ -5044,34 +5044,75 @@ body:not(.dark) .plans-heading {
   border: 1px solid var(--line);
   border-radius: 4px;
 }
-.design-example-bar {
+.design-example-bar,
+.design-inline-example-actions,
+.design-example-advanced {
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+}
+.design-example-bar {
+  justify-content: space-between;
   border-bottom: 1px solid var(--line);
-  padding: 3px 8px;
 }
-.design-example-row {
-  padding: 6px 10px;
+.design-example-bar > button:only-child {
+  margin-inline-start: auto;
 }
-.design-example-row pre {
-  max-height: 220px;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.design-example-bar > label {
+  min-width: 0;
+  max-width: 100%;
 }
-.design-example-empty {
-  min-height: 112px;
+.design-example-bar select {
+  max-width: min(100%, 300px);
+}
+.design-inline-example-editor {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
+  min-width: 0;
 }
-.design-example-empty > span {
-  padding: 8px;
-  text-align: center;
+.design-inline-example-gutter,
+.design-inline-example-editor textarea {
+  box-sizing: border-box;
+  padding: 3px 8px;
+  font: 13px / 20px var(--font-mono, monospace);
+}
+.design-inline-example-gutter {
   border-right: 1px solid var(--line);
-}
-.design-example-empty > p {
-  padding-inline: 12px;
+  text-align: center;
   color: var(--muted);
+}
+.design-inline-example-editor textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 147px;
+  min-height: 147px;
+  resize: vertical;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: var(--bg);
+}
+.design-inline-example-editor textarea:focus-visible {
+  border-color: var(--accent);
+  outline-offset: -2px;
+}
+.design-inline-example-actions {
+  justify-content: flex-end;
+  border-top: 1px solid var(--line);
+}
+.design-example-advanced {
+  border-top: 1px solid var(--line);
+}
+.design-example-advanced > button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .design-inline-example-editor {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
 }
 
 .design-response-settings {

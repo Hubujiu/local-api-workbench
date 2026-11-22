@@ -4,6 +4,9 @@ export const unappliedDesignResponseSettings =
 export const unappliedDesignResponseHeader =
   "新增响应头有未应用的修改，请先添加或取消。";
 
+export const unappliedDesignResponseExample =
+  "示例正文有未应用的修改，请先应用或取消。";
+
 export function unchangedResponseDefinitions(value, definitions) {
   try {
     return JSON.stringify(JSON.parse(value)) === JSON.stringify(definitions);
@@ -25,7 +28,9 @@ export function createDesignResponseSettingsDrafts() {
         if (draft)
           return draft.kind === "header"
             ? unappliedDesignResponseHeader
-            : unappliedDesignResponseSettings;
+            : draft.kind === "example"
+              ? unappliedDesignResponseExample
+              : unappliedDesignResponseSettings;
       }
       return "";
     },
