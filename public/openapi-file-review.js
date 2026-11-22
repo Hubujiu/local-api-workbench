@@ -53,7 +53,7 @@ export async function readOpenAPIReviewInput(file) {
   });
 }
 
-export function assertOpenAPIReview(preview, revision) {
+export function assertOpenAPIReview(preview, revision, excluded) {
   const receiptInvalid = () => {
     throw Error("预览回执无效或项目版本已变化，请重新加载后预览");
   };
@@ -103,9 +103,11 @@ export function assertOpenAPIReview(preview, revision) {
     tallies.created > 0 &&
     preview.historyImpact.prunedSnapshots === 0 &&
     preview.items.every(
-      ({ kind, action }) =>
+      ({ key, kind, action, reason }) =>
         Object.hasOwn(kindLabels, kind) &&
-        (action === "create" || action === "reuse"),
+        (excluded?.has(key)
+          ? action === "skip" && reason === "not_selected"
+          : action === "create" || action === "reuse"),
     )
   );
 }
@@ -162,6 +164,7 @@ export function openAPIReviewMarkup({
   preview,
   input,
   canApply,
+  scope,
 }) {
   const groups = Object.groupBy(preview.items, (row) => row.kind);
   const advertised = ["api", "model", "environment", "folder"];
@@ -179,20 +182,27 @@ export function openAPIReviewMarkup({
     const label = Object.hasOwn(kindLabels, row.kind)
       ? kindLabels[row.kind]
       : "其他资源";
-    const content =
-      row.kind === "api" && hint ? hint : `<span>${label} ${index}</span>`;
-    return `<li>${content}<span class="openapi-file-action">${actionLabels[row.action]}</span></li>`;
+    const operation = scope?.labels.get(row.key);
+    const content = operation
+      ? `<label class="openapi-file-choice"><input type="checkbox" value="${esc(row.key)}" data-openapi-review-check checked><strong class="openapi-file-method">${operation.method}</strong><span>${esc(operation.label)}</span></label>`
+      : row.kind === "api" && hint
+        ? hint
+        : `<span>${label} ${index}</span>`;
+    return `<li>${content}<span class="openapi-file-action"${scope ? ` data-openapi-review-action="${esc(row.key)}"` : ""}>${scope && !canApply ? "待更新" : actionLabels[row.action]}</span></li>`;
   });
   const notice = preview.blockers.length
     ? "发现冲突，未导入任何内容。"
     : preview.noOp
       ? "没有需要导入的变化。"
-      : canApply
-        ? "本次确认将导入全部计划项，不支持逐项选择。"
-        : "该计划包含本安全导入入口不支持的变更，未导入任何内容。";
+      : scope
+        ? "只导入所选接口及必要依赖，改变选择后需先更新预览。"
+        : canApply
+          ? "本次确认将导入全部计划项，不支持逐项选择。"
+          : "该计划包含本安全导入入口不支持的变更，未导入任何内容。";
   return `<section class="openapi-file-review" tabindex="-1" aria-label="文件导入计划">
-    <div class="openapi-file-summary" aria-label="资源数量">${advertised.map((kind) => `<span>${kindLabels[kind]}（${count(kind)}）</span>`).join("")}</div>
+    <div class="openapi-file-summary" aria-label="资源数量">${advertised.map((kind) => `<span${scope && kind === "api" ? ' id="openapi-review-count" role="status"' : ""}>${kindLabels[kind]}（${scope && kind === "api" ? count(kind) + "/" : ""}${count(kind)}）</span>`).join("")}</div>
     <p class="openapi-file-destination">${esc(fileName)} · 导入到「${esc(projectName)}」</p>
+    ${scope ? `<div class="openapi-file-selection-tools"><label><input type="checkbox" id="openapi-review-all" checked>全选接口</label><button type="button" id="openapi-review-refresh">更新预览</button></div><p id="openapi-review-selection-status" role="status">${canApply ? "" : "请更新预览以核对实际导入的依赖。"}</p>` : ""}
     ${rows.length ? `<ul class="openapi-file-items" aria-label="计划导入资源">${rows.join("")}</ul>` : ""}
     <p class="openapi-file-note">${notice} 此预览不保存项目或发送请求。${preview.warnings.length ? ` 有 ${preview.warnings.length} 条警告。` : ""}${preview.blockers.length ? ` 有 ${preview.blockers.length} 处阻止导入的冲突。` : ""}</p>
     <p id="openapi-file-review-error" role="alert"></p>

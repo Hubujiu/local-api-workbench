@@ -165,7 +165,13 @@ try {
     selection: { mode: "all" },
   });
   assert(await review.getByText("GET", { exact: true }).isVisible());
-  assert.equal(await review.getByRole("checkbox").count(), 0);
+  assert.equal(await review.getByRole("checkbox").count(), 2);
+  assert(await review.getByRole("checkbox", { name: "全选接口" }).isChecked());
+  assert(
+    await review
+      .getByRole("checkbox", { name: /Visual import ping/ })
+      .isChecked(),
+  );
   const wide = await review.boundingBox();
   console.log("OPENAPI_FILE_REVIEW_BOX", JSON.stringify(wide));
   if (evidence) {
