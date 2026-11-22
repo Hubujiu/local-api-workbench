@@ -85,10 +85,23 @@ try {
   await page.locator('[data-document-index="0"]').press("Enter");
   await work.getByRole("button", { name: "编辑", exact: true }).press("Enter");
   const box = await open.boundingBox();
+  const toolbar = await work
+    .getByRole("group", { name: "文档格式工具" })
+    .boundingBox();
+  const link = await work.getByRole("button", { name: "链接" }).boundingBox();
   assert.deepEqual(
-    [box.x + box.width / 2, box.y + box.height / 2, box.width],
-    [582, 193, 36],
+    [
+      box.x + box.width / 2,
+      box.x - link.x,
+      box.y - toolbar.y,
+      box.width,
+      box.height,
+    ],
+    [582, 36, 0, 36, 32],
   );
+  // The separate 1363px capture gate checks the toolbar's absolute y193
+  // against the installed reference, with the same browser/font setup.
+
   assert(await file.isHidden());
   await choose([]); // Real browser chooser, canceled without selecting a path.
   assert(await focusIs(open));
