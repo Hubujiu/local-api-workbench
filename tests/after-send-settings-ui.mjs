@@ -113,6 +113,9 @@ try {
     await modal
       .getByRole("tab", { name: "外观", exact: true })
       .press("ArrowDown");
+    await modal
+      .getByRole("tab", { name: "发送设置", exact: true })
+      .press("ArrowDown");
     await panel.waitFor();
     assert(await focus(settingsTab));
   };

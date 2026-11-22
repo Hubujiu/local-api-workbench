@@ -1,3 +1,4 @@
+import { readNewHTTPTimeout } from "./send-settings.js";
 import {
   createManualResponseView,
   readAfterSendResponse,
@@ -2450,6 +2451,7 @@ function download(name, data, type = "application/json") {
 function addRequest() {
   collect();
   const r = defaultRequest();
+  r.timeout = readNewHTTPTimeout(localStorage);
   project.requests.push(r);
   current = r.id;
   activeDocumentId = null;
