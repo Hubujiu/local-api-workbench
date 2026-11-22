@@ -68,6 +68,7 @@ jobs:
           DESIGN_DESCRIPTION_SCROLL_EVIDENCE: /tmp/local-api-http-design-description-scroll
       - run: node tests/debug-pair-composer-ui.mjs
       - run: node tests/http-debug-body-empty-ui.mjs
+      - run: node tests/http-success-response-ui.mjs
       - run: node tests/debug-multipart-editor-ui.mjs
       - run: node tests/debug-urlencoded-editor-ui.mjs
       - run: node tests/form-file-privacy-ui.mjs
