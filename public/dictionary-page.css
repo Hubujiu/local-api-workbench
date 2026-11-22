@@ -367,8 +367,7 @@ body.compact-ui .dictionary-page .dictionary-model-shortcut {
 }
 .workspace-model-draft .model-draft-header,
 .workspace-model-draft .model-draft-location,
-.model-draft-schema header,
-.model-draft-root {
+.model-draft-schema header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -405,6 +404,7 @@ body.compact-ui .dictionary-page .dictionary-model-shortcut {
   border: 1px solid var(--line);
   border-radius: 4px;
   min-height: 112px;
+  padding-bottom: 31px;
 }
 .model-draft-schema header,
 .model-draft-root {
@@ -417,22 +417,131 @@ body.compact-ui .dictionary-page .dictionary-model-shortcut {
   font-weight: 500;
   margin: 0;
 }
-.model-draft-root {
-  justify-content: start;
-  gap: 16px;
+.model-draft-schema .model-tree-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 248px) minmax(88px, 108px) minmax(48px, 1fr)
+    minmax(0, 1.2fr);
+  align-items: center;
+  gap: 4px 12px;
+  min-height: 32px;
+  padding: 2px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.model-draft-schema .model-draft-root {
   min-height: 42px;
 }
-.model-draft-root > span:first-child {
-  min-width: min(25vw, 248px);
+.model-draft-schema #model-root-expand {
+  justify-self: start;
+  padding: 2px 0;
+}
+.model-root-chevron {
+  display: inline-block;
+  margin-inline-end: 8px;
+}
+#model-root-expand[aria-expanded="true"] .model-root-chevron {
+  transform: rotate(90deg);
+}
+.model-draft-schema #model-tree-children {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.model-draft-schema .model-field-type,
+.model-draft-schema .model-pending-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.model-draft-schema .model-field-plus {
+  flex: 0 0 17px;
+  width: 17px;
+  height: 20px;
+  padding: 0;
+  color: #168349;
+}
+body.dark .model-draft-schema .model-field-plus {
+  color: #56c883;
+}
+.model-field-plus svg {
+  display: block;
+  width: 100%;
+  height: 16px;
 }
 .model-draft-type {
+  min-width: 0;
   border-radius: 999px;
-  padding: 3px 9px;
+  padding: 3px 8px;
   color: var(--accent);
   background: var(--panel);
-}
-.model-draft-root .muted {
   overflow-wrap: anywhere;
+}
+.model-schema-field[data-model-field-depth="1"] {
+  --model-field-depth: 1;
+}
+.model-schema-field[data-model-field-depth="2"] {
+  --model-field-depth: 2;
+}
+.model-schema-field[data-model-field-depth="3"] {
+  --model-field-depth: 3;
+}
+.model-schema-field[data-model-field-depth="4"] {
+  --model-field-depth: 4;
+}
+.model-schema-field[data-model-field-depth="5"] {
+  --model-field-depth: 5;
+}
+.model-schema-field[data-model-field-depth="6"] {
+  --model-field-depth: 6;
+}
+.model-schema-field[data-model-field-depth="7"] {
+  --model-field-depth: 7;
+}
+.model-schema-field[data-model-field-depth="8"] {
+  --model-field-depth: 8;
+}
+.model-schema-field .model-field-name {
+  padding-inline-start: calc(18px + var(--model-field-depth) * 16px);
+}
+.model-field-name,
+.model-field-description {
+  overflow-wrap: anywhere;
+}
+.model-pending-field input {
+  min-width: 0;
+  margin-inline-start: min(40px, 6vw);
+  height: 26px;
+  padding: 2px 4px;
+}
+.model-pending-field .model-pending-actions {
+  grid-column: 3 / -1;
+  flex-wrap: wrap;
+}
+.model-pending-actions > button {
+  padding: 3px 6px;
+  line-height: 18px;
+}
+.model-field-error {
+  grid-column: 1 / -1;
+}
+.model-tree-unavailable {
+  padding: 10px 12px;
+}
+@media (max-width: 850px) {
+  .model-draft-schema .model-tree-row {
+    grid-template-columns:
+      minmax(0, 1.3fr) minmax(72px, 0.7fr) minmax(34px, 0.4fr)
+      minmax(0, 1fr);
+    gap: 4px 8px;
+    padding-inline: 8px;
+  }
+  .model-schema-field .model-field-name {
+    padding-inline-start: calc(7px + var(--model-field-depth) * 6px);
+  }
+  .model-pending-field input {
+    margin-inline-start: 8px;
+  }
 }
 .model-draft-help {
   margin: 12px 0;
@@ -466,7 +575,10 @@ body.compact-ui .dictionary-page .dictionary-model-shortcut {
   }
   .workspace-model-draft .model-draft-header :is(input, button) {
     min-height: 32px;
-    padding-block: 4px;
+    padding-block: 2px;
+  }
+  .workspace-model-draft .model-draft-location select {
+    padding-block: 2px;
   }
   .workspace-model-draft .model-draft-location {
     min-height: 28px;

@@ -1,5 +1,9 @@
 import { modelFolderPath } from "./model-folders.js";
 import { assertModelSchema } from "./model-edit.js";
+import {
+  ModelWorkspaceTree,
+  modelWorkspaceTree,
+} from "./model-workspace-tree.js";
 
 const blankSchema = { type: "object", properties: {} };
 const esc = (value) =>
@@ -26,9 +30,13 @@ export class WorkspaceModelDrafts {
         name: "",
         folderId: "",
         schema: initialSchema,
+        tree: new ModelWorkspaceTree(),
         get changed() {
           return Boolean(
-            this.name || this.folderId || this.schema !== initialSchema,
+            this.name ||
+              this.folderId ||
+              this.schema !== initialSchema ||
+              this.tree.changed,
           );
         },
         replaceSchema(schema) {
@@ -63,19 +71,5 @@ export function modelDraftPanel(project, draft) {
     .join("");
   const missingFolder =
     draft.folderId && !folders.some((folder) => folder.id === draft.folderId);
-  const type =
-    typeof draft.schema === "boolean"
-      ? String(draft.schema)
-      : typeof draft.schema.type === "string"
-        ? draft.schema.type
-        : Array.isArray(draft.schema.type)
-          ? draft.schema.type
-              .filter((value) => typeof value === "string")
-              .join(" | ") || "未指定"
-          : "未指定";
-  const description =
-    typeof draft.schema.description === "string"
-      ? draft.schema.description
-      : "";
-  return `<section class="workspace-model-draft" aria-label="数据模型草稿"><div class="model-draft-header"><input id="model-workspace-name" aria-label="模型名称" placeholder="输入模型名称，建议使用代码模型名称或其同义词" value="${esc(draft.name)}" maxlength="500"><div class="model-workspace-actions"><button type="button" id="model-workspace-discard">放弃草稿</button><button type="button" id="model-workspace-apply" class="primary">应用到项目草稿</button></div></div><div class="model-draft-location"><label>模型目录 <select id="model-workspace-folder"><option value="">根目录</option>${missingFolder ? `<option value="${esc(draft.folderId)}" selected>原目录已不存在，请重新选择</option>` : ""}${options}</select></label><button type="button" class="ghost" id="model-workspace-list">返回字典</button></div><section class="model-draft-schema" aria-labelledby="model-draft-schema-heading"><header><h2 id="model-draft-schema-heading">数据结构</h2><button class="ghost" type="button" id="model-workspace-raw">Raw编辑</button></header><div class="model-draft-root"><span>根节点</span><span class="model-draft-type">${esc(type)}</span>${description ? `<span class="muted">${esc(description)}</span>` : ""}</div></section><p class="muted model-draft-help">应用后仍是本地草稿；使用「保存项目」写入磁盘。</p></section>`;
+  return `<section class="workspace-model-draft" aria-label="数据模型草稿"><div class="model-draft-header"><input id="model-workspace-name" aria-label="模型名称" placeholder="输入模型名称，建议使用代码模型名称或其同义词" value="${esc(draft.name)}" maxlength="500"><div class="model-workspace-actions"><button type="button" id="model-workspace-discard">放弃草稿</button><button type="button" id="model-workspace-apply" class="primary">应用到项目草稿</button></div></div><div class="model-draft-location"><label>模型目录 <select id="model-workspace-folder"><option value="">根目录</option>${missingFolder ? `<option value="${esc(draft.folderId)}" selected>原目录已不存在，请重新选择</option>` : ""}${options}</select></label><button type="button" class="ghost" id="model-workspace-list">返回字典</button></div><section class="model-draft-schema" aria-labelledby="model-draft-schema-heading"><header><h2 id="model-draft-schema-heading">数据结构</h2><button class="ghost" type="button" id="model-workspace-raw">Raw编辑</button></header>${modelWorkspaceTree(draft)}</section><p class="muted model-draft-help">应用后仍是本地草稿；使用「保存项目」写入磁盘。</p></section>`;
 }
