@@ -158,6 +158,11 @@ import {
   removeEmptyModelFolder,
 } from "./model-folder-actions.js";
 import { saveModel } from "./model-edit.js";
+import {
+  WorkspaceModelDrafts,
+  modelDraftPanel,
+  modelDraftTab,
+} from "./model-workspace.js";
 import { modelCards, modelFolderPath } from "./model-folders.js";
 import { bindMCPSettings } from "./mcp-settings-view.js";
 import { scriptDialectOptions, scriptDialectNotice } from "./script-dialect.js";
@@ -288,6 +293,7 @@ function caseSelectionToolbar() {
   return `<div class="toolbar case-selection"><label><input type="checkbox" id="select-all-cases" ${all.length && selected.size === all.length ? "checked" : ""} ${busy || !all.length ? "disabled" : ""}> 全选</label><span role="status">已选 ${selected.size} 项</span><button id="run-selected-cases" ${busy || !selected.size ? "disabled" : ""}>运行所选</button><button id="run-all-cases" ${busy || !all.length ? "disabled" : ""}>全部运行</button>${canCancelCurrentCase() ? '<button type="button" id="cancel-case-run">取消运行</button>' : ""}<button id="move-selected-cases" ${busy || !selected.size ? "disabled" : ""}>移动所选</button><button id="delete-selected-cases" class="danger" ${busy || !selected.size ? "disabled" : ""}>删除所选</button></div><p class="muted">单次最多100个、请求快照总量4MiB，按当前列表顺序串行运行；用例未通过会继续，调用错误会停止且不重试。取消会停止后续用例。</p>${caseBatch?.projectId === project.id && caseBatch?.sourceRequestId === current ? `<p id="case-batch-status" role="status">${caseBatch.running ? "运行中" : caseBatch.cancelled ? "已取消" : caseBatch.stoppedOnError ? "已停止（调用错误）" : "已完成"} ${caseBatch.completed} / ${caseBatch.total} · 通过 ${caseBatch.passed} · 未通过 ${caseBatch.failed}${caseBatch.currentName ? " · " + esc(caseBatch.currentName) : ""}</p>` : ""}`;
 }
 const temporaryParameters = new Map();
+const workspaceModelDrafts = new WorkspaceModelDrafts();
 const collapsedFolders = new Set();
 const loadOptions = new Map();
 const parameterScopes = new Map();
@@ -1624,6 +1630,7 @@ function render(preserveEditingFocus = false) {
   bind();
   if (page === "dictionary")
     bindDictionaryView($(".dictionary-page"), dictionaryPosition);
+  if (page === "dictionary") bindWorkspaceModel();
   const tabScroll = $(".tab-scroll");
   if (tabScroll) {
     tabScroll.scrollLeft = oldTabScroll;
@@ -2037,8 +2044,10 @@ function renderPage() {
         )
         .join("") || '<div class="empty"><p>回收站为空</p></div>'
     }</div>`;
-  if (page === "dictionary")
-    return `<div class="page dictionary-page" data-dictionary-project="${esc(project.id)}">${dictionaryPanel(project, temporaryParameters.get(project.id) || [])}<section class="dictionary-models" aria-labelledby="dictionary-models-heading"><div class="page-head"><div><h2 id="dictionary-models-heading" tabindex="-1">数据模型</h2><span class="muted">统一管理可复用的字段定义与枚举</span></div><div class="toolbar"><button id="add-model-folder">＋ 新建目录</button><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div></div>${modelCards(project)}</section></div>`;
+  if (page === "dictionary") {
+    const draft = workspaceModelDrafts.get(project.id);
+    return `<div class="page dictionary-page" data-dictionary-project="${esc(project.id)}">${dictionaryPanel(project, temporaryParameters.get(project.id) || [], { tab: modelDraftTab(draft), active: draft?.active, editor: draft?.active ? modelDraftPanel(project, draft) : "" })}<section class="dictionary-models" aria-labelledby="dictionary-models-heading"${draft?.active ? " hidden" : ""}><div class="page-head"><div><h2 id="dictionary-models-heading" tabindex="-1">数据模型</h2><span class="muted">统一管理可复用的字段定义与枚举</span></div><div class="toolbar"><button id="add-model-folder">＋ 新建目录</button><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div></div>${modelCards(project)}</section></div>`;
+  }
   if (page === "protocols")
     return `<div class="page"><h1>实时协议调试</h1><div class="row"><input id="protocol-name" placeholder="连接名称" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.name || "")}"><button id="save-protocol">保存连接定义</button><button id="delete-protocol" class="danger">删除连接定义</button></div><p class="muted">支持短时采集与交互会话。交互会话最长 15 分钟、8 MiB，保留最近 200 条消息。</p><div class="form-grid"><label>协议</label><select id="protocol-type">${[
       ["sse", "SSE"],
@@ -6353,6 +6362,82 @@ function editExample(index, designScope) {
       render();
     },
   );
+}
+
+function bindWorkspaceModel() {
+  const owner = project;
+  const draft = workspaceModelDrafts.get(owner.id);
+  const current = () =>
+    project === owner &&
+    page === "dictionary" &&
+    workspaceModelDrafts.get(owner.id) === draft;
+  const reveal = (control) => {
+    const target = $(control);
+    target?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    target?.focus({ preventScroll: true });
+  };
+  on("[data-open-model-workspace]", "click", () => {
+    if (project !== owner || page !== "dictionary") return;
+    workspaceModelDrafts.open(owner.id);
+    render();
+    reveal("#model-workspace-name");
+  });
+  on("[data-new-model-workspace-folder]", "click", (_, button) => {
+    if (project !== owner || page !== "dictionary") return;
+    button.closest("details").open = false;
+    editModelFolder();
+  });
+  if (!draft?.active) return;
+  on("[data-dictionary-jump]", "click", (_, element) => {
+    if (!current()) return;
+    draft.active = false;
+    const target = element.dataset.dictionaryJump;
+    render();
+    reveal("#" + target);
+  });
+  on("#model-workspace-list", "click", () => {
+    if (!current()) return;
+    draft.active = false;
+    render();
+    reveal("#dictionary-surface-heading");
+  });
+  on("#model-workspace-name", "input", (_, input) => {
+    if (current()) draft.name = input.value;
+  });
+  on("#model-workspace-folder", "change", (_, input) => {
+    if (current()) draft.folderId = input.value;
+  });
+  on("#model-workspace-discard", "click", () => {
+    if (!current()) return;
+    if (draft.changed && !confirm("放弃这份未应用的数据模型草稿？")) return;
+    workspaceModelDrafts.finish(owner.id, draft);
+    render();
+    reveal("#dictionary-surface-heading");
+  });
+  on("#model-workspace-apply", "click", () => {
+    if (!current()) return;
+    saveModel(owner, undefined, draft, uid());
+    workspaceModelDrafts.finish(owner.id, draft);
+    mark();
+    render();
+    reveal("#dictionary-models-heading");
+  });
+  on("#model-workspace-raw", "click", () => {
+    if (!current()) return;
+    modal(
+      "Raw",
+      `<div class="model-workspace-raw"><textarea id="model-workspace-json" aria-label="模型 Schema JSON" spellcheck="false" autofocus>${esc(JSON.stringify(draft.schema, null, 2))}</textarea></div>`,
+      () => {
+        if (!current()) throw Error("模型草稿已变化，请重新打开 Raw 编辑");
+        draft.replaceSchema(JSON.parse($("#model-workspace-json").value));
+        render();
+      },
+      "应用到模型草稿",
+      () => {
+        if (current()) reveal("#model-workspace-raw");
+      },
+    );
+  });
 }
 
 function editModelFolder(id) {

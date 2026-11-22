@@ -1,4 +1,13 @@
 import { validateModelFolders } from "./model-folders.js";
+export function assertModelSchema(schema) {
+  if (
+    typeof schema !== "boolean" &&
+    (!schema || typeof schema !== "object" || Array.isArray(schema))
+  )
+    throw Error("模型Schema须为对象或布尔值");
+  if (new TextEncoder().encode(JSON.stringify(schema)).length > 1024 * 1024)
+    throw Error("模型Schema最多1MiB UTF-8");
+}
 export function saveModel(project, index, input, newId) {
   const dictionary = project.dictionary || [];
   if (
@@ -22,18 +31,7 @@ export function saveModel(project, index, input, newId) {
     )
   )
     throw Error("模型名称重复，请使用不同名称");
-  if (
-    typeof input.schema !== "boolean" &&
-    (!input.schema ||
-      typeof input.schema !== "object" ||
-      Array.isArray(input.schema))
-  )
-    throw Error("模型Schema须为对象或布尔值");
-  if (
-    new TextEncoder().encode(JSON.stringify(input.schema)).length >
-    1024 * 1024
-  )
-    throw Error("模型Schema最多1MiB UTF-8");
+  assertModelSchema(input.schema);
   const previous = index === undefined ? {} : dictionary[index];
   const id = previous.id || newId;
   if (
