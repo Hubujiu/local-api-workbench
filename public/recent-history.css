@@ -40,6 +40,13 @@
   color: var(--text);
   font-weight: 500;
 }
+body.dark .recent-history-tabs {
+  background: #17140f;
+}
+body.dark .recent-history-tabs button[aria-selected="true"],
+body.dark .recent-history-day > summary {
+  background: #242017;
+}
 .recent-history-toolbar [hidden] {
   display: none;
 }
