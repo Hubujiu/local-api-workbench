@@ -6,6 +6,10 @@ import { join } from "node:path";
 import { normalizeRequest } from "../src/core.mjs";
 import { preparePostmanCollection } from "../src/postman-collection-scopes.mjs";
 import { createApp } from "../src/server.mjs";
+import {
+  chooseProjectSwitch,
+  projectSwitchPrompt,
+} from "./helpers/project-switch-confirmation-ui.mjs";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_PACKAGE || "playwright");
@@ -501,8 +505,18 @@ try {
   assert.equal(await body.inputValue(), formatted);
 
   await page.setViewportSize({ width: 1363, height: 1023 });
-  page.once("dialog", (dialog) => dialog.accept());
-  await page.locator("#project-select").selectOption(dictionaryProject.id);
+  const projectSelector = page.locator("#project-select");
+  const displayedOwner = projectSelector.locator("option[selected]");
+  assert.equal(await displayedOwner.getAttribute("value"), project.id);
+  await chooseProjectSwitch(page, "discard", async () => {
+    await projectSelector.selectOption(dictionaryProject.id);
+    assert.equal(await displayedOwner.getAttribute("value"), project.id);
+  });
+  await projectSwitchPrompt(page).waitFor({ state: "hidden" });
+  assert.equal(
+    await displayedOwner.getAttribute("value"),
+    dictionaryProject.id,
+  );
   await page.locator('[data-request="dictionary-draft"]').click();
   await bodyTab.click();
   await helperToggle.press("Enter");
