@@ -5641,6 +5641,7 @@ try {
   // The inline editor must be reachable without scrolling past long help text.
   for (const stage of ["after", "before"]) {
     await page.locator(`[data-param="${stage}"]`).click();
+    if (stage === "after") await revealDebugPostSettings(page);
     const visibleCodeHeight = await page
       .locator("#script-code")
       .evaluate((input) => {

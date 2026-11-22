@@ -155,8 +155,23 @@ try {
   await modalCode.press("Escape");
   await dialog.waitFor({ state: "hidden" });
   assert.equal(await active(trigger), true);
+  await page.setViewportSize({ width: 1000, height: 760 });
   await disclosure.press("Enter");
   assert.equal(await postCode.inputValue(), "");
+  const visibleCodeHeight = await postCode.evaluate((input) => {
+    const panel = input.closest(".request-panel");
+    panel.scrollTop = 0;
+    const a = input.getBoundingClientRect(),
+      b = panel.getBoundingClientRect();
+    return Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+  });
+  console.log("HTTP_POST_ACTIONS_VISIBLE_INLINE_EDITOR", visibleCodeHeight);
+  await capture("inline-editor-1000");
+  assert(
+    visibleCodeHeight >= 100,
+    `after inline script editor has ${visibleCodeHeight}px visible`,
+  );
+  await page.setViewportSize({ width: 1363, height: 1023 });
   assert.equal(
     await panel
       .getByRole("button", { name: "添加数据库查询", exact: true })
