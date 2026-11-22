@@ -99,6 +99,7 @@ jobs:
       - run: node tests/recent-dark-shell-ui.mjs
       - run: node tests/recent-saved-versions-ui.mjs
       - run: node tests/recent-saved-trash-ui.mjs
+      - run: node tests/recent-saved-checkbox-ui.mjs
       - run: node tests/ui-smoke.mjs
         env:
           HTTP_WORKBENCH_CHECKOUT_COMMIT: ${{ steps.browser_checkout.outputs.commit }}
