@@ -159,6 +159,10 @@ import {
 } from "./model-folder-actions.js";
 import { saveModel } from "./model-edit.js";
 import {
+  bindModelFieldTypeMenu,
+  changeWorkspaceModelFieldType,
+} from "./model-workspace-type.js";
+import {
   WorkspaceModelDrafts,
   modelDraftPanel,
   modelDraftTab,
@@ -6417,6 +6421,17 @@ function bindWorkspaceModel() {
     workspaceModelDrafts.finish(owner.id, draft);
     render();
     reveal("#dictionary-surface-heading");
+  });
+  bindModelFieldTypeMenu($(".model-draft-schema"), {
+    active: current,
+    notify: toast,
+    choose: (index, target) => {
+      const schema = changeWorkspaceModelFieldType(draft.schema, index, target);
+      if (schema === draft.schema) return;
+      draft.replaceSchema(schema);
+      render();
+      reveal("#model-type-trigger-" + index);
+    },
   });
   const fieldInput = (id) => "#model-field-name-" + id;
   const startField = (after) => {

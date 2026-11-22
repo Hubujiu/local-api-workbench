@@ -74,7 +74,7 @@ test("visual children show real schema metadata, and unsupported schema remains 
   });
   const html = modelDraftPanel({}, draft);
   assert.match(html, /identifier<\/span>/);
-  assert.match(html, /integer<\/span>/);
+  assert.match(html, /integer<\/button>/);
   assert.match(html, /必填<\/span>/);
   assert.match(html, /&lt;synthetic&gt;/);
   assert.doesNotMatch(html, /<synthetic>/);
