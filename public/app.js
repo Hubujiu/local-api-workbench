@@ -161,7 +161,7 @@ import { modelCards, modelFolderPath } from "./model-folders.js";
 import { bindMCPSettings } from "./mcp-settings-view.js";
 import { scriptDialectOptions, scriptDialectNotice } from "./script-dialect.js";
 import { mountVisualization } from "./visualizer-view.js";
-import { inlineImageURI } from "./inline-image.js";
+import { bindLocalDocumentImage } from "./document-local-image.js";
 import { moveFolderTree } from "./folder-tree.js";
 import { loadTiming } from "./load-timing.js";
 import { parseLoadCSV } from "./load-data.js";
@@ -6658,6 +6658,14 @@ function bindWorkspaceDocument() {
     bindTree();
   });
   const input = $("#workspace-document-text");
+  if (input)
+    bindLocalDocumentImage({
+      picker: $("#workspace-document-image-file"),
+      input,
+      trigger: $("#workspace-document-image"),
+      active: () => active() && !$("#dialog").open,
+      notify: toast,
+    });
   const linked = $("#workspace-document-sync");
   const scroll =
     input &&
@@ -6777,33 +6785,18 @@ function editDocument(index, workspaceOwner) {
       preview.innerHTML = renderMarkdown(input.value);
     }, 120);
   };
-  $("#document-image").onchange = async (event) => {
-    const picker = event.target,
-      file = picker.files?.[0];
-    if (!file) return;
-    try {
-      if (file.size > 128 * 1024) throw Error("图片最多128KiB");
-      const uri = inlineImageURI(
-        new Uint8Array(await file.arrayBuffer()),
-        file.type,
-      );
-      const bitmap = await createImageBitmap(file);
-      bitmap.close();
-      if (!input.isConnected || $("#document-content") !== input) return;
-      const start = input.selectionStart,
-        end = input.selectionEnd;
-      const text = "\n![图片](" + uri + ")\n";
-      if (input.value.length - (end - start) + text.length > 256 * 1024)
-        throw Error("文档超过256KiB预览限制");
-      input.setRangeText(text, start, end, "end");
-      input.dispatchEvent(new Event("input"));
-      toast("图片已插入，保存文档后生效");
-    } catch (error) {
-      if (input.isConnected) toast(error.message);
-    } finally {
-      picker.value = "";
-    }
-  };
+  const imageDialogRevision = modalRevision;
+  bindLocalDocumentImage({
+    picker: $("#document-image"),
+    input,
+    active: () =>
+      project === owner &&
+      $("#dialog").open &&
+      modalRevision === imageDialogRevision &&
+      (!workspaceOwner || workspaceDocument() === workspaceOwner) &&
+      (index === undefined || project.documents[index] === existing),
+    notify: toast,
+  });
   preview.innerHTML = renderMarkdown(input.value);
 }
 

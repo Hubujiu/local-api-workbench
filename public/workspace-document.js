@@ -33,6 +33,16 @@ export function documentCounts(content) {
   return `字数: ${Array.from(text).length}　行数: ${text.split(/\r\n?|\n/).length}`;
 }
 
+function workspaceDocumentToolbar() {
+  const image = `<button type="button" class="ghost" id="workspace-document-image" aria-label="插入本地图片" title="插入本地 PNG/JPEG 图片">${workspaceMarkdownIcon("image")}</button>`;
+  return markdownTools
+    .map(
+      ([key, , label]) =>
+        `<button type="button" class="ghost" data-workspace-markdown="${key}" aria-label="${esc(label)}" title="${esc(label)}">${workspaceMarkdownIcon(key)}</button>${key === "link" ? image : ""}`,
+    )
+    .join("");
+}
+
 export function workspaceDocumentHTML(
   doc,
   { editing, saving, status, synchronized = true },
@@ -52,7 +62,7 @@ export function workspaceDocumentHTML(
     </header>
     ${
       editing
-        ? `<div class="workspace-document-editor"><div class="workspace-document-toolbar" role="group" aria-label="文档格式工具">${markdownTools.map(([key, , label]) => `<button type="button" class="ghost" data-workspace-markdown="${key}" aria-label="${esc(label)}" title="${esc(label)}">${workspaceMarkdownIcon(key)}</button>`).join("")}</div><div class="workspace-document-panes"><textarea id="workspace-document-text" aria-label="Markdown 正文" spellcheck="false">\n${esc(content)}</textarea>${preview}</div><footer class="workspace-document-footer"><small id="workspace-document-count">${documentCounts(content)}</small><div class="workspace-document-scroll-actions"><label><input id="workspace-document-sync" type="checkbox" ${synchronized ? "checked" : ""}> 同步滚动</label><button type="button" class="ghost" id="workspace-document-top">回到顶部</button></div></footer></div>`
+        ? `<div class="workspace-document-editor"><div class="workspace-document-toolbar" role="group" aria-label="文档格式工具">${workspaceDocumentToolbar()}</div><input id="workspace-document-image-file" type="file" accept="image/png,image/jpeg" hidden><div class="workspace-document-panes"><textarea id="workspace-document-text" aria-label="Markdown 正文" spellcheck="false">\n${esc(content)}</textarea>${preview}</div><footer class="workspace-document-footer"><small id="workspace-document-count">${documentCounts(content)}</small><div class="workspace-document-scroll-actions"><label><input id="workspace-document-sync" type="checkbox" ${synchronized ? "checked" : ""}> 同步滚动</label><button type="button" class="ghost" id="workspace-document-top">回到顶部</button></div></footer></div>`
         : preview
     }
   </section>`;
