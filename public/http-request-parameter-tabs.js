@@ -12,7 +12,7 @@ const tabs = [
   ["extract", "提取变量"],
 ];
 
-export const namedMultipartRows = (request) =>
+export const namedFormRows = (request) =>
   (request.form || []).filter((row) => String(row.key || "").trim()).length;
 
 export function requestParameterTabs(request, active) {
@@ -21,8 +21,8 @@ export function requestParameterTabs(request, active) {
       const selected = active === key;
       const count =
         key === "body"
-          ? request.bodyType === "form-data"
-            ? namedMultipartRows(request)
+          ? ["form-data", "urlencoded"].includes(request.bodyType)
+            ? namedFormRows(request)
             : Number(request.bodyType !== "none")
           : Array.isArray(request[key])
             ? request[key].length

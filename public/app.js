@@ -10,6 +10,10 @@ import {
   newMultipartTextRow,
   syncMultipartAll,
 } from "./debug-multipart-editor.js";
+import {
+  debugURLencodedEditor,
+  isDebugURLencoded,
+} from "./debug-urlencoded-editor.js";
 import { readNewHTTPTimeout } from "./send-settings.js";
 import {
   createManualResponseView,
@@ -60,7 +64,7 @@ import {
   restoreResponseTabsPosition,
 } from "./http-response-tabs.js";
 import {
-  namedMultipartRows,
+  namedFormRows,
   requestParameterTabs,
   revealParameterTab,
 } from "./http-request-parameter-tabs.js";
@@ -2182,26 +2186,29 @@ function paramPanel(r, param, design = false) {
     const debugRawJSON = !design && r.bodyType === "json";
     const multipart =
       !design && isDebugMultipart(page, mode, param, r.bodyType);
+    const urlencoded = !design && isDebugURLencoded(page, mode, param, r);
     const binary = r.bodyType === "binary";
     const expandLabel = bodyExpanded ? "收起编辑器" : "展开编辑器";
     const tabbedHelper = helperOpen && debugRawJSON && useTabbedRawHelper();
-    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${!design && (r.bodyType === "none" || debugRawJSON || multipart || binary) ? `<span class="body-type-caption" title="${type}">${type}</span>` : type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" || multipart || binary ? "" : `<div class="body-actions${debugRawJSON ? " http-debug-raw-actions" : ""}"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">请求体 · 保存在本地</span><button id="format-json" class="ghost"${debugRawJSON ? ' aria-label="格式化 JSON"' : ""}>${debugRawJSON ? "美化" : "格式化 JSON"}</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${debugRawJSON ? `<span class="debug-raw-expand-icon">${lineIcon("editor-expand")}</span><span class="debug-raw-expand-label">${expandLabel}</span>` : expandLabel}</button>`}</div>`}${
+    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${!design && (r.bodyType === "none" || debugRawJSON || multipart || urlencoded || binary) ? `<span class="body-type-caption" title="${type}">${type}</span>` : type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" || multipart || urlencoded || binary ? "" : `<div class="body-actions${debugRawJSON ? " http-debug-raw-actions" : ""}"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">请求体 · 保存在本地</span><button id="format-json" class="ghost"${debugRawJSON ? ' aria-label="格式化 JSON"' : ""}>${debugRawJSON ? "美化" : "格式化 JSON"}</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${debugRawJSON ? `<span class="debug-raw-expand-icon">${lineIcon("editor-expand")}</span><span class="debug-raw-expand-label">${expandLabel}</span>` : expandLabel}</button>`}</div>`}${
       binary
         ? binaryBodyHTML(r, { debug: !design, icon: lineIcon })
         : multipart
           ? debugMultipartEditor(r.form, esc)
-          : ["form-data", "urlencoded"].includes(r.bodyType)
-            ? pairs(r.form, "form", undefined, undefined, r.bodyType)
-            : r.bodyType === "none"
-              ? `<div class="body-none"><span class="body-none-icon">${lineIcon("body-empty")}</span><p>当前请求未包含 Body</p>${design ? "" : '<button id="generate-body" class="ghost">基于数据结构生成</button>'}</div>`
-              : `<div class="body-editor-shell"><div class="code-editor"><pre id="code-gutter" aria-hidden="true">${r.body
-                  .split("\n")
-                  .map((_, i) => i + 1)
-                  .join(
-                    "\n",
-                  )}</pre><pre id="code-highlight" aria-hidden="true"${debugRawJSON ? ' class="debug-raw-json-highlight"' : ""}>${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle${debugRawJSON ? " debug-raw-helper" : ""}" aria-label="参数助手" aria-expanded="${helperOpen}"${helperOpen ? ' aria-controls="body-parameter-helper"' : ""}><span class="helper-label" aria-hidden="true">${debugRawJSON ? `<span class="helper-rail-chevron">${lineIcon("helper-rail-left")}</span>` : ""}${tabbedHelper ? `<span class="helper-pane-chevron">${lineIcon("helper-pane-right")}</span>` : ""}<span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
-                  helperOpen ? bodyParameterHelper(r, tabbedHelper) : ""
-                }</div>`
+          : urlencoded
+            ? debugURLencodedEditor(r.form, esc)
+            : ["form-data", "urlencoded"].includes(r.bodyType)
+              ? pairs(r.form, "form", undefined, undefined, r.bodyType)
+              : r.bodyType === "none"
+                ? `<div class="body-none"><span class="body-none-icon">${lineIcon("body-empty")}</span><p>当前请求未包含 Body</p>${design ? "" : '<button id="generate-body" class="ghost">基于数据结构生成</button>'}</div>`
+                : `<div class="body-editor-shell"><div class="code-editor"><pre id="code-gutter" aria-hidden="true">${r.body
+                    .split("\n")
+                    .map((_, i) => i + 1)
+                    .join(
+                      "\n",
+                    )}</pre><pre id="code-highlight" aria-hidden="true"${debugRawJSON ? ' class="debug-raw-json-highlight"' : ""}>${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle${debugRawJSON ? " debug-raw-helper" : ""}" aria-label="参数助手" aria-expanded="${helperOpen}"${helperOpen ? ' aria-controls="body-parameter-helper"' : ""}><span class="helper-label" aria-hidden="true">${debugRawJSON ? `<span class="helper-rail-chevron">${lineIcon("helper-rail-left")}</span>` : ""}${tabbedHelper ? `<span class="helper-pane-chevron">${lineIcon("helper-pane-right")}</span>` : ""}<span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
+                    helperOpen ? bodyParameterHelper(r, tabbedHelper) : ""
+                  }</div>`
     }`;
   }
   if (param === "auth")
@@ -4423,15 +4430,19 @@ function bind() {
         $('input[name="body-type"]:checked')?.focus({ preventScroll: true });
       return;
     }
-    const restoreEmptyBodyRadio =
+    const restoreDebugBodyRadio =
       mode === "debug" &&
       e.name === "body-type" &&
-      e.matches(":focus-visible") &&
+      keepRadioFocus &&
       (e.value === "none" ||
         e.value === "form-data" ||
+        (e.value === "urlencoded" &&
+          isDebugURLencoded(page, mode, param, { ...r, bodyType: e.value })) ||
         e
           .closest(".request-panel")
-          ?.querySelector(":scope > :is(.body-none, .debug-multipart-editor)"));
+          ?.querySelector(
+            ":scope > :is(.body-none, .debug-multipart-editor, .debug-urlencoded-editor)",
+          ));
     collect();
     if (["none", "form-data", "urlencoded"].includes(e.value))
       bodyExpanded = false;
@@ -4439,7 +4450,7 @@ function bind() {
       request().bodyType = "json";
     mark();
     render();
-    if (restoreEmptyBodyRadio)
+    if (restoreDebugBodyRadio)
       $('input[name="body-type"]:checked')?.focus({ preventScroll: true });
   });
   on("#expand-body", "click", () => {
@@ -4539,18 +4550,21 @@ function bind() {
     render();
     if (keepFocus) $("#format-json")?.focus({ preventScroll: true });
   });
-  const multipartProject = project,
-    multipartRequest = request();
-  const ownsMultipart = (element) =>
+  const formEditorProject = project,
+    formEditorRequest = request();
+  const debugFormEditor = ".debug-multipart-editor, .debug-urlencoded-editor";
+  const ownsDebugFormControl = (element) =>
     element.isConnected &&
-    project === multipartProject &&
-    request() === multipartRequest &&
-    isDebugMultipart(page, mode, param, multipartRequest?.bodyType);
-  const staleMultipartControl = (element) =>
-    Boolean(element.closest(".debug-multipart-editor")) &&
-    !ownsMultipart(element);
+    project === formEditorProject &&
+    request() === formEditorRequest &&
+    (element.closest(".debug-multipart-editor")
+      ? isDebugMultipart(page, mode, param, formEditorRequest?.bodyType)
+      : Boolean(element.closest(".debug-urlencoded-editor")) &&
+        isDebugURLencoded(page, mode, param, formEditorRequest));
+  const staleDebugFormControl = (element) =>
+    Boolean(element.closest(debugFormEditor)) && !ownsDebugFormControl(element);
   on("[data-field-type]", "change", (_, e) => {
-    if (staleMultipartControl(e)) return;
+    if (staleDebugFormControl(e)) return;
     const keepFieldFocus = document.activeElement === e;
     const index = e.dataset.fieldType;
     const r = request(),
@@ -4582,7 +4596,7 @@ function bind() {
       )?.focus({ preventScroll: true });
   });
   on("[data-field-file]", "change", async (_, e) => {
-    if (staleMultipartControl(e)) return;
+    if (staleDebugFormControl(e)) return;
     const file = e.files[0];
     const selectedProject = project;
     const selectedRequest = request();
@@ -4609,48 +4623,51 @@ function bind() {
     );
   });
   on("[data-pair]", "input", (_, e) => {
-    if (staleMultipartControl(e)) return;
+    if (staleDebugFormControl(e)) return;
     const [k, i, f] = e.dataset.pair.split(":");
     request()[k][i][f] = e.value;
     if (f === "key") {
       delete request()[k][i].schemaDefined;
-      if (k === "form" && $(".debug-multipart-editor")) {
+      if (k === "form" && $(".param-tabs")) {
         const bodyTab = $('.param-tabs [data-param="body"]');
-        const count = namedMultipartRows(request());
+        const count = namedFormRows(request());
         bodyTab.textContent = count ? `Body (${count})` : "Body";
       }
     }
     mark();
   });
   on("[data-pair-enabled]", "change", (_, e) => {
-    if (staleMultipartControl(e)) return;
+    if (staleDebugFormControl(e)) return;
     const [k, i] = e.dataset.pairEnabled.split(":");
     request()[k][i].enabled = e.checked;
     if (k === "form")
-      syncMultipartAll($("#debug-multipart-enable-all"), request().form);
+      syncMultipartAll(
+        $("#debug-multipart-enable-all, #debug-urlencoded-enable-all"),
+        request().form,
+      );
     mark();
   });
-  syncMultipartAll(
-    $("#debug-multipart-enable-all"),
-    multipartRequest?.form || [],
-  );
-  on("#debug-multipart-enable-all", "change", (_, element) => {
-    if (!ownsMultipart(element) || !multipartRequest.form.length) return;
-    for (const row of multipartRequest.form) row.enabled = element.checked;
-    for (const checkbox of document.querySelectorAll(
-      ".debug-multipart-editor [data-pair-enabled]",
-    ))
+  const formEnableAll =
+    "#debug-multipart-enable-all, #debug-urlencoded-enable-all";
+  syncMultipartAll($(formEnableAll), formEditorRequest?.form || []);
+  on(formEnableAll, "change", (_, element) => {
+    if (!ownsDebugFormControl(element) || !formEditorRequest.form.length)
+      return;
+    for (const row of formEditorRequest.form) row.enabled = element.checked;
+    for (const checkbox of element
+      .closest(debugFormEditor)
+      .querySelectorAll("[data-pair-enabled]"))
       checkbox.checked = element.checked;
-    syncMultipartAll(element, multipartRequest.form);
+    syncMultipartAll(element, formEditorRequest.form);
     mark();
   });
-  const commitMultipartRow = (event, element) => {
-    if (event.isComposing || !ownsMultipart(element)) return;
+  const commitDebugFormRow = (event, element) => {
+    if (event.isComposing || !ownsDebugFormControl(element)) return;
     const row = newMultipartTextRow(element.value);
     if (!row) return;
-    const index = multipartRequest.form.length;
+    const index = formEditorRequest.form.length;
     const { selectionStart, selectionEnd, selectionDirection } = element;
-    multipartRequest.form.push(row);
+    formEditorRequest.form.push(row);
     mark();
     render();
     const key = $(`[data-pair="form:${index}:key"]`);
@@ -4658,8 +4675,9 @@ function bind() {
     if (selectionStart !== null && selectionEnd !== null)
       key?.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
   };
-  on("#debug-multipart-new-key", "input", commitMultipartRow);
-  on("#debug-multipart-new-key", "compositionend", commitMultipartRow);
+  const formNewKey = "#debug-multipart-new-key, #debug-urlencoded-new-key";
+  on(formNewKey, "input", commitDebugFormRow);
+  on(formNewKey, "compositionend", commitDebugFormRow);
   const composerProject = project;
   const composerRequest = request();
   const commitDebugPair = (event, input) => {
@@ -4688,9 +4706,13 @@ function bind() {
   on("[data-debug-pair-name]", "input", commitDebugPair);
   on("[data-debug-pair-name]", "compositionend", commitDebugPair);
   on("[data-add-pair]", "click", (_, e) => {
-    if (staleMultipartControl(e)) return;
+    if (staleDebugFormControl(e)) return;
     if (mode === "design") collect();
     const key = e.dataset.addPair;
+    if (key === "form" && e.closest(".debug-urlencoded-editor")) {
+      $("#debug-urlencoded-new-key")?.focus();
+      return;
+    }
     if (ownsDebugPairComposer(key, page, mode, param)) {
       $(`[data-debug-pair-name="${key}"]`)?.focus();
       return;
@@ -4699,11 +4721,11 @@ function bind() {
     request()[key].push({ key: "", value: "", enabled: true });
     mark();
     render();
-    if (mode === "design" || (key === "form" && $(".debug-multipart-editor")))
+    if (mode === "design" || (key === "form" && $(debugFormEditor)))
       $(`[data-pair="${key}:${index}:key"]`)?.focus();
   });
   on("[data-remove-pair]", "click", (_, e) => {
-    if (staleMultipartControl(e)) return;
+    if (staleDebugFormControl(e)) return;
     if (mode === "design") collect();
     const [k, i] = e.dataset.removePair.split(":");
     request()[k].splice(Number(i), 1);
