@@ -549,7 +549,7 @@ try {
   assert.equal(await filter.inputValue(), "only note");
   await rows.first().press("Enter");
   assert.equal(await body.inputValue(), insertedBody);
-  for (const flip of [
+  const flips = [
     () => page.locator("#theme").click(),
     () => page.locator("#response-layout").click(),
     async () =>
@@ -558,7 +558,9 @@ try {
           ? { width: 430, height: 760 }
           : { width: 1363, height: 1023 },
       ),
-  ]) {
+  ];
+  for (const [index, flip] of flips.entries()) {
+    const unchangedEditor = index === 1 ? await body.elementHandle() : null;
     await flip();
     await tablist.waitFor({ state: "detached" });
     assert(
@@ -570,8 +572,12 @@ try {
         .isVisible(),
     );
     assert.equal(await body.inputValue(), insertedBody);
+    if (unchangedEditor)
+      assert(await unchangedEditor.evaluate((node) => node.isConnected));
     await flip();
     await tablist.waitFor();
+    if (unchangedEditor)
+      assert(await unchangedEditor.evaluate((node) => node.isConnected));
     assert.equal(await filter.inputValue(), "only note");
     assert.equal(await body.inputValue(), insertedBody);
   }
