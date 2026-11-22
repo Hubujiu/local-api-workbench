@@ -138,6 +138,15 @@ try {
             .querySelector(".design-query-equality")
             ?.getBoundingClientRect().x ?? null,
         add: text(table.querySelector(".design-empty-pair"), "＋").center,
+        controls: [
+          ".design-empty-pair",
+          '[data-design-query-draft-enabled="row"]',
+        ].map((selector) => {
+          const bounds = table.querySelector(selector)?.getBoundingClientRect();
+          return (
+            bounds && { x: bounds.x, right: bounds.right, width: bounds.width }
+          );
+        }),
         insideRules: [1, 2].map(
           (i) => getComputedStyle(cells[i]).borderRightWidth,
         ),
@@ -164,10 +173,21 @@ try {
     near(geometry.name, 416, 3);
     near(geometry.value, 711, 4);
     near(geometry.description, 1031, 3);
-    near(geometry.add, 399, 4);
     assert.deepEqual(geometry.insideRules, ["0px", "0px"]);
-    if (equality) near(geometry.equality, 687, 3);
-    else assert.equal(geometry.equality, null);
+    if (equality) {
+      near(geometry.equality, 687, 3);
+      const [addButton, enabledBox] = geometry.controls;
+      const firstCell = geometry.cells[0];
+      const nameCell = geometry.cells[1];
+      assert(enabledBox.x >= firstCell.x);
+      assert(enabledBox.right <= firstCell.x + firstCell.width);
+      assert(addButton.x >= nameCell.x);
+      assert(addButton.right <= nameCell.x + nameCell.width);
+      assert(addButton.width >= 24);
+    } else {
+      near(geometry.add, 399, 4);
+      assert.equal(geometry.equality, null);
+    }
     near(geometry.box.height, 73, 2);
   };
 
@@ -277,10 +297,105 @@ try {
   assert.equal(await equals.isChecked(), true);
   assert.equal(await all("query").count(), 0);
   assert.deepEqual(writes, []);
+  const draftType = panel.locator("[data-design-query-draft-type]");
+  const draftRequired = panel.getByRole("button", {
+    name: "待命名 Query 参数必填",
+  });
+  const draftHeader = panel.getByRole("checkbox", {
+    name: "启用待命名 Query 参数（表头）",
+    exact: true,
+  });
+  const draftEnabled = panel.getByRole("checkbox", {
+    name: "启用待命名 Query 参数",
+    exact: true,
+  });
+  const typeMenu = panel.getByRole("menu", { name: "Query 标量类型" });
+  const chooseInteger = async () => {
+    await draftType.press("ArrowDown");
+    assert.deepEqual(
+      await typeMenu.getByRole("menuitemradio").allTextContents(),
+      ["string", "number", "integer", "boolean"],
+    );
+    await typeMenu
+      .getByRole("menuitemradio", { name: "integer", exact: true })
+      .press("Enter");
+    assert.equal(await draftType.innerText(), "integer");
+    assert.equal(await focus(draftType), true);
+  };
+  assert.equal(await draftType.innerText(), "string");
+  assert.equal(await draftRequired.getAttribute("aria-pressed"), "false");
+  assert.equal(await draftHeader.isChecked(), true);
+  assert.equal(await draftEnabled.isChecked(), true);
+  await add().press("Enter");
+  assert.equal(await focus(compose("Query")), true);
+  await chooseInteger();
+  await draftRequired.press("Enter");
+  await draftHeader.press("Space");
+  assert.equal(await draftRequired.getAttribute("aria-pressed"), "true");
+  assert.equal(await draftEnabled.isChecked(), false);
+  await draftEnabled.press("Space");
+  assert.equal(await draftHeader.isChecked(), true);
+  await draftHeader.press("Space");
+  assert.equal(await draftEnabled.isChecked(), false);
+  const provisionalStatus = panel.getByRole("status");
+  await provisionalStatus.waitFor();
+  assert.equal(
+    await provisionalStatus.textContent(),
+    "待命名 Query 参数选项尚未加入接口；填写参数名后才能保存。",
+  );
+  await capture("query-provisional-desktop");
+  await page.locator("#save-project").press("Enter");
+  await page
+    .getByText(/待命名 Query 参数选项未保存：请返回设计 Query/)
+    .waitFor();
+  assert.equal(await all("query").count(), 0);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(await app.store.get(owner.id), baseline);
+
+  await draftType.press("ArrowDown");
+  const staleDraft = await typeMenu
+    .getByRole("menuitemradio", { name: "boolean" })
+    .elementHandle();
+  await page.locator('[data-open-tab="preserved"]').press("Enter");
+  await tab("Query").press("Enter");
+  await staleDraft.evaluate((node) => node.click());
+  assert.equal(await draftType.innerText(), "string");
+  assert.equal(await draftRequired.getAttribute("aria-pressed"), "false");
+  assert.equal(await draftEnabled.isChecked(), true);
+  await draftRequired.press("Enter");
+  await page.locator('[data-close-tab="preserved"]').press("Enter");
+  await tab("Query").press("Enter");
+  assert.equal(await draftType.innerText(), "string");
+  assert.equal(await draftRequired.getAttribute("aria-pressed"), "false");
+  assert.equal(await draftEnabled.isChecked(), true);
+  await request("preserved").click();
+  await page.locator('[data-open-tab="authored"]').press("Enter");
+  await tab("Query").press("Enter");
+  await chooseInteger();
+  await draftRequired.press("Enter");
+  await draftHeader.press("Space");
   await compose("Query").fill(" filter+raw ");
   assert.equal(await panel.locator(".design-pairs-query-empty").count(), 0);
+  assert.equal(await draftType.count(), 0);
   assert.equal(await key("query").inputValue(), " filter+raw ");
-  await value("query").fill("a+b");
+  assert.equal(
+    await panel
+      .getByRole("button", { name: /更改 .* 的类型：integer/ })
+      .count(),
+    1,
+  );
+  assert.equal(
+    await panel
+      .locator("[data-design-query-required]")
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  assert.equal(
+    await panel.locator('[data-pair-enabled="query:0"]').isChecked(),
+    false,
+  );
+  await panel.locator('[data-pair-enabled="query:0"]').check();
+  await value("query").fill("001");
   await panel
     .getByRole("checkbox", { name: "空值 Query 参数添加等号" })
     .uncheck();
@@ -319,6 +434,16 @@ try {
   const narrowEmpty = await emptySurface();
   assert.equal(narrowEmpty.borderCollapse, "collapse");
   assert.equal(narrowEmpty.fontSize, "12px");
+  await page.locator("#theme").press("Enter");
+  await chooseInteger();
+  await draftHeader.press("Space");
+  assert.equal(await draftEnabled.isChecked(), false);
+  await capture("query-provisional-narrow-dark");
+  await panel.getByRole("button", { name: "重置待命名选项" }).press("Enter");
+  assert.equal(await focus(compose("Query")), true);
+  assert.equal(await draftType.innerText(), "string");
+  assert.equal(await draftEnabled.isChecked(), true);
+  await page.locator("#theme").press("Enter");
   assert.equal(
     await page.evaluate(() => document.documentElement.scrollWidth),
     430,
@@ -353,7 +478,13 @@ try {
     },
   ]);
   assert.deepEqual(result.query, [
-    { key: " filter+raw ", value: "a+b", enabled: true },
+    {
+      key: " filter+raw ",
+      value: "001",
+      enabled: true,
+      schema: { type: "integer" },
+      required: true,
+    },
   ]);
   assert.equal(result.queryAddEqual, false);
   assert.deepEqual(
@@ -364,6 +495,18 @@ try {
   await mode("design").press("Enter");
   await tab("Header").press("Enter");
   assert.equal(await key("headers").inputValue(), "X-Verification");
+  await tab("Query").press("Enter");
+  assert.equal(await value("query").inputValue(), "001");
+  assert.equal(
+    await panel
+      .locator("[data-design-query-required]")
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  assert.match(
+    await panel.locator("[data-design-query-type]").innerText(),
+    /integer/,
+  );
   assert.deepEqual(forbidden, [], "no traffic or automatic save");
   assert.deepEqual(errors, []);
   console.log(
