@@ -108,3 +108,27 @@ test("existing type, folder and case-insensitive URL filters still map to exact 
   );
   assert.doesNotMatch(render({ search: "events" }), /data-request="root"/);
 });
+
+test("row menu trigger is a distinct control only for restorable ordinary HTTP rows", () => {
+  const html = render();
+  assert.deepEqual(
+    [...html.matchAll(/data-api-row-menu="([^"]+)"/g)].map(([, id]) => id),
+    ["first", "root", "last"],
+  );
+  assert.match(
+    html,
+    /<\/button><button[^>]+data-api-row-menu="root"[^>]+aria-haspopup="menu"/,
+  );
+  assert.match(html, /id="api-tree-row-menu" popover role="menu"/);
+  assert.doesNotMatch(render({ page: "protocols" }), /api-tree-row-menu/);
+  assert.doesNotMatch(render({ search: "events" }), /api-tree-row-menu/);
+  assert.doesNotMatch(
+    render({
+      project: {
+        ...project,
+        settings: { ...project.settings, nativeInheritance: {} },
+      },
+    }),
+    /api-tree-row-menu/,
+  );
+});

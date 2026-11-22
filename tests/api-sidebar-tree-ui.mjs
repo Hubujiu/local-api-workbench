@@ -86,7 +86,9 @@ try {
   await editor.locator('[data-param="auth"]').click();
   const sidebar = page.locator('.sidebar[data-sidebar-page="apis"]');
   const tree = sidebar.locator("#tree");
-  const rootRequest = tree.locator(':scope > [data-request="verification"]');
+  const rootRequest = tree.locator(
+    ':scope > .api-tree-request-row > [data-request="verification"]',
+  );
   const doc = tree.locator(':scope > [data-document-index="0"]');
   const folder = tree.locator(':scope > [data-tree-folder="示例接口"]');
   const summary = folder.locator(":scope > summary");

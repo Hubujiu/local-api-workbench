@@ -9,6 +9,8 @@ const paths = {
   "editor-expand": '<path d="M14 4h6v6m0-6-6 6M10 20H4v-6m0 6 6-6"/>',
   "body-empty":
     '<path d="M7 9V3h10v6m-8-3h6m-6 2h6M4 9h16l2 5v7H2v-7zm-2 5h7l1 3h4l1-3h7"/>',
+  "copy-request":
+    '<rect x="7" y="7" width="13" height="13" rx="2"/><path d="M16 7V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2m4-2.5h5m-2.5-2.5v5"/>',
   folder:
     '<path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>',
   "plan-play": '<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/>',

@@ -7,6 +7,7 @@ import {
 import { selectedSSEWorkbench } from "./sse-workbench.js";
 import { protocolDefinitionEdit } from "./protocol-definition-edit.js";
 import { renderWorkspaceTree } from "./api-sidebar-tree.js";
+import { bindApiRowMenu } from "./api-row-menu.js";
 import { bindPlanPickerTree } from "./plan-step-picker.js";
 import { unsentResponseData } from "./http-response-empty.js";
 import {
@@ -4419,72 +4420,14 @@ function bind() {
   });
   on("#save-menu-copy", "click", () => $("#duplicate").click());
   on("#save-menu-project", "click", () => save());
-  on("#duplicate", "click", () => {
-    collect();
-    const r = structuredClone(request());
-    r.id = uid();
-    r.name += " 副本";
-    project.requests.push(r);
-    current = r.id;
-    response = null;
-    if (!opened.includes(current)) opened.push(current);
-    mark();
-    render();
-  });
+  on("#duplicate", "click", () => duplicateRequest(request()));
   on("#delete", "click", async (_, opener) => {
     if (project.settings?.nativeInheritance) {
       await changeNativeRequestLifecycle(request().id, false);
       return;
     }
-    const owner = project,
-      target = request(),
-      name = target?.name,
-      version = editVersion;
-    const ownsTarget = () =>
-      project === owner &&
-      page === "apis" &&
-      !workspaceDocument() &&
-      current === target?.id &&
-      request() === target &&
-      !target?.deletedAt;
-    if (!target || !ownsTarget() || busy || saving)
-      throw Error("接口已变化或操作正在进行，请稍后再试");
-    let moved = false,
-      dialogRevision;
-    modal(
-      "确定将 " + name + " 移到回收站？",
-      '<div class="request-trash-confirmation" aria-hidden="true"></div>',
-      () => {
-        if (
-          !ownsTarget() ||
-          target.name !== name ||
-          modalRevision !== dialogRevision ||
-          !$("#dialog").open ||
-          editVersion !== version ||
-          busy ||
-          saving
-        )
-          throw Error("接口或草稿已变化，未移到回收站；请重新打开确认");
-        target.deletedAt = new Date().toISOString();
-        current = owner.requests.find((r) => !r.deletedAt)?.id;
-        response = responses.get(owner.id + ":" + current) || null;
-        mark();
-        moved = true;
-        render();
-      },
-      "确定",
-      () => {
-        if (project !== owner || page !== "apis") return;
-        if (!moved && ownsTarget() && opener?.isConnected)
-          opener.focus({ preventScroll: true });
-        else if (moved)
-          ($("#request-name") || $("#welcome-add"))?.focus({
-            preventScroll: true,
-          });
-      },
-    );
-    dialogRevision = modalRevision;
-    $('#dialog footer button[value="cancel"]').focus();
+    if (workspaceDocument()) throw Error("没有当前接口可删除");
+    confirmOrdinaryRequestTrash(request(), opener);
   });
   on("[data-restore]", "click", async (_, e) => {
     if (project.settings?.nativeInheritance) {
@@ -6575,7 +6518,107 @@ function bind() {
     ),
   );
 }
+function duplicateRequest(target) {
+  collect();
+  const copy = structuredClone(target);
+  copy.id = uid();
+  copy.name += " 副本";
+  project.requests.push(copy);
+  current = copy.id;
+  activeDocumentId = null;
+  response = null;
+  if (!opened.includes(current)) opened.push(current);
+  mark();
+  render();
+}
+
+function ordinaryRequestRowOwner(target) {
+  const owner = project,
+    selection = current,
+    documentId = activeDocumentId,
+    name = target?.name,
+    version = editVersion;
+  return () =>
+    Boolean(
+      target &&
+        project === owner &&
+        page === "apis" &&
+        current === selection &&
+        activeDocumentId === documentId &&
+        target.name === name &&
+        owner.requests.find((item) => item.id === target.id) === target &&
+        !owner.settings?.nativeInheritance &&
+        !target.deletedAt &&
+        editVersion === version &&
+        !busy &&
+        !saving,
+    );
+}
+
+function confirmOrdinaryRequestTrash(target, opener) {
+  const owner = project,
+    selected = !workspaceDocument() && request() === target,
+    ownsTarget = ordinaryRequestRowOwner(target);
+  if (!ownsTarget()) throw Error("接口已变化或操作正在进行，请稍后再试");
+  let moved = false,
+    dialogRevision;
+  modal(
+    "确定将 " + target.name + " 移到回收站？",
+    '<div class="request-trash-confirmation" aria-hidden="true"></div>',
+    () => {
+      if (
+        !ownsTarget() ||
+        modalRevision !== dialogRevision ||
+        !$("#dialog").open
+      )
+        throw Error("接口或草稿已变化，未移到回收站；请重新打开确认");
+      // A different editor remains open. Validate/retain its draft before a redraw.
+      if (!selected) collect();
+      target.deletedAt = new Date().toISOString();
+      if (current === target.id) {
+        current = owner.requests.find((r) => !r.deletedAt)?.id;
+        if (selected)
+          response = responses.get(owner.id + ":" + current) || null;
+      }
+      mark();
+      moved = true;
+      render();
+    },
+    "确定",
+    () => {
+      if (project !== owner || page !== "apis") return;
+      if (!moved && opener?.isConnected) opener.focus({ preventScroll: true });
+      else if (moved)
+        (
+          $("#request-name") ||
+          $(".tab.selected .tab-switch") ||
+          $("#welcome-add")
+        )?.focus({ preventScroll: true });
+    },
+  );
+  dialogRevision = modalRevision;
+  $('#dialog footer button[value="cancel"]').focus();
+}
+
 function bindTree() {
+  bindApiRowMenu($("#tree"), {
+    prepare(id) {
+      if ($("#dialog").open) throw Error("请先结束当前对话框");
+      const target = project.requests.find((item) => item.id === id);
+      const owns = ordinaryRequestRowOwner(target);
+      if (!owns()) throw Error("接口已变化或操作正在进行，请稍后再试");
+      return (action, trigger) => {
+        if (!owns() || $("#dialog").open)
+          throw Error("接口或草稿已变化，请重新打开操作菜单");
+        if (action === "clone") {
+          duplicateRequest(target);
+          $(".tab.selected .tab-switch")?.focus({ preventScroll: true });
+        } else if (action === "trash")
+          confirmOrdinaryRequestTrash(target, trigger);
+      };
+    },
+    notify: toast,
+  });
   for (const folder of document.querySelectorAll("[data-tree-folder]")) {
     const key = project.id + ":" + folder.dataset.treeFolder;
     folder.ontoggle = () => {

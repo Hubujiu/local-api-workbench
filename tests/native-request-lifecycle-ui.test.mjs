@@ -309,6 +309,10 @@ test("actual application wiring awaits native controller and guards ordinary sav
     app.indexOf('  on("#delete",'),
     app.indexOf('  on("#send",'),
   );
+  const ordinaryTrash = app.slice(
+    app.indexOf("function ordinaryRequestRowOwner("),
+    app.indexOf("function bindTree()"),
+  );
   const execute = new Function(
     "project",
     "changeNativeRequestLifecycle",
@@ -317,11 +321,16 @@ test("actual application wiring awaits native controller and guards ordinary sav
     "render",
     "save",
     "responses",
-    `let current="r1",response, editVersion=0, modalRevision=0, page="apis", busy=false, saving=false;
+    `let current="r1",activeDocumentId=null,response, editVersion=0, modalRevision=0, page="apis", busy=false, saving=false;
       const handlers={};const on=(s,e,f)=>handlers[s]=f;
       const workspaceDocument=()=>null, $=()=>({ open:true, focus(){} });
       const modal=(title,_html,submit)=>{modalRevision++;handlers.title=title;handlers.confirm=submit};
+      const collect=()=>{};
+      ${ordinaryTrash};
       ${handlers};
+      handlers.openOther=(target,opener)=>confirmOrdinaryRequestTrash(target,opener);
+      handlers.selection=()=>current;
+      handlers.select=(id)=>{current=id};
       handlers.edit=()=>{editVersion++};
       return handlers;`,
   );
@@ -377,6 +386,16 @@ test("actual application wiring awaits native controller and guards ordinary sav
   assert.equal(saved, 0);
   await old["[data-restore]"](null, { dataset: { restore: "r1" } });
   assert.equal(ordinary.requests[0].deletedAt, undefined);
+  assert.equal(saved, 1);
+  const other = { id: "other", name: "Another request" };
+  ordinary.requests.push(other);
+  old.select("r1");
+  old.openOther(other);
+  assert.match(old.title, /Another request/);
+  old.confirm();
+  assert(other.deletedAt);
+  assert.equal(ordinary.requests[0].deletedAt, undefined);
+  assert.equal(old.selection(), "r1");
   assert.equal(saved, 1);
 });
 
