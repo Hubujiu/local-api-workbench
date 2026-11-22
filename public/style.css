@@ -40,6 +40,10 @@ body.dark {
   --muted: #a69b83;
   --text: #d8cfb5;
   --hover: #30291c;
+  --shell-top: #14110c;
+  --shell-top-line: #2d291e;
+  --shell-rail: #242017;
+  --shell-rail-selected: #3b3223;
   color: var(--text);
   background: var(--bg);
 }
@@ -99,13 +103,13 @@ textarea {
 }
 header.top {
   height: 44px;
-  background: var(--top);
+  background: var(--shell-top, var(--top));
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--shell-top-line, var(--line));
 }
 .brand {
   font-weight: 750;
@@ -145,7 +149,7 @@ header.top {
 }
 nav.rail {
   width: 50px;
-  background: var(--top);
+  background: var(--shell-rail, var(--top));
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
@@ -185,7 +189,7 @@ body:not(.dark) nav.rail {
   outline-offset: -2px;
 }
 .rail button.active {
-  background: var(--hover);
+  background: var(--shell-rail-selected, var(--hover));
   color: var(--accent);
 }
 .rail .icon {
