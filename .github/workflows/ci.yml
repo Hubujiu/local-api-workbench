@@ -68,6 +68,7 @@ jobs:
       - run: node tests/scoped-export-surface-ui.mjs
       - run: node tests/local-project-import-ui.mjs
       - run: node tests/openapi-file-review-ui.mjs
+      - run: node tests/openapi-file-selection-ui.mjs
       - run: node tests/workspace-document-ui.mjs
       - run: node tests/workspace-document-image-ui.mjs
       - run: node tests/workspace-document-history-ui.mjs

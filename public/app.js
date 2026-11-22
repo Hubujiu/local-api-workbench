@@ -123,6 +123,12 @@ import {
   openAPIReviewMarkup,
   readOpenAPIReviewInput,
 } from "./openapi-file-review.js";
+import {
+  assertOpenAPISubsetPlan,
+  bindOpenAPISelection,
+  openAPISelectionScope,
+  scopedOpenAPIInput,
+} from "./openapi-file-selection.js";
 import { selectedDirectoryDocument } from "./apipost-directory-input.js";
 import { createCaseResultStore } from "./case-result-store.js";
 import { runCaseBatch, caseEvidence } from "./case-batch.js";
@@ -1448,9 +1454,17 @@ function bindOpenAPIFileReview(shell) {
       const route = "/projects/" + owner.id;
       const preview = await api(route + "/import-preview", "POST", input);
       assertSource();
-      const canApply = assertOpenAPIReview(preview, configRevision);
-      let pending = canApply ? { input, preview } : null;
-      let reviewRevision;
+      const allowed = assertOpenAPIReview(preview, configRevision);
+      const scope = allowed
+        ? openAPISelectionScope(input.document, preview)
+        : null;
+      const initialKeys = scope ? [...scope.labels.keys()] : null;
+      const canApply =
+        allowed &&
+        (!scope ||
+          scope.selectedClosure(initialKeys).size === scope.inventory.size);
+      let pending = canApply ? { input, preview, keys: initialKeys } : null;
+      let reviewRevision, choices;
       modal(
         "预览 Swagger / OpenAPI",
         openAPIReviewMarkup({
@@ -1459,15 +1473,21 @@ function bindOpenAPIFileReview(shell) {
           preview,
           input,
           canApply,
+          scope,
         }),
         async () => {
           const alert = $("#openapi-file-review-error");
           try {
             assertOwner(reviewRevision);
-            if (!pending || pending.preview.expiresAt <= Date.now())
+            if (
+              !pending ||
+              pending.preview.expiresAt <= Date.now() ||
+              (choices && !choices.matches(pending.keys))
+            )
               throw Error("预览已失效，请关闭后重新选择文件并预览");
             const accept = pending;
             pending = null; // Never replay the attempted write or use its token again.
+            choices?.lock();
             const operation = projectImports.begin(owner.id, "interfaces");
             try {
               const receipt = await api(route + "/import-apply", "POST", {
@@ -1523,11 +1543,34 @@ function bindOpenAPIFileReview(shell) {
         "确认导入",
         () => {
           pending = null;
+          choices?.lock();
           $("#import")?.focus();
         },
       );
       reviewRevision = modalRevision;
       $("#dialog-save").disabled = !canApply;
+      if (scope) {
+        choices = bindOpenAPISelection($(".openapi-file-review"), canApply, {
+          invalidate() {
+            pending = null;
+            $("#dialog-save").disabled = true;
+          },
+          async preview(keys) {
+            assertOwner(reviewRevision);
+            const scoped = scopedOpenAPIInput(input, keys);
+            const plan = await api(route + "/import-preview", "POST", scoped);
+            assertOwner(reviewRevision);
+            const excluded = assertOpenAPISubsetPlan(scope, keys, plan);
+            if (!assertOpenAPIReview(plan, configRevision, excluded))
+              throw Error("所选范围包含不可导入的变更；未导入任何内容");
+            return { input: scoped, preview: plan, keys };
+          },
+          accept(current) {
+            pending = current;
+            $("#dialog-save").disabled = false;
+          },
+        });
+      }
       $(".openapi-file-review").focus();
     } catch (error) {
       if (isOriginal()) status.textContent = error.message;

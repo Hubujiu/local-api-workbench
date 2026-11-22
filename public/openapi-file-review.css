@@ -95,3 +95,35 @@
     margin-block: 0;
   }
 }
+#dialog-content .openapi-file-selection-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding-top: 4px;
+}
+#dialog-content .openapi-file-choice,
+#dialog-content .openapi-file-selection-tools label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.openapi-file-choice {
+  min-width: 0;
+  cursor: pointer;
+}
+.openapi-file-review input[type="checkbox"] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+#openapi-review-selection-status {
+  margin: 4px 0;
+}
+#openapi-review-selection-status:empty {
+  margin: 0;
+}
