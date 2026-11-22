@@ -94,7 +94,6 @@ try {
   const apply = pane.getByRole("button", { name: "应用到正文", exact: true });
   const discard = pane.getByRole("button", { name: "放弃", exact: true });
   const save = page.locator("#save-project");
-  const modal = page.locator("#dialog");
   const names = () =>
     rail.locator("[data-graphql-query-row]").allTextContents();
   const activeName = () => rail.locator('[aria-current="true"]').textContent();
@@ -102,6 +101,24 @@ try {
     locator.evaluate((node) => node === document.activeElement);
   const menu = rail.getByRole("menu", { name: "查询操作", exact: true });
   const rename = menu.getByRole("menuitem", { name: "重命名", exact: true });
+  const renameField = rail.getByRole("textbox", {
+    name: "查询名称",
+    exact: true,
+  });
+  const openRename = async (name) => {
+    await more(name).press("ArrowDown");
+    assert.equal(await focus(rename), true);
+    await rename.press("Enter");
+    assert.equal(await focus(renameField), true);
+    assert.equal(await renameField.inputValue(), name);
+    assert.deepEqual(
+      await renameField.evaluate((field) => [
+        field.selectionStart,
+        field.selectionEnd,
+      ]),
+      [0, name.length],
+    );
+  };
   const remove = menu.getByRole("menuitem", { name: "删除", exact: true });
   const deletion = pane.getByRole("alertdialog", { name: "删除", exact: true });
   const cancelDelete = deletion.getByRole("button", {
@@ -176,22 +193,50 @@ try {
   assert.equal(await query.inputValue(), second);
   await apply.press("Enter");
 
-  await more("自定义查询 2").press("ArrowDown");
-  await rename.press("Enter");
-  const renameField = modal.getByRole("textbox", {
-    name: "查询名称",
-    exact: true,
-  });
-  assert.equal(await focus(renameField), true);
+  const originalRow = await more("自定义查询 2").locator("..").boundingBox();
+  assert(originalRow, "the second named row is visible before renaming");
+  await openRename("自定义查询 2");
+  assert.equal(await page.locator("#dialog").isVisible(), false);
+  const renameBounds = await renameField.boundingBox();
+  console.log("GRAPHQL_NAMED_RENAME_GEOMETRY", JSON.stringify(renameBounds));
+  await capture("rename");
+  assert(Math.abs(renameBounds.x - originalRow.x - 10) <= 1);
+  assert(
+    Math.abs(
+      renameBounds.y +
+        renameBounds.height / 2 -
+        originalRow.y -
+        originalRow.height / 2,
+    ) <= 1,
+    "the editor stays vertically centered in the query row it replaces",
+  );
+  assert.deepEqual(
+    [renameBounds.width, renameBounds.height].map(Math.round),
+    [99, 27],
+  );
+  await renameField.fill("escape leaves original");
+  await renameField.press("Escape");
+  assert.equal(await renameField.count(), 0);
+  assert.equal(await focus(more("自定义查询 2")), true);
+
+  await openRename("自定义查询 2");
+  await renameField.fill("blur leaves original");
+  await query.click({ position: { x: 260, y: 20 } });
+  assert.equal(await renameField.count(), 0);
+  assert.equal(await focus(query), true);
+  assert.deepEqual(await names(), ["自定义查询", "自定义查询 2"]);
+
+  await openRename("自定义查询 2");
   await renameField.fill("stale rename");
-  // Simulate a stale queued control callback while the shared dialog is open.
+  const staleRename = await renameField.elementHandle();
   await page
     .locator('[data-request="plain"]')
     .evaluate((element) => element.click());
-  await modal.getByRole("button", { name: "确定", exact: true }).press("Enter");
-  assert.match(await page.locator("#toast").textContent(), /查询或窗口已变化/);
-  await escape();
-  await modal.waitFor({ state: "hidden" });
+  await staleRename.evaluate((field) =>
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    ),
+  );
   await page.locator('[data-request="g"]').click();
   assert.deepEqual(await names(), ["自定义查询", "自定义查询 2"]);
   await row("自定义查询").press("Enter");
@@ -200,11 +245,17 @@ try {
   assert.equal(await query.inputValue(), second);
   assert.equal(await vars.inputValue(), "null");
 
-  await more("自定义查询 2").press("ArrowDown");
-  await rename.press("Enter");
+  await openRename("自定义查询 2");
+  await renameField.fill("  ");
+  await renameField.press("Enter");
+  assert.match(await pane.getByRole("alert").textContent(), /查询名称须/);
+  assert.equal(await focus(renameField), true);
   await renameField.fill("Second Fixture");
-  await modal.getByRole("button", { name: "确定", exact: true }).press("Enter");
-  await modal.waitFor({ state: "hidden" });
+  await renameField.press("Control+s");
+  await renameField.press("Control+Enter");
+  assert.equal(await renameField.isVisible(), true);
+  await renameField.press("Enter");
+  assert.equal(await renameField.count(), 0);
   assert.equal(await focus(more("Second Fixture")), true);
   assert.equal(await query.inputValue(), second);
   assert.equal(await activeName(), "Second Fixture");
@@ -307,6 +358,12 @@ try {
   assert.equal(await activeName(), "Second Fixture");
   assert.equal(await query.inputValue(), second);
   await page.setViewportSize({ width: 430, height: 830 });
+  await openRename("Second Fixture");
+  const narrowRename = await renameField.boundingBox();
+  assert(narrowRename.x >= 0 && narrowRename.x + narrowRename.width <= 430);
+  await capture("rename-narrow", true);
+  await renameField.press("Escape");
+  assert.equal(await focus(more("Second Fixture")), true);
   await openDelete("Second Fixture");
   const narrowDelete = await deletion.boundingBox();
   assert(narrowDelete.x >= 8 && narrowDelete.x + narrowDelete.width <= 422);
@@ -329,7 +386,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "GRAPHQL_NAMED_WORKSPACE_UI_PASS order, real selection and bodies, stale modal, cancel/confirm, explicit save only, no dispatch",
+    "GRAPHQL_NAMED_WORKSPACE_UI_PASS order, real selection and bodies, inline rename, stale controls, cancel/confirm, explicit save only, no dispatch",
   );
 } finally {
   await browser?.close();

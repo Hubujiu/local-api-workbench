@@ -178,7 +178,15 @@ export function bindGraphQLWorkspace(
       active,
       add: (keyboard) => attempt(() => named.add(keyboard)),
       select: (id, keyboard) => attempt(() => named.select(id, keyboard)),
-      arrange: (id) => attempt(() => named.arrange(id)),
+      prepareRename: (id) => {
+        const action = attempt(() => named.prepareRename(id));
+        return (
+          action && {
+            name: action.name,
+            apply: (name) => attempt(() => action.apply(name)),
+          }
+        );
+      },
       prepareDelete: (id) => {
         const action = attempt(() => named.prepareDelete(id));
         return (

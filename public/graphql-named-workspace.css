@@ -153,3 +153,22 @@
   min-height: 24px;
   padding: 2px 5px;
 }
+
+.graphql-named-rail [data-graphql-query-row][hidden] {
+  display: none;
+}
+.graphql-named-rail .graphql-named-inline-rename {
+  box-sizing: border-box;
+  width: min(99px, calc(100% - 10px));
+  min-width: 0;
+  height: 27px;
+  margin-inline-start: 10px;
+  padding: 3px 4px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+}
+.graphql-named-rail .graphql-named-inline-rename:focus-visible {
+  outline-offset: 1px;
+}
