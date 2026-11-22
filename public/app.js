@@ -6414,8 +6414,61 @@ function bindWorkspaceModel() {
     render();
     reveal("#dictionary-surface-heading");
   });
+  const fieldInput = (id) => "#model-field-name-" + id;
+  const startField = (after) => {
+    if (!current()) return;
+    const id = draft.tree.begin(draft.schema, after);
+    render();
+    reveal(fieldInput(id));
+  };
+  const resolveField = (id, cancel = false) => {
+    if (!current()) return;
+    const index = draft.tree.pending.findIndex((field) => field.id === id);
+    if (cancel) draft.tree.cancel(id);
+    else if (!draft.tree.confirm(draft, id)) {
+      render();
+      reveal(fieldInput(id));
+      return;
+    }
+    const next = draft.tree.pending[index] || draft.tree.pending.at(-1);
+    render();
+    reveal(next ? fieldInput(next.id) : "#model-root-add");
+  };
+  on("#model-root-expand", "click", () => {
+    if (!current()) return;
+    draft.tree.expanded = !draft.tree.expanded;
+    render();
+    reveal("#model-root-expand");
+  });
+  on("#model-root-add", "click", () => startField());
+  on("[data-model-field-sibling]", "click", (_, button) =>
+    startField(button.dataset.modelFieldSibling),
+  );
+  on("[data-model-field-name]", "input", (_, input) => {
+    if (current()) draft.tree.input(input.dataset.modelFieldName, input.value);
+  });
+  on("[data-model-field-name]", "keydown", (event, input) => {
+    if (
+      event.isComposing ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      (event.key !== "Enter" && event.key !== "Escape")
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    resolveField(input.dataset.modelFieldName, event.key === "Escape");
+  });
+  on("[data-model-field-confirm]", "click", (_, button) =>
+    resolveField(button.dataset.modelFieldConfirm),
+  );
+  on("[data-model-field-cancel]", "click", (_, button) =>
+    resolveField(button.dataset.modelFieldCancel, true),
+  );
   on("#model-workspace-apply", "click", () => {
     if (!current()) return;
+    draft.tree.assertResolved();
     saveModel(owner, undefined, draft, uid());
     workspaceModelDrafts.finish(owner.id, draft);
     mark();
@@ -6424,6 +6477,7 @@ function bindWorkspaceModel() {
   });
   on("#model-workspace-raw", "click", () => {
     if (!current()) return;
+    draft.tree.assertResolved();
     modal(
       "Raw",
       `<div class="model-workspace-raw"><textarea id="model-workspace-json" aria-label="模型 Schema JSON" spellcheck="false" autofocus>${esc(JSON.stringify(draft.schema, null, 2))}</textarea></div>`,

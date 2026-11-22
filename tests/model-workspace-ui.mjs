@@ -29,7 +29,10 @@ try {
   const writes = [];
   const errors = [];
   let allowSave = false;
-  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("pageerror", (error) => {
+    errors.push(error.message);
+    console.error("MODEL_WORKSPACE_PAGE_ERROR", error.message);
+  });
   await page.route("**/*", (route) => {
     const request = route.request(),
       url = new URL(request.url());
@@ -101,10 +104,11 @@ try {
   assert(await focusIs(name));
   assert.equal(await name.inputValue(), "");
   assert.equal(await folder.inputValue(), "");
-  await draft.getByText("根节点", { exact: true }).waitFor();
-  await draft.getByText("object", { exact: true }).waitFor();
   await name.blur();
   await capture("unsaved-editor");
+  const rootToggle = draft.getByRole("button", { name: "根节点", exact: true });
+  await rootToggle.waitFor();
+  await draft.getByText("object", { exact: true }).waitFor();
   const bounds = await draft.evaluate((region) =>
     Object.fromEntries(
       [
@@ -128,7 +132,7 @@ try {
   const frame = bounds[".model-draft-schema"];
   assert.equal(Math.round(frame.x), 380);
   assert(
-    Math.abs(frame.y - 167) <= 6,
+    Math.abs(frame.y - 167) <= 2,
     "Schema frame should align with native y167",
   );
 
@@ -147,20 +151,109 @@ try {
   await dialog.waitFor({ state: "hidden" });
   assert(await focusIs(raw));
   assert(await draft.getByText("object", { exact: true }).isVisible());
+  const rootAdd = draft.getByRole("button", { name: "添加子级节点" });
+  const fields = draft.getByRole("list", { name: "模型字段" });
+  const pending = fields.locator(".model-pending-field");
+  const children = fields.locator(".model-schema-field");
+  const inputField = (row) => row.getByRole("textbox", { name: "字段名称" });
+  const first = inputField(pending.first());
+  const plus = await rootAdd.boundingBox();
+  assert(Math.abs(plus.x + plus.width / 2 - 661) <= 2);
+  assert(Math.abs(plus.y + plus.height / 2 - 229) <= 4);
+  await rootToggle.press("Enter");
+  assert.equal(await rootToggle.getAttribute("aria-expanded"), "false");
+  assert(await fields.isHidden());
+  await rootAdd.press("Enter");
+  assert.equal(await rootToggle.getAttribute("aria-expanded"), "true");
+  assert(await focusIs(first));
+  assert.equal(await first.inputValue(), "");
+  await capture("field-add");
+  const pendingBounds = await pending.first().boundingBox();
+  const nameBounds = await first.boundingBox();
+  console.log(
+    "MODEL_WORKSPACE_INLINE_BOUNDS",
+    JSON.stringify({ plus, pendingBounds, nameBounds }),
+  );
+  assert(Math.abs(nameBounds.x - 433) <= 2);
+  assert(Math.abs(pendingBounds.y - 246) <= 2);
+  assert.equal(Math.round(pendingBounds.height), 32);
+  const expandedFrame = await draft
+    .locator(".model-draft-schema")
+    .boundingBox();
+  assert.equal(Math.round(expandedFrame.height - frame.height), 32);
+  await pending
+    .first()
+    .getByRole("button", { name: "添加相邻字段" })
+    .press("Enter");
+  const second = inputField(pending.nth(1));
+  assert.equal(await pending.count(), 2);
+  assert(await focusIs(second));
+  await capture("field-sibling");
+  await first.press("Enter");
+  const fieldAlert = pending.first().getByRole("alert");
+  await fieldAlert.waitFor();
+  assert.equal(await fieldAlert.textContent(), "字段名不能为空且至多200字符");
+  await first.fill("identifier");
+  await second.fill("discarded");
   await raw.press("Enter");
+  await page
+    .getByText("请先确认或取消正在添加的字段", { exact: true })
+    .waitFor();
+  assert(await dialog.isHidden());
+  await second.press("Escape");
+  assert.equal(await pending.count(), 1);
+  assert(await focusIs(first));
+  assert.equal(await first.inputValue(), "identifier");
+  await first.press("Enter");
+  assert.equal(await pending.count(), 0);
+  assert(await focusIs(rootAdd));
+  await children.getByText("identifier", { exact: true }).waitFor();
+  assert(await children.getByText("string", { exact: true }).isVisible());
+  await rootAdd.press("Enter");
+  await first.fill("identifier");
+  await pending
+    .first()
+    .getByRole("button", { name: "确认字段", exact: true })
+    .press("Enter");
+  await fieldAlert.waitFor();
+  assert.equal(await fieldAlert.textContent(), "字段已存在");
+  await pending
+    .first()
+    .getByRole("button", { name: "取消字段", exact: true })
+    .press("Enter");
+  assert.equal(await children.count(), 1);
+  await rootToggle.press("Enter");
+  assert(await children.first().isHidden());
+  await rootToggle.press("Enter");
+  assert(await children.first().isVisible());
+
+  await raw.press("Enter");
+  const fromInline = JSON.parse(await rawInput.inputValue());
+  assert.deepEqual(fromInline, {
+    type: "object",
+    properties: { identifier: { type: "string" } },
+  });
   await rawInput.fill("[]");
   await applyRaw.press("Enter");
   await page.getByText("模型Schema须为对象或布尔值", { exact: true }).waitFor();
   const schema = {
-    type: "array",
-    items: { type: "string" },
+    ...fromInline,
     description: "Synthetic rows",
+    required: ["identifier"],
+    properties: {
+      identifier: { type: "integer", description: "Synthetic value" },
+    },
   };
   await rawInput.fill(JSON.stringify(schema));
   await applyRaw.press("Enter");
   await dialog.waitFor({ state: "hidden" });
-  await draft.getByText("array", { exact: true }).waitFor();
+  await children.getByText("integer", { exact: true }).waitFor();
+  assert(await children.getByText("必填", { exact: true }).isVisible());
+  assert(
+    await children.getByText("Synthetic value", { exact: true }).isVisible(),
+  );
   assert(await focusIs(raw));
+  await capture("field-populated");
   await name.fill("Synthetic Model");
   await folder.selectOption("local-models");
 
@@ -178,7 +271,7 @@ try {
     .press("Enter");
   assert.equal(await name.inputValue(), "Synthetic Model");
   assert.equal(await folder.inputValue(), "local-models");
-  assert(await draft.getByText("array", { exact: true }).isVisible());
+  assert(await children.getByText("integer", { exact: true }).isVisible());
   await page.setViewportSize({ width: 430, height: 720 });
   assert.deepEqual(
     await page.evaluate(() => {
@@ -187,6 +280,13 @@ try {
     }),
     [430, 0],
   );
+  await rootAdd.press("Enter");
+  await first.fill("narrow-synthetic");
+  assert(await focusIs(first));
+  const fieldBounds = await first.boundingBox();
+  assert(fieldBounds.width > 40 && fieldBounds.x + fieldBounds.width < 430);
+  await first.press("Escape");
+  assert.equal(await pending.count(), 0);
   await raw.press("Enter");
   assert((await dialog.boundingBox()).width < 430);
   await dialog
@@ -242,7 +342,7 @@ try {
   assert.deepEqual(blocked, []);
   assert.deepEqual(errors, []);
   console.log(
-    "MODEL_WORKSPACE_PASS keyboard/new/raw/project-isolation/narrow/explicit-save",
+    "MODEL_WORKSPACE_PASS keyboard/new/root/inline-field/raw/project-isolation/narrow/explicit-save",
     { frame, modal },
   );
 } finally {
