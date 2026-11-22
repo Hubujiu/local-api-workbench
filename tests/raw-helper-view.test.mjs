@@ -9,6 +9,8 @@ import {
   matchesRawHelperEntry,
   bodyDynamicToken,
   rawHelperFixedValue,
+  rawHelperMockChooser,
+  rawHelperMockPreset,
   rawHelperTabs,
   rawHelperVariableChooser,
   rawHelperVariableNames,
@@ -279,4 +281,49 @@ test("chooser winners match the real Debug environment and scope precedence with
     ),
   );
   assert.deepEqual(actual, expected);
+});
+
+test("every advertised Raw Mock rule produces its claimed type through the real body resolver", async () => {
+  const checks = {
+    integer: (v) => Number.isInteger(v) && v >= 1 && v <= 100,
+    boolean: (v) => typeof v === "boolean",
+    date: (v) => /^\d{4}-\d{2}-\d{2}$/.test(v),
+    datetime: (v) => /^\d{4}-\d{2}-\d{2}T00:00:00\.000Z$/.test(v),
+    uuid: (v) =>
+      /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(
+        v,
+      ),
+    url: (v) => /^https:\/\/example\.test\/[a-z]{8}$/.test(v),
+    ip: (v) => /^192\.0\.2\.\d{1,3}$/.test(v),
+    email: (v) => /^user\d+@example\.test$/.test(v),
+    cname: (v) => /^\p{Script=Han}{2,4}$/u.test(v),
+    name: (v) => /^[A-Z][a-z]+ [A-Z][a-z]+$/.test(v),
+    word: (v) => /^[a-z]{8}$/.test(v),
+  };
+  const markup = rawHelperMockChooser();
+  const ids = [...markup.matchAll(/data-raw-mock-rule="([a-z]+)"/g)].map(
+    (match) => match[1],
+  );
+  assert.deepEqual(ids.sort(), Object.keys(checks).sort());
+  for (const id of ids) {
+    const preset = rawHelperMockPreset(id);
+    assert.deepEqual(preset.spec.functions, []);
+    assert.equal(preset.spec.source, "mock");
+    assert.equal(preset.spec.format, "json");
+    assert.equal(Object.hasOwn(preset.spec, "seed"), false);
+    const draft = {
+      url: "http://127.0.0.1:38982/verification",
+      method: "POST",
+      bodyType: "json",
+      body: bodyDynamicToken(id),
+      bodyDynamic: { [id]: { ...preset.spec, seed: 31672608 } },
+    };
+    const snapshot = structuredClone(draft);
+    const out = await resolveDynamicRequest(draft, {}, [], interpolate);
+    assert(checks[id](JSON.parse(out.body)), id);
+    assert.deepEqual(draft, snapshot);
+  }
+  for (const id of ["now", "time", "@integer(1,999)", "constructor", "execute"])
+    assert.equal(rawHelperMockPreset(id), null);
+  assert.doesNotMatch(markup, /@now\(|@time\(|Mock\.js|示例密码/);
 });

@@ -5110,7 +5110,7 @@ body:not(.dark) .workspace-document-toolbar {
 .raw-helper-action-card small {
   color: #786b57;
 }
-:is(.raw-helper-variable-icon, .raw-helper-fixed-icon) {
+:is(.raw-helper-variable-icon, .raw-helper-fixed-icon, .raw-helper-mock-icon) {
   display: grid;
   place-items: center;
   width: 32px;
@@ -5123,39 +5123,39 @@ body:not(.dark) .workspace-document-toolbar {
   color: #168775;
   background: #e9f7f3;
 }
-:is(.raw-helper-variable-icon, .raw-helper-fixed-icon) svg,
+.raw-helper-mock-icon {
+  color: #2469b6;
+  background: #e7f0fa;
+}
+:is(.raw-helper-variable-icon, .raw-helper-fixed-icon, .raw-helper-mock-icon)
+  svg,
 .raw-helper-variable-next svg {
   display: block;
   width: 15px;
   height: 15px;
 }
 
-#dialog[open]:has(
-    :is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser)
-  ) {
+#dialog[open]:has(:is(.raw-helper-variable-chooser, .raw-helper-preset)) {
   width: 360px;
   height: min(536px, calc(100dvh - 36px));
   border-radius: 4px;
   box-shadow: 0 8px 21px #0002;
 }
-#dialog:has(
-    :is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser)
-  )::backdrop {
+#dialog:has(:is(.raw-helper-variable-chooser, .raw-helper-preset))::backdrop {
   background: transparent;
 }
-#dialog:has(:is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser))
-  > form {
+#dialog:has(:is(.raw-helper-variable-chooser, .raw-helper-preset)) > form {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
-#dialog:has(:is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser))
+#dialog:has(:is(.raw-helper-variable-chooser, .raw-helper-preset))
   > form
   > :is(header, footer) {
   padding: 12px 18px;
   border: 0;
 }
-#dialog:has(:is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser))
+#dialog:has(:is(.raw-helper-variable-chooser, .raw-helper-preset))
   > form
   > #dialog-content {
   flex: 1;
@@ -5163,12 +5163,12 @@ body:not(.dark) .workspace-document-toolbar {
   max-height: none;
   padding: 0 18px 10px;
 }
-#dialog :is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser) label {
+#dialog :is(.raw-helper-variable-chooser, .raw-helper-preset) label {
   margin-top: 0;
   color: #786b57;
 }
 #raw-helper-variable-search,
-.raw-helper-fixed-chooser input {
+.raw-helper-preset input {
   height: 32px;
 }
 .raw-helper-variable-options {
@@ -5213,10 +5213,10 @@ body:not(.dark) .workspace-document-toolbar {
   color: #786b57;
   font-size: 12px;
 }
-#dialog-content:has(.raw-helper-fixed-chooser) {
+#dialog-content:has(.raw-helper-preset) {
   display: flex;
 }
-.raw-helper-fixed-chooser {
+.raw-helper-preset {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -5226,19 +5226,50 @@ body:not(.dark) .workspace-document-toolbar {
 .raw-helper-fixed-result > [role="status"] {
   color: #786b57;
 }
-.raw-helper-fixed-result {
+.raw-helper-fixed-result,
+.raw-helper-mock-result {
   margin-top: auto;
 }
-.raw-helper-fixed-result input[readonly] {
+.raw-helper-preset input[readonly] {
   background: #f7f2e7;
 }
-.raw-helper-fixed-result label {
+:is(.raw-helper-fixed-result, .raw-helper-mock-result) label {
   padding-top: 8px;
 }
+.raw-helper-mock-groups {
+  min-height: 0;
+  max-height: 278px;
+  margin-top: 5px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 5px 9px;
+}
+.raw-helper-mock-groups p {
+  margin: 4px 0;
+  color: #786b57;
+}
+.raw-helper-mock-groups summary {
+  padding: 5px 3px;
+}
+.raw-helper-mock-groups button {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px 5px 14px;
+  border: 0;
+  text-align: left;
+}
+.raw-helper-mock-groups button[aria-pressed="true"] {
+  background: var(--hover);
+}
+.raw-helper-mock-groups button[hidden] {
+  display: none;
+}
 @media (min-width: 1000px) and (min-height: 720px) {
-  #dialog[open]:has(
-      :is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser)
-    ) {
+  #dialog[open]:has(:is(.raw-helper-variable-chooser, .raw-helper-preset)) {
     transform: translate(min(15vw, 194px), -34px);
   }
 }
