@@ -4659,6 +4659,63 @@ body:not(.dark) .plans-heading {
   .workspace-document {
     padding-top: 42px;
   }
+  .workspace-document:has(.workspace-document-editor) {
+    padding-bottom: 39px;
+  }
+  body:not(.dark) .workspace-document {
+    --document-preview-ink: #606266;
+    --document-preview-rule: #dcdce2;
+    --document-scroll-thumb: #ebe0cb;
+  }
+  .workspace-document .workspace-document-preview {
+    padding: 12px;
+    color: var(--document-preview-ink, var(--text));
+    font:
+      14px/1.5 Arial,
+      "Microsoft YaHei",
+      sans-serif;
+  }
+  .workspace-document > .workspace-document-preview {
+    padding-top: 25px;
+  }
+  .workspace-document .workspace-document-preview :is(h1, h2) {
+    margin: 24px 0 16px;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--document-preview-rule, var(--line));
+    line-height: 1.25;
+  }
+  .workspace-document .workspace-document-preview > :first-child {
+    margin-block-start: 0;
+  }
+  .workspace-document .workspace-document-preview h1 {
+    font-size: 28px;
+  }
+  .workspace-document .workspace-document-preview h2 {
+    font-size: 21px;
+  }
+  .workspace-document-preview > :is(p, ul, ol) {
+    margin-block: 0 16px;
+  }
+  .workspace-document-preview :is(ul, ol) {
+    padding-inline-start: 2em;
+  }
+  .workspace-document-preview li + li {
+    margin-block-start: 4px;
+  }
+  :is(
+    #workspace-document-text,
+    .workspace-document-panes > .workspace-document-preview
+  )::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  :is(
+    #workspace-document-text,
+    .workspace-document-panes > .workspace-document-preview
+  )::-webkit-scrollbar-thumb {
+    border-radius: 99px;
+    background: var(--document-scroll-thumb, var(--muted));
+  }
 }
 @media (max-width: 680px) {
   .workspace-document {

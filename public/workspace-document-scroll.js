@@ -44,8 +44,12 @@ export function bindWorkspaceDocumentScroll(
   return {
     top() {
       if (!active()) return;
-      move(editor, 0);
-      move(preview, 0);
+      for (const pane of [editor, preview]) {
+        // A keyboard scroll can still be animating even when its current
+        // position is zero. An explicit instant scroll supersedes it.
+        pane.scrollTo({ top: 0, behavior: "instant" });
+        expected.set(pane, pane.scrollTop);
+      }
     },
     refreshPreview() {
       if (!active() || !enabled()) return;
