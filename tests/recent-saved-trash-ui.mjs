@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../src/server.mjs";
 import { normalizeRequest } from "../src/core.mjs";
@@ -9,7 +10,7 @@ const { chromium } = createRequire(import.meta.url)(
   process.env.PLAYWRIGHT_PACKAGE || "playwright",
 );
 const evidence = process.env.RECENT_SAVED_TRASH_EVIDENCE;
-const root = await mkdtemp("/tmp/workbench-recent-saved-trash-");
+const root = await mkdtemp(join(tmpdir(), "workbench-recent-saved-trash-"));
 const app = await createApp({ root, port: 0 });
 let browser;
 try {
