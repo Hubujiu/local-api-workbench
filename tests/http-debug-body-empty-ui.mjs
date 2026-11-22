@@ -191,15 +191,33 @@ try {
   await page.keyboard.press("ArrowLeft");
   assert.equal(await radio("raw").isChecked(), true);
   const bodyCode = editor.locator("#body-code");
+  const rawFormat = editor.getByRole("combobox", { name: "Raw格式" });
+  const rawRadioAppearance = () =>
+    radio("raw").evaluate((el) => getComputedStyle(el).appearance);
+  assert.equal(await rawFormat.inputValue(), "json");
+  assert.equal(await rawRadioAppearance(), "none");
+  await page.emulateMedia({ forcedColors: "active" });
+  assert.equal(await rawRadioAppearance(), "auto");
+  await page.emulateMedia({ forcedColors: "none" });
+  assert.equal(await rawRadioAppearance(), "none");
+
   await bodyCode.fill(draft);
-  assert.equal(
-    await radio("raw").evaluate((el) => getComputedStyle(el).appearance),
-    "auto",
-  );
   await radio("none").check();
   assert.equal(await bodyCode.count(), 0);
   await radio("raw").check();
+  assert.equal(await rawFormat.inputValue(), "json");
   assert.equal(await bodyCode.inputValue(), draft);
+
+  await rawFormat.selectOption("raw");
+  assert.equal(await rawFormat.inputValue(), "raw");
+  assert.equal(await rawRadioAppearance(), "auto");
+  assert.equal(await bodyCode.inputValue(), draft);
+  const textDraft = 'plain text — {"not":"reformatted"}';
+  await bodyCode.fill(textDraft);
+  await rawFormat.selectOption("json");
+  assert.equal(await rawFormat.inputValue(), "json");
+  assert.equal(await rawRadioAppearance(), "none");
+  assert.equal(await bodyCode.inputValue(), textDraft);
   await radio("none").check();
   await editor.locator('[data-mode="design"]').click();
   const design = page.locator('.editor[data-editor-mode="design"]');
