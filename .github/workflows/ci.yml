@@ -94,6 +94,7 @@ jobs:
       - run: node tests/after-send-settings-ui.mjs
       - run: node tests/send-settings-ui.mjs
       - run: node tests/scoped-export-surface-ui.mjs
+      - run: node tests/graphql-export-notice-ui.mjs
       - run: node tests/sse-workbench-ui.mjs
       - run: node tests/database-manager-ui.mjs
       - run: node tests/empty-trash-ui.mjs
