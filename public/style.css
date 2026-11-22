@@ -3,6 +3,7 @@
 @import url("./dictionary-page.css");
 @import url("./model-raw-editor.css");
 @import url("./model-workspace-type.css");
+@import url("./case-list.css");
 :root {
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
   color: #413d35;

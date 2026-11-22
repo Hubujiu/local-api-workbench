@@ -223,3 +223,51 @@ test("case evidence distinguishes missing response status from an unsent request
   assert.match(unsent, /本批次未运行.*未发送/);
   assert.match(render({ outcome: "passed", status: 200 }), /通过.*HTTP 200/);
 });
+
+test("compact case rows preserve existing action handles and expose only genuine result evidence", () => {
+  const p = project();
+  p.cases = [
+    snapshotCase({
+      id: "case",
+      name: '<img onerror="bad()">',
+      sourceRequestId: "api",
+      request: { method: "GET", url: "http://127.0.0.1:32187/verification" },
+    }),
+  ];
+  const idle = caseCards(p, "api");
+  assert.match(idle, /interface-case-row/);
+  assert.match(idle, /class="method GET">GET<\/span>/);
+  assert.match(
+    idle,
+    /<summary[^>]+>地址<\/summary><code>http:\/\/127\.0\.0\.1:32187\/verification<\/code>/,
+  );
+  assert.doesNotMatch(idle, /<img |data-case-result|未通过|测试报告/);
+  for (const attr of ["data-run-case", "data-edit-case", "data-delete-case"]) {
+    assert.match(idle, new RegExp(attr + '="case"'));
+  }
+  const result = caseCards(
+    p,
+    "api",
+    new Map([["case", { outcome: "not-run" }]]),
+    true,
+    new Set(["case"]),
+    new Set(["case"]),
+  );
+  assert.match(
+    result,
+    /data-case-result="case"><summary>本批次未运行 · 未发送/,
+  );
+  assert.match(result, /data-run-case="case" disabled/);
+  assert.match(result, /case-row-selected/);
+  assert.match(result, /<pre data-case-result-body>/);
+  const expanded = caseCards(
+    p,
+    "api",
+    new Map([["case", { outcome: "passed" }]]),
+  );
+  assert.match(
+    expanded,
+    /<pre data-case-result-body>[\s\S]*&quot;outcome&quot;: &quot;passed&quot;/,
+  );
+  assert.doesNotMatch(expanded, /<details class="case-result"/);
+});

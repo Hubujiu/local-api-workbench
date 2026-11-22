@@ -2290,12 +2290,20 @@ try {
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.reload();
   await page.locator('[data-mode="cases"]').click();
-  await page.getByText("Independent persisted case", { exact: true }).waitFor();
-  await page.locator("[data-run-case]").click();
-  await page
-    .locator(".page pre")
-    .getByText('"outcome": "passed"', { exact: false })
-    .waitFor();
+  const persistedCaseRow = page.locator(".interface-case-row").filter({
+    has: page.getByText("Independent persisted case", { exact: true }),
+  });
+  await persistedCaseRow
+    .getByRole("button", { name: "运行用例", exact: true })
+    .click();
+  const persistedCaseEvidence = persistedCaseRow.locator(
+    "[data-case-result-body]",
+  );
+  await persistedCaseEvidence.waitFor({ state: "visible" });
+  assert.equal(
+    JSON.parse(await persistedCaseEvidence.textContent()).outcome,
+    "passed",
+  );
   await page.screenshot({ path: "/tmp/local-api-cases.png" });
   await page.locator('[data-mode="mock"]').click();
   const exampleMockURL = await page.locator(".mock-url").inputValue();
