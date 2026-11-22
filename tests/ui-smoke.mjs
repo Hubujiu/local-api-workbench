@@ -4948,12 +4948,7 @@ try {
     1,
   );
   await page.locator('.rail [data-page="apis"]').click();
-  assert.equal(
-    await page
-      .locator('[data-tree-folder=""] > summary [data-edit-folder]')
-      .count(),
-    0,
-  );
+  assert.equal(await page.locator('#tree [data-tree-folder=""]').count(), 0);
   assert.equal(
     await page
       .locator(

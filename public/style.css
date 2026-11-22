@@ -2476,6 +2476,147 @@ dialog:has(#cookie-line) {
   border-left: 1px solid var(--line);
 }
 
+.sidebar[data-sidebar-page="apis"] .section-label {
+  height: 36px;
+  padding: 0 4px;
+}
+.sidebar[data-sidebar-page="apis"] #tree {
+  --api-tree-level: 24px;
+}
+.sidebar[data-sidebar-page="apis"] #tree [data-tree-depth="1"] {
+  --api-tree-indent: var(--api-tree-level);
+}
+.sidebar[data-sidebar-page="apis"] #tree [data-tree-depth="2"] {
+  --api-tree-indent: calc(2 * var(--api-tree-level));
+}
+.sidebar[data-sidebar-page="apis"] #tree [data-tree-depth="3"] {
+  --api-tree-indent: calc(3 * var(--api-tree-level));
+}
+.sidebar[data-sidebar-page="apis"] #tree [data-tree-depth="4"] {
+  --api-tree-indent: calc(4 * var(--api-tree-level));
+}
+.sidebar[data-sidebar-page="apis"] .tree-item {
+  display: grid;
+  grid-template-columns: 43px minmax(0, 1fr);
+  gap: 0;
+  height: 30px;
+  padding: 0 8px 0 calc(28px + var(--api-tree-indent, 0px));
+}
+.sidebar[data-sidebar-page="apis"] .tree-item .method {
+  min-width: 0;
+  justify-self: start;
+}
+.sidebar[data-sidebar-page="apis"]
+  .tree-item[data-tree-kind="socketio"]
+  .method {
+  font-size: 9px;
+}
+body:not(.dark)
+  .sidebar[data-sidebar-page="apis"]
+  .tree-item[data-tree-kind="document"]
+  .method {
+  color: #087ac9;
+}
+body:not(.dark)
+  .sidebar[data-sidebar-page="apis"]
+  .tree-item[data-tree-kind="sse"]
+  .method {
+  color: #12869b;
+}
+.sidebar[data-sidebar-page="apis"] .tree-folder > .tree-folder {
+  margin-left: 0;
+  border-left: 0;
+}
+.sidebar[data-sidebar-page="apis"] .tree-folder > summary {
+  position: relative;
+  height: 30px;
+  padding-inline-start: calc(8px + var(--api-tree-indent, 0px));
+  padding-inline-end: 28px;
+  margin: 0;
+  border-radius: 4px;
+  list-style: none;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 30px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar[data-sidebar-page="apis"]
+  .tree-folder
+  > summary::-webkit-details-marker {
+  display: none;
+}
+.sidebar[data-sidebar-page="apis"] .tree-folder > summary:focus-visible,
+.sidebar[data-sidebar-page="apis"] .tree-item:focus-visible {
+  outline-offset: -2px;
+}
+.sidebar[data-sidebar-page="apis"] .tree-folder > summary > svg {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  margin-inline-end: 8px;
+}
+.sidebar[data-sidebar-page="apis"] .tree-folder-caret {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline: 1px 13px;
+  border: solid currentColor;
+  border-width: 1px 1px 0 0;
+  transform: rotate(45deg);
+  vertical-align: 2px;
+}
+.sidebar[data-sidebar-page="apis"]
+  .tree-folder[open]
+  > summary
+  .tree-folder-caret {
+  transform: rotate(135deg);
+  vertical-align: 3px;
+}
+.sidebar[data-sidebar-page="apis"] .tree-folder-count {
+  color: var(--muted);
+  font-size: 11px;
+}
+.sidebar[data-sidebar-page="apis"] .folder-edit {
+  position: absolute;
+  inset: 3px 2px auto auto;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+}
+.sidebar[data-sidebar-page="apis"] .folder-edit > svg {
+  width: 14px;
+  height: 14px;
+}
+.sidebar[data-sidebar-page="apis"] .tree-folder-settings-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+@media (hover: hover) {
+  .sidebar[data-sidebar-page="apis"]
+    .tree-folder
+    > summary:not(:hover):not(:focus-within)
+    > .folder-edit {
+    opacity: 0;
+  }
+}
+.sidebar[data-sidebar-page="apis"] .tree-create summary {
+  height: 32px;
+  padding: 0;
+  margin-top: 4px;
+  line-height: 30px;
+}
+@media (max-width: 900px) {
+  .sidebar[data-sidebar-page="apis"] #tree {
+    --api-tree-level: 18px;
+  }
+}
+
 .markdown-content img {
   max-width: 100%;
   height: auto;
