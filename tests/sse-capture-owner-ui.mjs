@@ -211,15 +211,31 @@ try {
   await switchTo(project.id);
   await status("结果待核对；没有记录不代表未执行，请勿重发。");
   await check.click();
-  await page
-    .getByText("未核对到这一笔采集的已保存记录；不能据此判断未执行", {
-      exact: true,
-    })
-    .waitFor();
+  const missedText =
+    "未核对到这一笔采集的已保存记录；不能据此判断未执行，请勿重发。";
+  const missed = page.getByText(missedText, { exact: true });
+  await missed.waitFor();
+  assert.equal(
+    await page.locator("#sse-capture-status").textContent(),
+    missedText,
+  );
+  assert.doesNotMatch(
+    await page.locator("#toast").textContent(),
+    /未核对到这一笔/,
+  );
   assert.equal(await start.isEnabled(), false);
   await page.setViewportSize({ width: 430, height: 900 });
   await check.press("Enter");
   await status("采集已取消 · 本机记录已保存");
+  assert.equal(
+    await missed.count(),
+    0,
+    "settled UI must not show stale reconciliation feedback",
+  );
+  assert.doesNotMatch(
+    await page.locator("#toast").textContent(),
+    /未核对到这一笔/,
+  );
   await capture("cancelled-b-narrow");
   assert.equal(await check.isVisible(), false);
   assert.equal(await start.isEnabled(), true);

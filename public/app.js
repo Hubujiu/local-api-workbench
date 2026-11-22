@@ -5378,6 +5378,7 @@ function bind() {
       // The current local service could not return this history read.
     } finally {
       attempt.checking = false;
+      attempt.reconciliationMissed = !found;
       paintSSECapture();
     }
     if (sseCaptures.current(selectedSSEOwner()) !== attempt) return;
@@ -5387,7 +5388,6 @@ function bind() {
         document.activeElement === document.body)
     )
       (found ? $("#protocol-run") : button).focus();
-    if (!found) toast("未核对到这一笔采集的已保存记录；不能据此判断未执行");
   });
   on("#sse-capture-abandon", "click", () => {
     const attempt = sseCaptures.current(selectedSSEOwner());

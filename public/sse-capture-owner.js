@@ -108,7 +108,10 @@ export function sseCaptureView(attempt) {
   const notice = {
     running: "正在采集 SSE 事件…",
     stopping: "已请求断开，正在等待本机结果…",
-    unknown: "结果待核对；没有记录不代表未执行，请勿重发。",
+    unknown:
+      attempt?.reconciliationMissed && !attempt.checking
+        ? "未核对到这一笔采集的已保存记录；不能据此判断未执行，请勿重发。"
+        : "结果待核对；没有记录不代表未执行，请勿重发。",
     completed: "采集完成 · 本机记录已保存",
     partial: "采集已结束（保留部分事件）· 本机记录已保存",
     failed: "采集失败 · 本机记录已保存",

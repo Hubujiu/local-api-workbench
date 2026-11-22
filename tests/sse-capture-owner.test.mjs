@@ -75,8 +75,15 @@ test("a cancel acknowledgement does not confirm stop; ownership and exactly one 
     assert.equal(calls.check(a, records), false);
     assert.equal(a.phase, "unknown");
   }
+  a.reconciliationMissed = true;
+  assert.match(sseCaptureView(a).notice, /未核对到.*请勿重发/);
+  assert.doesNotMatch(sseCaptureView(calls.current(other)).notice, /未核对到/);
+  a.checking = true;
+  assert.doesNotMatch(sseCaptureView(a).notice, /未核对到/);
+  a.checking = false;
   assert.equal(calls.check(a, [row()]), true);
   assert.match(sseCaptureView(a).notice, /已取消/);
+  assert.doesNotMatch(sseCaptureView(a).notice, /未核对到/);
   assert.equal(calls.check(a, [row({ status: "completed" })]), false);
   assert.equal(calls.current(other), undefined);
 });
