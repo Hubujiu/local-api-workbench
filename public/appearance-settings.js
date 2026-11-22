@@ -1,3 +1,4 @@
+import { bindSendSettings, sendSettingsMarkup } from "./send-settings.js";
 import {
   afterSendSettingsMarkup,
   readAfterSendResponse,
@@ -45,9 +46,11 @@ export function openAppearanceSettings(
         <h2 id="appearance-settings-heading">应用设置</h2>
         <div role="tablist" aria-label="应用设置栏目" aria-orientation="vertical">
           <button type="button" class="appearance-tab" id="appearance-main-tab" role="tab" aria-controls="appearance-main-panel" aria-selected="true">${icon("appearance")}外观</button>
+          <button type="button" class="appearance-tab" id="send-settings-tab" role="tab" aria-controls="send-settings-panel" aria-selected="false" tabindex="-1">${icon("↗")}发送设置</button>
           <button type="button" class="appearance-tab" id="after-send-settings-tab" role="tab" aria-controls="after-send-settings-panel" aria-selected="false" tabindex="-1">${icon("⇄")}发送后设置</button>
           <button type="button" class="appearance-tab" id="appearance-version-tab" role="tab" aria-controls="appearance-version-panel" aria-selected="false" tabindex="-1">${icon("☷")}版本信息</button>
         </div>
+        <button id="send-timeout-reset" type="button" class="ghost" hidden>恢复默认超时</button>
         <button id="after-send-reset" type="button" class="ghost" hidden>恢复默认发送后设置</button>
         <button id="appearance-reset" type="button" class="ghost">恢复默认外观</button>
       </aside>
@@ -69,6 +72,7 @@ export function openAppearanceSettings(
         </fieldset>
         ${appearanceFontScaleHTML()}
       </div>
+      ${sendSettingsMarkup()}
       ${afterSendSettingsMarkup()}
       ${productVersionMarkup()}
       <button id="appearance-close" type="button" class="ghost" aria-label="关闭外观设置" autofocus>×</button>
@@ -101,7 +105,9 @@ export function openAppearanceSettings(
         !active;
     });
     reset.hidden = selected !== 0;
-    resetAfterSend.hidden = selected !== 1;
+    dialog.querySelector("#send-timeout-reset").hidden =
+      tabs[selected].id !== "send-settings-tab";
+    resetAfterSend.hidden = tabs[selected].id !== "after-send-settings-tab";
   };
   tabs.forEach((tab, index) => {
     tab.addEventListener("click", () => show(index), options);
@@ -136,6 +142,7 @@ export function openAppearanceSettings(
     );
   });
   updateProductVersion(dialog, readBuild?.() || productBuild());
+  bindSendSettings(dialog, storage, options);
   openResponse.addEventListener(
     "change",
     () => {
