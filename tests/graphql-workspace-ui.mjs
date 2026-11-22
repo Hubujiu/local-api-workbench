@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { normalizeRequest } from "../src/core.mjs";
 import { createApp } from "../src/server.mjs";
+import { assertGraphQLBadge } from "./helpers/graphql-badge-ui.mjs";
 
 const playwright = createRequire(import.meta.url)(
   process.env.PLAYWRIGHT_PACKAGE || "playwright",
@@ -110,6 +111,8 @@ try {
   await page.locator('[data-param="body"]').press("Enter");
   assert.equal(await raw.inputValue(), '{"name":"ordinary"}');
   assert.equal(await pane.count(), 0);
+  assert.equal(await ordinary.locator(".method").innerText(), "POST");
+  assert.equal(await ordinary.locator(".graphql-badge").count(), 0);
   await create.press("Space");
   await tile.press("Enter");
   await query.waitFor();
@@ -121,7 +124,9 @@ try {
     .locator("[data-open-tab]")
     .getAttribute("data-open-tab");
   const treeItem = page.locator(`[data-request="${id}"]`);
-  assert.match(await treeItem.innerText(), /GraphQL/);
+  const activeTab = selectedTab.locator("[data-open-tab]");
+  await assertGraphQLBadge(treeItem);
+  await assertGraphQLBadge(activeTab);
   const tabs = await page
     .locator(".param-tabs [data-param]")
     .evaluateAll((nodes) => nodes.map((node) => node.dataset.param));
@@ -134,7 +139,9 @@ try {
     "after",
   ]);
   assert.equal(
-    await pane.getByRole("button", { name: /schema|新建查询/i }).count(),
+    await pane
+      .getByRole("button", { name: /获取\s*schema|刷新|新建查询/i })
+      .count(),
     0,
   );
   await page.locator('[data-param="graphql"]').focus();
@@ -230,6 +237,8 @@ try {
   assert.equal(await focus(raw), true);
   await treeItem.click();
   await page.setViewportSize({ width: 430, height: 830 });
+  await assertGraphQLBadge(treeItem);
+  await assertGraphQLBadge(activeTab);
   if ((await toggle.getAttribute("aria-expanded")) === "false")
     await toggle.press("Enter");
   assert.equal(await vars.isVisible(), true);

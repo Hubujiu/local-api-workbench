@@ -19,7 +19,7 @@ export function workspaceTreeItems(project, search, searchType) {
         kind: "http",
         label:
           item.graphqlEditorVersion === 1
-            ? "GraphQL"
+            ? "GQL"
             : item.method === "DELETE"
               ? "DEL"
               : item.method,
@@ -94,7 +94,9 @@ export function renderWorkspaceTree({
       (item.kind !== "http" &&
         item.id === selectedProtocolId &&
         page === "protocols");
-    const button = `<button type="button" class="tree-item${active ? " active" : ""}" ${active ? 'aria-current="true"' : ""} data-tree-kind="${esc(item.kind)}" data-tree-depth="${Math.min(depth, 4)}" ${selector}="${esc(identifier)}" title="${esc(item.name)}"><span class="method ${esc(item.badge || item.method || item.label)}">${esc(item.label)}</span><span>${esc(item.name)}</span></button>`;
+    const graphql = item.kind === "http" && item.graphqlEditorVersion === 1;
+    const name = esc(graphql ? "GraphQL " + item.name : item.name);
+    const button = `<button type="button" class="tree-item${active ? " active" : ""}" ${active ? 'aria-current="true"' : ""} data-tree-kind="${esc(item.kind)}" data-tree-depth="${Math.min(depth, 4)}" ${selector}="${esc(identifier)}" title="${name}"${graphql ? ` aria-label="${name}"` : ""}><span class="method ${esc(item.badge || item.method || item.label)}"${graphql ? ' aria-hidden="true" title="GraphQL"' : ""}>${esc(item.label)}</span><span>${esc(item.name)}</span></button>`;
     if (!isAPI || item.kind !== "http" || project.settings?.nativeInheritance)
       return button;
     return `<div class="api-tree-request-row">${button}<button type="button" class="api-tree-row-menu-trigger" data-api-row-menu="${esc(item.id)}" aria-label="更多操作：${esc(item.name)}" aria-haspopup="menu" aria-expanded="false" aria-controls="api-tree-row-menu"><span aria-hidden="true">⋯</span></button></div>`;
