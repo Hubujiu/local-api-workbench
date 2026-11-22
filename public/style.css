@@ -5083,8 +5083,8 @@ body:not(.dark) .workspace-document-toolbar {
   }
 }
 
-/* Workbench's real variable reference action within the opened desktop helper. */
-.raw-helper-open #raw-helper-reference-variable {
+/* Workbench's real actions within the opened desktop helper. */
+.raw-helper-open .raw-helper-action-card {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) 14px;
   align-items: center;
@@ -5096,21 +5096,21 @@ body:not(.dark) .workspace-document-toolbar {
   text-align: left;
   background: #f7f2e7;
 }
-.raw-helper-open #raw-helper-reference-variable:hover {
+.raw-helper-open .raw-helper-action-card:hover {
   background: var(--hover);
 }
-#raw-helper-reference-variable strong,
-#raw-helper-reference-variable small {
+.raw-helper-action-card strong,
+.raw-helper-action-card small {
   display: block;
 }
-#raw-helper-reference-variable strong {
+.raw-helper-action-card strong {
   margin-bottom: 3px;
   font-weight: 500;
 }
-#raw-helper-reference-variable small {
+.raw-helper-action-card small {
   color: #786b57;
 }
-.raw-helper-variable-icon {
+:is(.raw-helper-variable-icon, .raw-helper-fixed-icon) {
   display: grid;
   place-items: center;
   width: 32px;
@@ -5119,42 +5119,56 @@ body:not(.dark) .workspace-document-toolbar {
   color: #7857b3;
   background: #f3ebfa;
 }
-.raw-helper-variable-icon svg,
+.raw-helper-fixed-icon {
+  color: #168775;
+  background: #e9f7f3;
+}
+:is(.raw-helper-variable-icon, .raw-helper-fixed-icon) svg,
 .raw-helper-variable-next svg {
   display: block;
   width: 15px;
   height: 15px;
 }
 
-#dialog[open]:has(.raw-helper-variable-chooser) {
+#dialog[open]:has(
+    :is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser)
+  ) {
   width: 360px;
   height: min(536px, calc(100dvh - 36px));
   border-radius: 4px;
   box-shadow: 0 8px 21px #0002;
 }
-#dialog:has(.raw-helper-variable-chooser)::backdrop {
+#dialog:has(
+    :is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser)
+  )::backdrop {
   background: transparent;
 }
-#dialog:has(.raw-helper-variable-chooser) > form {
+#dialog:has(:is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser))
+  > form {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
-#dialog:has(.raw-helper-variable-chooser) > form > :is(header, footer) {
+#dialog:has(:is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser))
+  > form
+  > :is(header, footer) {
   padding: 12px 18px;
   border: 0;
 }
-#dialog:has(.raw-helper-variable-chooser) > form > #dialog-content {
+#dialog:has(:is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser))
+  > form
+  > #dialog-content {
   flex: 1;
   min-height: 0;
   max-height: none;
   padding: 0 18px 10px;
 }
-#dialog .raw-helper-variable-chooser label {
+#dialog :is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser) label {
   margin-top: 0;
   color: #786b57;
 }
-#raw-helper-variable-search {
+#raw-helper-variable-search,
+.raw-helper-fixed-chooser input {
   height: 32px;
 }
 .raw-helper-variable-options {
@@ -5195,8 +5209,32 @@ body:not(.dark) .workspace-document-toolbar {
 .raw-helper-variable-options > button[hidden] {
   display: none;
 }
+#dialog-content:has(.raw-helper-fixed-chooser) {
+  display: flex;
+}
+.raw-helper-fixed-chooser {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.raw-helper-fixed-chooser > p,
+.raw-helper-fixed-result > [role="status"] {
+  color: #786b57;
+}
+.raw-helper-fixed-result {
+  margin-top: auto;
+}
+.raw-helper-fixed-result input[readonly] {
+  background: #f7f2e7;
+}
+.raw-helper-fixed-result label {
+  padding-top: 8px;
+}
 @media (min-width: 1000px) and (min-height: 720px) {
-  #dialog[open]:has(.raw-helper-variable-chooser) {
+  #dialog[open]:has(
+      :is(.raw-helper-variable-chooser, .raw-helper-fixed-chooser)
+    ) {
     transform: translate(min(15vw, 194px), -34px);
   }
 }

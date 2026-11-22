@@ -202,7 +202,10 @@ import { clientConfiguration, mcpClients } from "./mcp-client-config.js";
 import { renderPlans, renderRuns } from "./plan-view.js";
 import {
   bindRawHelper,
+  bindRawHelperFixedChooser,
   bindRawHelperVariableChooser,
+  bodyDynamicToken,
+  rawHelperFixedChooser,
   rawHelperTabs,
   rawHelperVariableChooser,
   rawHelperVariableNames,
@@ -1716,8 +1719,9 @@ function pairs(rows, key, designOptions, debugOptions) {
     )}${debugComposer ? debugPairComposer(key, false) : ""}</tbody></table>${compactEmpty || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
 }
 function bodyParameterHelper(r, tabbed) {
-  const reference = `<button type="button" id="raw-helper-reference-variable" aria-label="引用变量"><span class="raw-helper-variable-icon">${lineIcon("helper-variable")}</span><span><strong>引用变量</strong><small>引用环境变量、全局变量</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
-  const dynamic = `${tabbed ? reference : ""}<h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
+  const reference = `<button type="button" class="raw-helper-action-card" id="raw-helper-reference-variable" aria-label="引用变量"><span class="raw-helper-variable-icon">${lineIcon("helper-variable")}</span><span><strong>引用变量</strong><small>引用环境变量、全局变量</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
+  const fixed = `<button type="button" class="raw-helper-action-card" id="raw-helper-insert-fixed" aria-label="固定值"><span class="raw-helper-fixed-icon">${lineIcon("helper-fixed")}</span><span><strong>固定值</strong><small>插入固定文本</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
+  const dynamic = `${tabbed ? reference + fixed : ""}<h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
     r.bodyDynamic || {},
   )
     .map(
@@ -3730,6 +3734,7 @@ function bind() {
   on("#raw-helper-reference-variable", "click", () =>
     openRawHelperVariableChooser(),
   );
+  on("#raw-helper-insert-fixed", "click", openRawHelperFixedChooser);
   on("#new-body-dynamic", "click", () => editDynamicValue("body"));
   on("[data-edit-body-dynamic]", "click", (_, element) =>
     editDynamicValue("body", element.dataset.editBodyDynamic),
@@ -7072,15 +7077,7 @@ function editDynamicValue(group, index) {
           throw Error("原版函数模板暂不支持额外加工链");
       }
       if (group === "body") {
-        target.bodyDynamic ??= {};
-        target.bodyDynamic[bodyId] = spec;
-        if (!index)
-          target.body =
-            target.body.slice(0, selection.start) +
-            "{{@value:" +
-            bodyId +
-            "}}" +
-            target.body.slice(selection.end);
+        setBodyDynamicDraft(target, bodyId, spec, index ? null : selection);
       } else row.dynamic = spec;
       mark();
       render();
@@ -7124,7 +7121,7 @@ function editDynamicValue(group, index) {
   $("#dynamic-remove").onclick = () => {
     if (group === "body") {
       delete target.bodyDynamic?.[bodyId];
-      target.body = target.body.split("{{@value:" + bodyId + "}}").join("");
+      target.body = target.body.split(bodyDynamicToken(bodyId)).join("");
     } else delete row.dynamic;
     mark();
     $("#dialog").close();
@@ -7261,16 +7258,105 @@ async function openCookieManager(workspace = null) {
   draw();
 }
 
-function openRawHelperVariableChooser() {
+function rawHelperBodyOwner() {
   const editor = $("#body-code");
-  if (!editor) return;
+  const owner = request();
+  if (!editor || !owner) return null;
   const ownerProject = project,
-    ownerRequest = request(),
     ownerEnvironment = env(),
     ownerOpening = projectOpenSequence,
     ownerEdit = editVersion,
-    selection = { start: editor.selectionStart, end: editor.selectionEnd };
-  const entries = rawHelperVariableNames(ownerProject, ownerEnvironment);
+    ownerText = editor.value;
+  return {
+    project: ownerProject,
+    request: owner,
+    environment: ownerEnvironment,
+    selection: { start: editor.selectionStart, end: editor.selectionEnd },
+    text: ownerText,
+    current: () =>
+      page === "apis" &&
+      mode === "debug" &&
+      param === "body" &&
+      helperOpen &&
+      useTabbedRawHelper() &&
+      project === ownerProject &&
+      request() === owner &&
+      owner.bodyType === "json" &&
+      env() === ownerEnvironment &&
+      projectOpenSequence === ownerOpening &&
+      editVersion === ownerEdit &&
+      $("#body-code") === editor &&
+      editor.value === ownerText,
+  };
+}
+function setBodyDynamicDraft(
+  target,
+  id,
+  spec,
+  selection,
+  sourceBody = target.body,
+) {
+  target.bodyDynamic ??= {};
+  target.bodyDynamic[id] = spec;
+  if (selection)
+    target.body =
+      sourceBody.slice(0, selection.start) +
+      bodyDynamicToken(id) +
+      sourceBody.slice(selection.end);
+}
+function openRawHelperFixedChooser() {
+  const owner = rawHelperBodyOwner();
+  if (!owner) return;
+  const id = uid();
+  let read,
+    inserted = false;
+  modal(
+    "固定值",
+    rawHelperFixedChooser(),
+    () => {
+      if (!owner.current()) throw Error("接口、环境或草稿已变化，未插入固定值");
+      const value = read?.();
+      if (!value) throw Error("请输入不超过 64 KiB 的固定值");
+      if (Object.hasOwn(owner.request.bodyDynamic || {}, id))
+        throw Error("固定值标识已存在，未插入");
+      const previousScroll = $("#raw-helper-dynamic")?.scrollTop || 0;
+      setBodyDynamicDraft(
+        owner.request,
+        id,
+        value.spec,
+        owner.selection,
+        owner.text,
+      );
+      mark();
+      render();
+      const helper = $("#raw-helper-dynamic");
+      if (helper) helper.scrollTop = previousScroll;
+      inserted = true;
+    },
+    "确定",
+    () => {
+      if (inserted) {
+        const field = $("#body-code");
+        const caret = owner.selection.start + bodyDynamicToken(id).length;
+        field?.focus({ preventScroll: true });
+        field?.setSelectionRange(caret, caret);
+      } else {
+        const control =
+          $("#raw-helper-insert-fixed") || $("#toggle-parameter-helper");
+        control?.focus({ preventScroll: true });
+      }
+    },
+  );
+  read = bindRawHelperFixedChooser(
+    $(".raw-helper-fixed-chooser"),
+    id,
+    $("#dialog-save"),
+  );
+}
+function openRawHelperVariableChooser() {
+  const owner = rawHelperBodyOwner();
+  if (!owner) return;
+  const entries = rawHelperVariableNames(owner.project, owner.environment);
   let selectedName,
     inserted = false;
   modal(
@@ -7278,24 +7364,10 @@ function openRawHelperVariableChooser() {
     rawHelperVariableChooser(entries),
     () => {
       const name = selectedName?.();
-      if (
-        page !== "apis" ||
-        mode !== "debug" ||
-        param !== "body" ||
-        !helperOpen ||
-        !useTabbedRawHelper() ||
-        project !== ownerProject ||
-        request() !== ownerRequest ||
-        ownerRequest?.bodyType !== "json" ||
-        env() !== ownerEnvironment ||
-        projectOpenSequence !== ownerOpening ||
-        editVersion !== ownerEdit ||
-        $("#body-code") !== editor
-      )
-        throw Error("接口、环境或草稿已变化，未插入变量");
+      if (!owner.current()) throw Error("接口、环境或草稿已变化，未插入变量");
       if (!entries.some((entry) => entry.name === name))
         throw Error("请选择当前项目的变量");
-      insertVariable(name, selection);
+      insertVariable(name, owner.selection);
       inserted = true;
     },
     "确定",

@@ -171,3 +171,50 @@ export function bindRawHelperVariableChooser(chooser, confirm, cancel) {
   }
   return () => selected?.dataset.rawVariableName;
 }
+
+export const bodyDynamicToken = (id) => `{{@value:${id}}}`;
+
+export function rawHelperFixedValue(value) {
+  if (typeof value !== "string" || !value.length) return null;
+  const preview = JSON.stringify(value);
+  if (new TextEncoder().encode(preview).length > 65536) return null;
+  return {
+    preview,
+    spec: { source: "fixed", value, format: "json", functions: [] },
+  };
+}
+
+export function rawHelperFixedChooser() {
+  return `<div class="raw-helper-fixed-chooser">
+    <label for="raw-helper-fixed-value">固定值</label>
+    <input id="raw-helper-fixed-value" type="text" maxlength="65536" placeholder="输入固定文本" autocomplete="off">
+    <p>以 JSON 字符串插入，不执行加工函数。</p>
+    <div class="raw-helper-fixed-result">
+      <label for="raw-helper-fixed-expression">表达式</label>
+      <input id="raw-helper-fixed-expression" readonly>
+      <label for="raw-helper-fixed-preview">预览</label>
+      <input id="raw-helper-fixed-preview" readonly>
+      <p role="status" hidden>固定值不能超过 64 KiB（按 JSON 编码计）</p>
+    </div>
+  </div>`;
+}
+
+export function bindRawHelperFixedChooser(chooser, id, confirm) {
+  const input = chooser.querySelector("#raw-helper-fixed-value");
+  const token = chooser.querySelector("#raw-helper-fixed-expression");
+  const preview = chooser.querySelector("#raw-helper-fixed-preview");
+  const status = chooser.querySelector("[role=status]");
+  const update = () => {
+    const value = rawHelperFixedValue(input.value);
+    confirm.disabled = !value;
+    token.value = value ? bodyDynamicToken(id) : "";
+    preview.value = value?.preview || "";
+    status.hidden = Boolean(value || !input.value.length);
+  };
+  input.addEventListener("input", update);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") event.preventDefault();
+  });
+  update();
+  return () => rawHelperFixedValue(input.value);
+}
