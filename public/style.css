@@ -12,6 +12,7 @@
 @import url("./appearance-settings.css");
 @import url("./api-welcome.css");
 @import url("./api-create-menu.css");
+@import url("./project-create-form.css");
 @import url("./project-switch-confirmation.css");
 :root {
   --app-type-unit: 1px;

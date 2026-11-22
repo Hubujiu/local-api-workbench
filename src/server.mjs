@@ -1109,7 +1109,20 @@ export async function createApp({
           return json(res, 200, await store.list());
         if (u.pathname === "/api/projects" && req.method === "POST") {
           const b = await body(req);
-          return json(res, 201, await store.create(b.name, b.directory));
+          if (
+            b.description !== undefined &&
+            (typeof b.description !== "string" || b.description.length > 2000)
+          )
+            return json(res, 400, {
+              error: "项目描述须为文本，最多 2000 个字符",
+            });
+          return json(
+            res,
+            201,
+            await store.create(b.name, b.directory, {
+              description: b.description,
+            }),
+          );
         }
         if (u.pathname === "/api/restore" && req.method === "POST") {
           // Full backups have a dedicated bounded transport. Normal owner/MCP

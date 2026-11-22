@@ -1,3 +1,4 @@
+import { projectCreateForm } from "./project-create-form.js";
 import { apiCreateMenu, bindApiCreateMenu } from "./api-create-menu.js";
 import { confirmDirtyProjectSwitch } from "./project-switch-confirmation.js";
 import { apiWelcome } from "./api-welcome.js";
@@ -1786,15 +1787,6 @@ function modal(title, html, onSave, label = "确定", afterClose) {
     }
   };
   d.showModal();
-  if ($("#pick-directory"))
-    $("#pick-directory").onclick = async () => {
-      if (!window.desktop?.chooseDirectory) {
-        toast("浏览器模式请直接填写绝对路径；桌面版支持选择文件夹");
-        return;
-      }
-      const directory = await window.desktop.chooseDirectory();
-      if (directory) $("#new-directory").value = directory;
-    };
   $("#dialog-content input")?.focus();
 }
 const jsonEditor = (value, id = "modal-json") =>
@@ -2911,20 +2903,60 @@ function bind() {
     mark();
     render();
   });
-  on("#new-project", "click", () =>
+  on("#new-project", "click", (_, opener) => {
+    const owner = project;
     modal(
-      "新建本地项目",
-      '<label>项目名称</label><input id="new-name" placeholder="例如：商城服务"><label>存储目录（留空使用默认目录）</label><input id="new-directory" placeholder="绝对路径"><button id="pick-directory" type="button">选择本地文件夹</button>',
+      "新建项目",
+      projectCreateForm(),
       async () => {
+        const description = $("#new-description").value;
+        if (description.length > 2000) throw Error("项目描述最多 2000 个字符");
         const p = await api("/projects", "POST", {
           name: $("#new-name").value,
           directory: $("#new-directory").value || undefined,
+          description: description || undefined,
         });
         projects = await api("/projects");
         await openProject(p.id);
       },
-    ),
-  );
+      "确定",
+      () => {
+        if (project === owner && opener.isConnected)
+          opener.focus({ preventScroll: true });
+      },
+    );
+    const revision = modalRevision;
+    const picker = $("#pick-directory"),
+      field = $("#new-directory");
+    picker.onclick = async () => {
+      if (!window.desktop?.chooseDirectory) {
+        toast("浏览器模式请直接填写绝对路径；桌面版支持选择文件夹");
+        return;
+      }
+      const before = field.value;
+      const stillOwns = () =>
+        project === owner &&
+        modalRevision === revision &&
+        $("#dialog").open &&
+        picker.isConnected &&
+        field.isConnected;
+      picker.disabled = true;
+      try {
+        const directory = await window.desktop.chooseDirectory();
+        if (
+          stillOwns() &&
+          field.value === before &&
+          typeof directory === "string" &&
+          directory
+        )
+          field.value = directory;
+      } catch (error) {
+        if (stillOwns()) toast(error.message);
+      } finally {
+        if (stillOwns()) picker.disabled = false;
+      }
+    };
+  });
   on("#add-request,#new-request,#tab-add", "click", addRequest);
   on("#welcome-add", "click", () => {
     addRequest();
