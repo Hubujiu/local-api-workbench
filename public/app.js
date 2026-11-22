@@ -1,4 +1,10 @@
 import {
+  appearanceTheme,
+  activeAppearanceTheme,
+  applyAppearanceTheme,
+  openAppearanceSettings,
+} from "./appearance-settings.js";
+import {
   bindProjectSwitcher,
   projectSwitcherHTML,
   selectableProjects,
@@ -1836,7 +1842,7 @@ function render(preserveEditingFocus = false) {
       )
       .join(
         "",
-      )}</select>${projectSwitcherHTML(busy || saving)}<button id="open-location" class="ghost">打开位置</button><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost top-plan ${page === "plans" ? "active" : ""}"><span class="icon">${lineIcon("plan-play")}</span>执行计划</button><button id="mcp-status" data-page="settings" data-settings-target="settings-mcp" class="offline" title="打开 MCP 连接设置">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail" aria-label="工作区导航">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}" ${page === "trash" ? 'aria-current="page"' : ""}><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar" data-sidebar-page="${page}">${
+      )}</select>${projectSwitcherHTML(busy || saving)}<button id="open-location" class="ghost">打开位置</button><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost top-plan ${page === "plans" ? "active" : ""}"><span class="icon">${lineIcon("plan-play")}</span>执行计划</button><button id="mcp-status" data-page="settings" data-settings-target="settings-mcp" class="offline" title="打开 MCP 连接设置">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button><button type="button" id="appearance-settings" class="ghost" title="全局外观设置" aria-label="全局外观设置" aria-haspopup="dialog">${lineIcon("⚙")}</button></div></header><div class="shell"><nav class="rail" aria-label="工作区导航">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}" ${page === "trash" ? 'aria-current="page"' : ""}><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar" data-sidebar-page="${page}">${
       page === "settings"
         ? settingsSidebar(settingsSection)
         : page === "dictionary" || page === "database-manager"
@@ -2673,13 +2679,21 @@ function bind() {
       "应用授权",
     );
   });
-  on("#theme", "click", () => {
-    document.body.classList.toggle("dark");
-    localStorage.setItem(
-      "theme",
-      document.body.classList.contains("dark") ? "dark" : "light",
-    );
+  const readTheme = () => activeAppearanceTheme(document.body);
+  const chooseTheme = (theme) => {
+    applyAppearanceTheme(document.body, localStorage, theme);
     refreshResponsiveRawHelper();
+  };
+  on("#theme", "click", () =>
+    chooseTheme(readTheme() === "dark" ? "light" : "dark"),
+  );
+  on("#appearance-settings", "click", (_, opener) => {
+    openAppearanceSettings($("#appearance-dialog"), {
+      opener,
+      findOpener: () => $("#appearance-settings"),
+      read: readTheme,
+      apply: chooseTheme,
+    });
   });
   on("#project-select", "change", (_, e) => openProject(e.value));
   const switcherOwner = project;
@@ -7143,7 +7157,11 @@ async function send() {
   }
 }
 document.addEventListener("keydown", (e) => {
-  if ($("#dialog").open || $("#empty-trash-dialog")?.open) {
+  if (
+    $("#dialog").open ||
+    $("#empty-trash-dialog")?.open ||
+    $("#appearance-dialog")?.open
+  ) {
     if ((e.ctrlKey || e.metaKey) && ["s", "Enter"].includes(e.key))
       e.preventDefault();
     return;
@@ -7184,8 +7202,10 @@ async function init() {
   compactUI = localStorage.getItem("compact-ui") === "true";
   responseLayout =
     localStorage.getItem("response-layout") === "split" ? "split" : "stacked";
-  if (localStorage.getItem("theme") === "dark")
-    document.body.classList.add("dark");
+  document.body.classList.toggle(
+    "dark",
+    appearanceTheme(localStorage.getItem("theme")) === "dark",
+  );
   token =
     new URLSearchParams(location.hash.slice(1)).get("token") ||
     sessionStorage.getItem("local-api-token") ||
