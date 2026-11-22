@@ -193,13 +193,23 @@ try {
   assert.equal(await query.inputValue(), second);
   await apply.press("Enter");
 
+  const originalRow = await more("自定义查询 2").locator("..").boundingBox();
+  assert(originalRow, "the second named row is visible before renaming");
   await openRename("自定义查询 2");
   assert.equal(await page.locator("#dialog").isVisible(), false);
   const renameBounds = await renameField.boundingBox();
   console.log("GRAPHQL_NAMED_RENAME_GEOMETRY", JSON.stringify(renameBounds));
   await capture("rename");
-  assert(Math.abs(renameBounds.x - 391) <= 3);
-  assert(Math.abs(renameBounds.y - 280) <= 5);
+  assert(Math.abs(renameBounds.x - originalRow.x - 10) <= 1);
+  assert(
+    Math.abs(
+      renameBounds.y +
+        renameBounds.height / 2 -
+        originalRow.y -
+        originalRow.height / 2,
+    ) <= 1,
+    "the editor stays vertically centered in the query row it replaces",
+  );
   assert.deepEqual(
     [renameBounds.width, renameBounds.height].map(Math.round),
     [99, 27],
