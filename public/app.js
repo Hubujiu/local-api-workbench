@@ -1,3 +1,7 @@
+import {
+  databaseManagerHTML,
+  bindDatabaseManager,
+} from "./database-manager.js";
 import { selectedSSEWorkbench } from "./sse-workbench.js";
 import { protocolDefinitionEdit } from "./protocol-definition-edit.js";
 import { renderWorkspaceTree } from "./api-sidebar-tree.js";
@@ -1729,10 +1733,11 @@ function nav() {
     ["grpc", "↗", "gRPC"],
     ["socketio", "↗", "Socket.IO"],
   ]
-    .map(
-      ([key, icon, title]) =>
-        `<button data-page="${key}" class="${page === key ? "active" : ""}" ${page === key ? 'aria-current="page"' : ""} title="${title}"><span class="icon">${lineIcon(icon)}</span>${title}</button>`,
-    )
+    .map(([key, icon, title]) => {
+      const active =
+        page === key || (key === "dictionary" && page === "database-manager");
+      return `<button data-page="${key}" class="${active ? "active" : ""}" ${active ? 'aria-current="page"' : ""} title="${title}"><span class="icon">${lineIcon(icon)}</span>${title}</button>`;
+    })
     .join("");
 }
 function tree() {
@@ -1817,8 +1822,8 @@ function render(preserveEditingFocus = false) {
       )}</select><button id="open-location" class="ghost">打开位置</button><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost top-plan ${page === "plans" ? "active" : ""}"><span class="icon">${lineIcon("plan-play")}</span>执行计划</button><button id="mcp-status" data-page="settings" data-settings-target="settings-mcp" class="offline" title="打开 MCP 连接设置">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail" aria-label="工作区导航">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}" ${page === "trash" ? 'aria-current="page"' : ""}><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar" data-sidebar-page="${page}">${
       page === "settings"
         ? settingsSidebar(settingsSection)
-        : page === "dictionary"
-          ? dictionarySidebar()
+        : page === "dictionary" || page === "database-manager"
+          ? dictionarySidebar(page === "database-manager")
           : `<div class="search"><div class="search-filter"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><select id="tree-type" aria-label="内容类型">${[
               ["all", "全部"],
               ["http", "HTTP"],
@@ -1855,6 +1860,13 @@ function render(preserveEditingFocus = false) {
   if (page === "dictionary")
     bindDictionaryView($(".dictionary-page"), dictionaryPosition);
   if (page === "dictionary") bindWorkspaceModel();
+  if (page === "database-manager" && project) {
+    const owner = project;
+    bindDatabaseManager($(".database-manager"), {
+      owns: () => project === owner && page === "database-manager",
+      list: () => api("/projects/" + owner.id + "/database-connections"),
+    });
+  }
   const tabScroll = $(".tab-scroll");
   if (tabScroll) {
     tabScroll.scrollLeft = oldTabScroll;
@@ -2252,6 +2264,7 @@ function renderPage() {
         )
         .join("") || '<div class="empty"><p>回收站为空</p></div>'
     }</div>`;
+  if (page === "database-manager") return databaseManagerHTML();
   if (page === "dictionary") {
     const draft = workspaceModelDrafts.get(project.id);
     return `<div class="page dictionary-page" data-dictionary-project="${esc(project.id)}">${dictionaryPanel(project, temporaryParameters.get(project.id) || [], { tab: modelDraftTab(draft), active: draft?.active, editor: draft?.active ? modelDraftPanel(project, draft) : "" })}<section class="dictionary-models" aria-labelledby="dictionary-models-heading"${draft?.active ? " hidden" : ""}><div class="page-head"><div><h2 id="dictionary-models-heading" tabindex="-1">数据模型</h2><span class="muted">统一管理可复用的字段定义与枚举</span></div><div class="toolbar"><button id="add-model-folder">＋ 新建目录</button><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div></div>${modelCards(project)}</section></div>`;
@@ -2284,7 +2297,7 @@ function renderPage() {
         "",
       )}</select><label>URL / TCP Host</label><input id="protocol-url" placeholder="http://localhost:8080/events" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.url || "")}"><label>TCP 端口</label><input id="protocol-port" type="number" value="${project.protocols?.find((item) => item.id === selectedProtocolId)?.port || 8080}"><label>采集时长 ms</label><input id="protocol-duration" type="number" value="3000" min="100" max="30000"><label>发送消息</label><textarea id="protocol-message"></textarea></div><p><button id="protocol-run" class="primary" ${busy ? "disabled" : ""}>连接并采集</button> <button id="cancel">断开</button></p><pre id="protocol-result"></pre><div class="card"><div class="toolbar"><strong>当前全局会话</strong><button id="session-connect" class="primary" ${sessionState.canConnect ? "" : "disabled"}>建立交互会话</button><button id="session-send" ${sessionState.canSend ? "" : "disabled"}>发送消息</button><button id="session-stop" ${sessionState.canStop ? "" : "disabled"}>断开会话</button><button id="session-refresh">核对会话</button><button id="session-export">导出消息</button><span id="session-status">${esc(sessionLabel())}</span></div><pre id="session-events">${esc(activeSession?.events?.map((event) => `${event.at} ${event.direction} ${event.data}`).join("\n") || "")}</pre></div></div>`;
   if (page === "database")
-    return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite / PostgreSQL / MySQL / Redis / MongoDB / ClickHouse · 默认只读 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option><option value="clickhouse">ClickHouse（HTTP只读）</option><option value="redis">Redis（默认只读）</option><option value="mongodb">MongoDB（find只读）</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306 / 6379"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名 / Redis数据库索引</label><input id="db-name"><label>MongoDB认证库</label><input id="db-auth-source" value="admin"><label>TLS</label><input id="db-tls" type="checkbox"><label>自定义CA（PEM，可选）</label><textarea id="db-ca" placeholder="留空使用系统信任的证书"></textarea><label>达梦客户端证书链（PEM，双向 TLS）</label><textarea id="db-client-cert" spellcheck="false" autocomplete="off"></textarea><label>达梦客户端私钥（PEM，双向 TLS）</label><textarea id="db-client-key" spellcheck="false" autocomplete="off"></textarea><label>服务端证书 DN</label><input id="db-server-dn" placeholder="CN=db.example.com"><label>授权表（每行一个 SCHEMA.TABLE，有效期 15 分钟）</label><textarea id="db-relations" placeholder="APP.ITEMS"></textarea><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL / Redis命令JSON数组（如 ["GET","key"]）</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><label id="db-write-label"><input id="db-write" type="checkbox"><span id="db-write-description">仅本次允许SQLite写入（INSERT / UPDATE / DELETE）</span></label></p><p><button id="db-query" class="primary">执行只读查询</button> <button id="db-register">授权为本项目会话连接</button> <button id="db-connections">管理会话连接</button></p><p id="db-sqlserver-notice" class="notice" hidden>SQL Server 只读预览：必须验证TLS，目标数据库须为 READ_ONLY；仅显式 schema.table 列查询，参数使用 @p0。最多1000行，不支持写入/SSH。尚未完成真实服务与 Windows 验收。</p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
+    return `<div class="page"><div class="page-head"><h1>数据库连接</h1><button type="button" class="ghost" data-page="database-manager">数据库管理</button></div><p class="muted">SQLite / PostgreSQL / MySQL / Redis / MongoDB / ClickHouse · 默认只读 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option><option value="clickhouse">ClickHouse（HTTP只读）</option><option value="redis">Redis（默认只读）</option><option value="mongodb">MongoDB（find只读）</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306 / 6379"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名 / Redis数据库索引</label><input id="db-name"><label>MongoDB认证库</label><input id="db-auth-source" value="admin"><label>TLS</label><input id="db-tls" type="checkbox"><label>自定义CA（PEM，可选）</label><textarea id="db-ca" placeholder="留空使用系统信任的证书"></textarea><label>达梦客户端证书链（PEM，双向 TLS）</label><textarea id="db-client-cert" spellcheck="false" autocomplete="off"></textarea><label>达梦客户端私钥（PEM，双向 TLS）</label><textarea id="db-client-key" spellcheck="false" autocomplete="off"></textarea><label>服务端证书 DN</label><input id="db-server-dn" placeholder="CN=db.example.com"><label>授权表（每行一个 SCHEMA.TABLE，有效期 15 分钟）</label><textarea id="db-relations" placeholder="APP.ITEMS"></textarea><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL / Redis命令JSON数组（如 ["GET","key"]）</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><label id="db-write-label"><input id="db-write" type="checkbox"><span id="db-write-description">仅本次允许SQLite写入（INSERT / UPDATE / DELETE）</span></label></p><p><button id="db-query" class="primary">执行只读查询</button> <button id="db-register">授权为本项目会话连接</button> <button id="db-connections">管理会话连接</button></p><p id="db-sqlserver-notice" class="notice" hidden>SQL Server 只读预览：必须验证TLS，目标数据库须为 READ_ONLY；仅显式 schema.table 列查询，参数使用 @p0。最多1000行，不支持写入/SSH。尚未完成真实服务与 Windows 验收。</p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
   if (page === "git")
     return `<div class="page"><h1>Git 协同</h1><p><button id="git-terminal" class="primary">在项目位置打开终端</button></p><p class="muted">本地项目是格式化 JSON 文件，可以纳入你自己的 Git 仓库。</p><div class="card"><h3>推荐流程</h3><ol class="markdown"><li>导出项目，检查并移除环境密钥与历史中的敏感信息。</li><li>把接口定义文件放入项目仓库。</li><li>通过 Git diff 审查变更，通过 PR 协作。</li><li>其他成员导入同一文件，继续本地编辑。</li></ol><button id="export">导出项目文件</button></div><div class="notice">打开终端后由你执行 Git 命令；本应用不会自动提交凭据或推送代码。执行记录与历史可能含敏感数据，请勿公开提交。</div></div>`;
   return `<div class="page"><div class="page-head"><div><h1>接口文档</h1><span class="muted">从当前项目定义生成，离线阅读与导出</span></div><div class="toolbar"><button id="new-document">＋ 新建文档</button><button id="export-docs" class="primary">导出文档</button></div></div>${
@@ -2541,7 +2554,13 @@ function bind() {
     if (e.dataset.settingsTarget) settingsSection = e.dataset.settingsTarget;
     if (page === "plans") planTab = "plans";
     render();
-    if (fromRailKeyboard) $(".rail [aria-current='page']")?.focus();
+    if (e.dataset.dictionaryTarget) {
+      const target = document.getElementById(e.dataset.dictionaryTarget);
+      target?.scrollIntoView({ block: "start" });
+    }
+    if (event.detail === 0 && page === "database-manager")
+      $("#database-manager-heading")?.focus({ preventScroll: true });
+    else if (fromRailKeyboard) $(".rail [aria-current='page']")?.focus();
   });
   bindWorkspaceDocument();
   on("[data-open-document-tab]", "click", (event, button) => {
