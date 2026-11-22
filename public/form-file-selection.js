@@ -4,11 +4,18 @@ export async function applySelectedFormFile(file, field, isCurrent, onApplied) {
   if (!field) return false;
   const token = {};
   selections.set(field, token);
-  if (!file) return false;
+  const owned = () => selections.get(field) === token && isCurrent();
+  if (!file || !owned()) return false;
   if (file.size > limit) throw Error("文件不能超过 6 MiB");
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  let bytes;
+  try {
+    bytes = new Uint8Array(await file.arrayBuffer());
+  } catch (error) {
+    if (!owned()) return false;
+    throw error;
+  }
+  if (!owned()) return false;
   if (bytes.byteLength > limit) throw Error("文件不能超过 6 MiB");
-  if (selections.get(field) !== token || !isCurrent()) return false;
   let binary = "";
   for (let i = 0; i < bytes.length; i += 8192)
     binary += String.fromCharCode(...bytes.subarray(i, i + 8192));

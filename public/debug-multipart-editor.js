@@ -1,3 +1,4 @@
+import { formFileRepresentation } from "./form-field-types.js";
 import { debugPairFromKey } from "./debug-pair-composer.js";
 
 export const isDebugMultipart = (page, mode, param, bodyType) =>
@@ -29,10 +30,13 @@ export function debugMultipartEditor(rows, esc) {
   const automatic = "自动（content-type）";
   const storedRows = rows
     .map((row, i) => {
-      const file = row.type === "file";
-      const value = file
-        ? `<label class="debug-multipart-file"><input type="file" data-field-file="${i}" aria-label="选择参数文件"><span>${esc(row.filename || "请选择文件")}</span></label>`
-        : `<input data-pair="form:${i}:value" aria-label="参数值" value="${esc(row.value)}">`;
+      const file = formFileRepresentation(row);
+      const value =
+        file && row.type !== "file"
+          ? '<span class="muted">文件数据未作为文本显示；如需文本，请转换字段。</span>'
+          : file
+            ? `<label class="debug-multipart-file"><input type="file" data-field-file="${i}" aria-label="选择参数文件"><span>${esc(row.filename || "请选择文件")}</span></label>`
+            : `<input data-pair="form:${i}:value" aria-label="参数值" value="${esc(row.value)}">`;
       return `<tr data-multipart-row="${i}">
       <td class="debug-multipart-check"><input type="checkbox" data-pair-enabled="form:${i}" ${row.enabled !== false ? "checked" : ""} aria-label="启用参数"></td>
       <td><div class="debug-multipart-name"><input data-pair="form:${i}:key" aria-label="参数名" value="${esc(row.key)}"><select data-field-type="${i}" aria-label="字段类型"><option value="text"${file ? "" : " selected"}>string</option><option value="file"${file ? " selected" : ""}>file</option></select></div></td>

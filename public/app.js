@@ -1,4 +1,10 @@
 import {
+  formFileRepresentation,
+  unsupportedURLencodedForm,
+  prepareFormTypeChange,
+  formTextExample,
+} from "./form-field-types.js";
+import {
   debugMultipartEditor,
   isDebugMultipart,
   newMultipartTextRow,
@@ -2051,7 +2057,7 @@ function editor(r) {
       : modePanel(r)
   }</section>`;
 }
-function pairs(rows, key, designOptions, debugOptions) {
+function pairs(rows, key, designOptions, debugOptions, formBodyType) {
   const debugComposer = Boolean(debugOptions);
   const design = Boolean(designOptions);
   const metadataColumn = ["headers", "query", "path", "cookies"].includes(key);
@@ -2073,14 +2079,19 @@ function pairs(rows, key, designOptions, debugOptions) {
     design && (key === "headers" || key === "query") && !rows.length;
   return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}"><thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${compactEmpty ? `<tr><td colspan="4"><button type="button" class="ghost design-empty-pair" data-add-pair="${key}">＋ 添加参数</button></td></tr>` : ""}${rows
     .map((p, i) => {
+      const form = key === "form";
+      const fileLike = form ? formFileRepresentation(p) : p.type === "file";
+      const allowFile = form && formBodyType === "form-data";
       const selector =
-        key === "form"
-          ? `<select data-field-type="${i}" aria-label="字段类型"><option value="text" ${p.type !== "file" ? "selected" : ""}>文本</option><option value="file" ${p.type === "file" ? "selected" : ""}>文件</option></select>`
+        form && (allowFile || fileLike)
+          ? `<select data-field-type="${i}" aria-label="字段类型"><option value="text" ${fileLike ? "" : "selected"}>文本</option><option value="file" ${fileLike ? "selected" : ""} ${allowFile ? "" : "disabled"}>文件</option></select>`
           : "";
       const value =
-        p.type === "file"
-          ? `<span class="pair-file"><input type="file" data-field-file="${i}"><small title="${esc(p.filename || "未选择文件")}">${esc(p.filename || "未选择文件")}</small></span>`
-          : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`;
+        fileLike && (!allowFile || p.type !== "file")
+          ? '<span class="muted">文件数据未作为文本显示；请转换字段或保留为 multipart 文件。</span>'
+          : fileLike
+            ? `<span class="pair-file"><input type="file" data-field-file="${i}"><small title="${esc(p.filename || "未选择文件")}">${esc(p.filename || "未选择文件")}</small></span>`
+            : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`;
       return `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td><div class="pair-value">${selector}${value}</div></td>${metadataColumn ? `<td class="pair-description" title="${esc(p.description || "")}">${esc(p.description || "")}</td>` : ""}<td><div class="pair-row-actions"><button data-dynamic-pair="${key}:${i}">${p.dynamic ? "动态✓" : "动态"}</button><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></div></td></tr>`;
     })
     .join(
@@ -2172,7 +2183,7 @@ function paramPanel(r, param, design = false) {
       multipart
         ? debugMultipartEditor(r.form, esc)
         : ["form-data", "urlencoded"].includes(r.bodyType)
-          ? pairs(r.form, "form")
+          ? pairs(r.form, "form", undefined, undefined, r.bodyType)
           : r.bodyType === "none"
             ? `<div class="body-none"><span class="body-none-icon">${lineIcon("body-empty")}</span><p>当前请求未包含 Body</p>${design ? "" : '<button id="generate-body" class="ghost">基于数据结构生成</button>'}</div>`
             : `<div class="body-editor-shell"><div class="code-editor"><pre id="code-gutter" aria-hidden="true">${r.body
@@ -3884,7 +3895,8 @@ function bind() {
             key: parameter.key,
             type: parameter.schema.type || "string",
             description: parameter.description,
-            example: parameter.value,
+            example:
+              kind === "form" ? formTextExample(parameter) : parameter.value,
           };
           const values = temporaryParameters.get(project.id) || [];
           if (
@@ -4332,6 +4344,27 @@ function bind() {
     if ($("#code-gutter")) $("#code-gutter").scrollTop = element.scrollTop;
   });
   on('input[name="body-type"],#raw-format', "change", (_, e) => {
+    const r = request();
+    if (
+      e.name === "body-type" &&
+      e.value === "urlencoded" &&
+      r.bodyType !== "urlencoded" &&
+      unsupportedURLencodedForm(r.form)
+    ) {
+      const previous = ["raw", "json"].includes(r.bodyType)
+        ? "raw"
+        : r.bodyType;
+      const last = [
+        ...document.querySelectorAll('input[name="body-type"]'),
+      ].find((radio) => radio.value === previous);
+      if (last) {
+        last.checked = true;
+        if (e.matches(":focus-visible")) last.focus({ preventScroll: true });
+      }
+      throw Error(
+        "URLencoded 不支持文件或 multipart 分项内容类型；请先处理对应表单字段。",
+      );
+    }
     const restoreEmptyBodyRadio =
       mode === "debug" &&
       e.name === "body-type" &&
@@ -4457,14 +4490,35 @@ function bind() {
     !ownsMultipart(element);
   on("[data-field-type]", "change", (_, e) => {
     if (staleMultipartControl(e)) return;
-    const keepMultipartFocus =
-      e.closest(".debug-multipart-editor") && document.activeElement === e;
+    const keepFieldFocus = document.activeElement === e;
     const index = e.dataset.fieldType;
-    request().form[index].type = e.value;
-    delete request().form[index].schemaDefined;
+    const r = request(),
+      field = r?.form[index];
+    if (!e.isConnected || !field) return;
+    const oldType = formFileRepresentation(field) ? "file" : "text";
+    let change;
+    try {
+      change = prepareFormTypeChange(field, e.value, r.bodyType);
+    } catch (error) {
+      e.value = oldType;
+      throw error;
+    }
+    if (!change) return;
+    if (
+      change.confirm &&
+      !confirm("切换字段类型会清除当前值或文件选择。确定继续？")
+    ) {
+      e.value = oldType;
+      return;
+    }
+    r.form[index] = change.row;
     mark();
     render();
-    if (keepMultipartFocus) $(`[data-field-type="${index}"]`)?.focus();
+    if (keepFieldFocus)
+      (
+        $(`[data-field-type="${index}"]`) ||
+        $(`[data-pair="form:${index}:value"]`)
+      )?.focus({ preventScroll: true });
   });
   on("[data-field-file]", "change", async (_, e) => {
     if (staleMultipartControl(e)) return;
@@ -4478,9 +4532,12 @@ function bind() {
       file,
       field,
       () =>
+        e.isConnected &&
+        e.files[0] === file &&
         page === "apis" &&
         project === selectedProject &&
         request() === selectedRequest &&
+        selectedBodyType === "form-data" &&
         selectedRequest.bodyType === selectedBodyType &&
         selectedRequest.form[index] === field &&
         field.type === "file",
