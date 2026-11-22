@@ -1,3 +1,4 @@
+import { openProjectCreateUI } from "./helpers/open-project-create-ui.mjs";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -93,7 +94,7 @@ try {
       caret: "hide",
     });
   };
-  await open.press("Enter");
+  await openProjectCreateUI(page);
   await dialog.waitFor();
   const desktop = {
     frame: await bounds(dialog),
@@ -123,7 +124,7 @@ try {
     () => typeof window.pendingProjectDirectory === "function",
   );
   await close();
-  await open.press("Enter");
+  await openProjectCreateUI(page);
   await path.fill("typed choice in reopened dialog");
   await page.evaluate(
     (value) => window.pendingProjectDirectory(value),
@@ -140,7 +141,7 @@ try {
   assert.deepEqual(writes, []);
 
   await page.setViewportSize({ width: 430, height: 760 });
-  await open.press("Enter");
+  await openProjectCreateUI(page);
   await dialog.waitFor();
   const narrow = await bounds(dialog);
   assert(narrow.x >= 0 && narrow.x + narrow.width <= 430);

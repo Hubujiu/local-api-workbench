@@ -1,3 +1,4 @@
+import { openProjectCreateUI } from "./open-project-create-ui.mjs";
 import assert from "node:assert/strict";
 function deferred() {
   let resolve, reject;
@@ -24,7 +25,7 @@ async function bounded(promise) {
   }
 }
 export async function createImportOwnershipFixture(page) {
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("Import response ownership");
   // The preceding smoke scenarios may leave a synthetic draft. Explicitly
   // discard it when opening our newly created fixture, never edit that project.
