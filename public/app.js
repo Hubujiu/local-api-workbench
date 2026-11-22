@@ -1,3 +1,4 @@
+import { renderWorkspaceTree } from "./api-sidebar-tree.js";
 import { bindPlanPickerTree } from "./plan-step-picker.js";
 import { unsentResponseData } from "./http-response-empty.js";
 import {
@@ -142,7 +143,7 @@ import { bindMCPSettings } from "./mcp-settings-view.js";
 import { scriptDialectOptions, scriptDialectNotice } from "./script-dialect.js";
 import { mountVisualization } from "./visualizer-view.js";
 import { inlineImageURI } from "./inline-image.js";
-import { folderTree, moveFolderTree } from "./folder-tree.js";
+import { moveFolderTree } from "./folder-tree.js";
 import { loadTiming } from "./load-timing.js";
 import { parseLoadCSV } from "./load-data.js";
 import { builtinVariableNames } from "./builtin-variable-catalog.js";
@@ -1388,75 +1389,15 @@ function nav() {
     .join("");
 }
 function tree() {
-  const items = [
-    ...(project?.requests || [])
-      .filter((item) => !item.deletedAt)
-      .map((item) => ({
-        ...item,
-        kind: "http",
-        label: item.method === "DELETE" ? "DEL" : item.method,
-        attribute: 'data-request="' + esc(item.id) + '"',
-      })),
-    ...(project?.documents || []).map((item, index) => ({
-      ...item,
-      name: item.title,
-      url: "",
-      kind: "document",
-      label: "MD",
-      attribute: 'data-document-index="' + index + '"',
-    })),
-    ...(project?.settings?.grpcDefinitions || []).map((item) => ({
-      ...item,
-      kind: "grpc",
-      label: "gRPC",
-      url: item.target,
-      attribute: 'data-grpc-definition="' + esc(item.id) + '"',
-    })),
-    ...(project?.settings?.socketioDefinitions || []).map((item) => ({
-      ...item,
-      kind: "socketio",
-      label: "Socket.IO",
-      attribute: 'data-socketio-definition="' + esc(item.id) + '"',
-    })),
-    ...(project?.protocols || []).map((item) => ({
-      ...item,
-      kind: item.type,
-      label: item.type === "websocket" ? "WS" : item.type.toUpperCase(),
-      attribute: 'data-protocol-id="' + esc(item.id) + '"',
-    })),
-  ].filter(
-    (item) =>
-      (searchType === "all" || item.kind === searchType) &&
-      (item.name + " " + (item.url || "") + " " + (item.folder || ""))
-        .toLowerCase()
-        .includes(search.toLowerCase()),
-  );
-  const folders = [
-    ...new Set([
-      ...(project?.folders || []),
-      ...items.map((item) => item.folder || ""),
-    ]),
-  ];
-  const renderFolder = (node) => {
-    const folder = node.path;
-    const direct = items.filter((item) => (item.folder || "") === folder);
-    const total = items.filter(
-      (item) =>
-        (item.folder || "") === folder ||
-        (folder && (item.folder || "").startsWith(folder + "/")),
-    ).length;
-    return `<details class="tree-folder" data-tree-folder="${esc(folder)}" ${search || !collapsedFolders.has(project.id + ":" + folder) ? "open" : ""}><summary class="folder"><span>${esc(node.name)}</span> <span>(${total})</span>${folder ? `<button class="ghost folder-edit" data-edit-folder="${esc(folder)}" aria-label="编辑目录 ${esc(folder)}">设置</button>` : ""}</summary>${direct.map((item) => `<button class="tree-item ${(item.kind === "http" && item.id === current && page === "apis") || (item.kind !== "http" && item.id === selectedProtocolId && page === "protocols") ? "active" : ""}" ${item.attribute}><span class="method ${esc(item.method || item.label)}">${esc(item.label)}</span><span>${esc(item.name)}</span></button>`).join("")}${node.children.map(renderFolder).join("")}</details>`;
-  };
-  return (
-    [
-      ...folderTree(folders),
-      ...(items.some((item) => !item.folder)
-        ? [{ path: "", name: "未分组", children: [] }]
-        : []),
-    ]
-      .map(renderFolder)
-      .join("") || '<div class="notice">没有匹配的项目内容。</div>'
-  );
+  return renderWorkspaceTree({
+    project,
+    search,
+    searchType,
+    page,
+    current,
+    selectedProtocolId,
+    collapsedFolders,
+  });
 }
 
 function render(preserveEditingFocus = false) {
@@ -1513,7 +1454,7 @@ function render(preserveEditingFocus = false) {
       )
       .join(
         "",
-      )}</select><button id="open-location" class="ghost">打开位置</button><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost top-plan ${page === "plans" ? "active" : ""}"><span class="icon">${lineIcon("plan-play")}</span>执行计划</button><button id="mcp-status" data-page="settings" data-settings-target="settings-mcp" class="offline" title="打开 MCP 连接设置">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail" aria-label="工作区导航">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}" ${page === "trash" ? 'aria-current="page"' : ""}><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar">${
+      )}</select><button id="open-location" class="ghost">打开位置</button><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost top-plan ${page === "plans" ? "active" : ""}"><span class="icon">${lineIcon("plan-play")}</span>执行计划</button><button id="mcp-status" data-page="settings" data-settings-target="settings-mcp" class="offline" title="打开 MCP 连接设置">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail" aria-label="工作区导航">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}" ${page === "trash" ? 'aria-current="page"' : ""}><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar" data-sidebar-page="${page}">${
       page === "settings"
         ? settingsSidebar(settingsSection)
         : `<div class="search"><div class="search-filter"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><select id="tree-type" aria-label="内容类型">${[
