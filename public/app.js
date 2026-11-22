@@ -5564,34 +5564,29 @@ function bind() {
   on("#add-step", "click", async () => {
     assertExecutionReady();
     const plan = project.plans.find((item) => item.id === planId);
-    const selected = [
-      ...document.querySelectorAll(
-        '#plan-step-picker input[name="plan-picker-api"]:checked',
-      ),
-    ];
+    const selected = selectedPlanStepIds();
     if (!plan || !selected.length) return;
     const requests = new Map(
       project.requests
         .filter((item) => !item.deletedAt)
         .map((item) => [item.id, item]),
     );
-    const steps = selected.map(({ value }) => {
-      const request = requests.get(value);
+    const steps = selected.map((id) => {
+      const request = requests.get(id);
       if (!request) throw Error("所选接口已变化，请重新选择");
       return { request: snapshotInterfaceForPlan(request) };
     });
     await savePlan({ ...plan, steps: [...plan.steps, ...steps] });
   });
   const stepPicker = $("#plan-step-picker");
-  if (stepPicker) bindPlanPickerTree(stepPicker);
-  on('#plan-step-picker input[name="plan-picker-api"]', "change", () => {
-    const count =
-      $("#plan-step-picker").querySelectorAll("input:checked").length;
-    $("#add-step").disabled = !count;
-    $("#plan-step-picker > summary").textContent = count
-      ? "已选 " + count + " 个接口"
-      : "选择要执行的接口";
-  });
+  const selectedPlanStepIds = stepPicker
+    ? bindPlanPickerTree(stepPicker, (count) => {
+        $("#add-step").disabled = !count;
+        stepPicker.querySelector(":scope > summary").textContent = count
+          ? "已选 " + count + " 个接口"
+          : "选择要执行的接口";
+      })
+    : () => [];
   on("#plan-step-picker", "keydown", (event, picker) => {
     if (event.key !== "Escape" || !picker.open) return;
     event.preventDefault();
@@ -5608,7 +5603,8 @@ function bind() {
   });
   on(".plans-page", "click", (event) => {
     const picker = $("#plan-step-picker");
-    if (picker?.open && !picker.contains(event.target)) picker.open = false;
+    if (picker?.open && !event.composedPath().includes(picker))
+      picker.open = false;
   });
   on("#plan-step-picker", "toggle", (_, picker) => {
     if (picker.open) picker.querySelector("input[type=search]").focus();

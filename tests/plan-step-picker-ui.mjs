@@ -150,6 +150,77 @@ try {
     JSON.stringify(measurements.requestIndent),
   );
   await capture("expanded");
+  const folderCheck = picker.getByRole("checkbox", {
+    name: "选择 示例接口 中的全部接口",
+    exact: true,
+  });
+  const chips = picker.getByRole("group", { name: "已选接口" });
+  const chipLabels = () =>
+    chips
+      .locator("button")
+      .evaluateAll((buttons) =>
+        buttons.map((button) => button.getAttribute("aria-label").slice(3)),
+      );
+  const mixed = () => folderCheck.evaluate((box) => box.indeterminate);
+  await search.fill("用户信息");
+  assert.deepEqual(await options.allTextContents(), nativeLabels.slice(1, 3));
+  measurements.filter = await popup.boundingBox();
+  await capture("filter");
+  await folderCheck.press("Space");
+  assert.equal(await search.inputValue(), "");
+  assert.equal(
+    await search.evaluate((input) => input === document.activeElement),
+    true,
+  );
+  assert.equal(await picker.getAttribute("open"), "");
+  assert.equal(await folderCheck.isChecked(), true);
+  assert.equal(await mixed(), false);
+  assert.deepEqual(await chipLabels(), nativeLabels.slice(0, 4));
+  assert.deepEqual(await options.allTextContents(), nativeLabels);
+  measurements.filterSelected = {
+    field: await picker.locator(".plan-picker-field").boundingBox(),
+    popup: await popup.boundingBox(),
+    chips: await chips.boundingBox(),
+  };
+  assert.deepEqual(measurements.filterSelected.field, measurements.input);
+  await capture("filter-selected");
+  await chips
+    .getByRole("button", { name: "移除 POST 创建用户" })
+    .press("Enter");
+  assert.equal(await mixed(), true);
+  assert.equal(await folderCheck.isChecked(), false);
+  assert.equal(
+    await picker.locator('input[value="create"]').isChecked(),
+    false,
+  );
+  assert.equal(
+    await search.evaluate((input) => input === document.activeElement),
+    true,
+  );
+  assert.equal(await picker.getAttribute("open"), "");
+  assert.deepEqual(await chipLabels(), nativeLabels.slice(1, 4));
+  await capture("mixed");
+  await folderCheck.click();
+  assert.deepEqual(await chipLabels(), [
+    ...nativeLabels.slice(1, 4),
+    nativeLabels[0],
+  ]);
+  await picker
+    .getByRole("checkbox", { name: "GET Verification", exact: true })
+    .check();
+  await folderCheck.click();
+  assert.deepEqual(await chipLabels(), [nativeLabels[4]]);
+  assert.equal(await folderCheck.isChecked(), false);
+  assert.equal(await mixed(), false);
+  assert.equal(
+    await picker.locator('input[name="plan-picker-api"]:checked').count(),
+    1,
+  );
+  await chips.getByRole("button", { name: "移除 GET Verification" }).click();
+  assert.equal(await picker.getAttribute("open"), "");
+  assert.equal(await add.isEnabled(), false);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(await app.store.get(project.id), fixture);
   await branch.press("Space");
   assert.equal(await branch.getAttribute("aria-expanded"), "false");
   assert.deepEqual(await options.allTextContents(), ["GET Verification"]);
@@ -184,6 +255,12 @@ try {
   );
   await openPicker();
   assert.equal(await picker.locator("input:checked").count(), 2);
+  await chips.getByRole("button", { name: "移除 POST 创建用户" }).click();
+  await branch.click();
+  await picker
+    .getByRole("checkbox", { name: "POST 创建用户", exact: true })
+    .check();
+  assert.deepEqual(await chipLabels(), [nativeLabels[1], nativeLabels[0]]);
   assert.equal(await page.locator(".plan-step").count(), 1);
   assert.deepEqual(await app.store.get(project.id), fixture);
   assert.deepEqual(writes, []);
@@ -204,7 +281,7 @@ try {
   project = await app.store.get(project.id);
   assert.deepEqual(
     project.plans[0].steps.map((step) => step.name),
-    ["Verification", "创建用户", "获取用户信息"],
+    ["Verification", "获取用户信息", "创建用户"],
   );
 
   // Extend the ephemeral fixture only after the same-state captures.
@@ -242,6 +319,24 @@ try {
   await search.fill("示例接口/账户");
   assert.equal(await nestedRequest.isVisible(), true);
   await nestedRequest.check();
+  assert.equal(await mixed(), true);
+  const nestedCheck = picker.getByRole("checkbox", {
+    name: "选择 账户 中的全部接口",
+    exact: true,
+  });
+  assert.equal(await nestedCheck.isChecked(), true);
+  await folderCheck.press("Space");
+  assert.equal(await search.inputValue(), "");
+  assert.equal(await chipLabels().then((items) => items[0]), "PATCH 深层验证");
+  assert.equal(await chipLabels().then((items) => items.length), 5);
+  const chipsCanScroll = await chips.evaluate(
+    (node) => node.scrollWidth > node.clientWidth,
+  );
+  assert.equal(chipsCanScroll, true);
+  const lastChip = chips.getByRole("button").last();
+  await lastChip.focus();
+  assert.ok(await chips.evaluate((node) => node.scrollLeft > 0));
+  assert.equal(await search.isVisible(), true);
   assert.equal(await picker.locator('input[value="removed"]').count(), 0);
   await selectPlan("Other Plan");
   await openPicker();
@@ -270,7 +365,7 @@ try {
       ) + "\n",
     );
   console.log(
-    "PLAN_STEP_PICKER_UI_PASS expanded/collapsed/filter/keyboard/owner/narrow/one-explicit-plan-save/no-dispatch",
+    "PLAN_STEP_PICKER_UI_PASS expanded/collapsed/filter/folder/mixed/chips/ordering/keyboard/owner/narrow/one-explicit-plan-save/no-dispatch",
   );
 } finally {
   await browser?.close();
