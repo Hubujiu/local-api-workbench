@@ -1,0 +1,102 @@
+#api-create-menu {
+  position: fixed;
+  inset: var(--api-create-y, 12px) auto auto
+    clamp(12px, var(--api-create-x, 12px), max(12px, calc(100vw - 458px)));
+  width: min(446px, calc(100vw - 24px));
+  max-height: calc(100dvh - var(--api-create-y, 12px) - 12px);
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 7px 24px #29201324;
+}
+#api-create-menu > h2 {
+  margin: 0 0 8px;
+  font-size: calc(13 * var(--app-type-unit));
+  line-height: 20px;
+  color: var(--text);
+}
+#api-create-menu > .api-create-grid + h2 {
+  margin-top: 12px;
+}
+#api-create-menu .api-create-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+#api-create-menu .api-create-tile {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  min-width: 0;
+  gap: 9px;
+  padding: 4px 8px;
+  background: var(--bg);
+  color: var(--text);
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#api-create-menu .api-create-tile:is(:hover, :focus-visible) {
+  background: var(--hover);
+}
+#api-create-menu :is(#new-folder, [data-tree-import="file"]) {
+  grid-column: 1 / -1;
+}
+#api-create-menu .api-create-tile > span {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--hover);
+  color: var(--text);
+}
+#api-create-menu .api-create-tile svg {
+  width: 13px;
+  height: 13px;
+}
+
+#api-create-menu [data-tree-protocol="tcp"] {
+  grid-column-start: 1;
+}
+#api-create-menu [data-tree-import]:not(:hover, :focus-visible) {
+  background: var(--panel);
+}
+#api-create-menu #new-request > span {
+  background: #f6d1cd;
+  color: #802c25;
+}
+#api-create-menu [data-tree-protocol="sse"] > span {
+  background: #cef2f9;
+  color: #206270;
+}
+#api-create-menu [data-tree-protocol="websocket"] > span {
+  background: #f8e9aa;
+  color: #6b560a;
+}
+#api-create-menu [data-page="socketio"] > span,
+#api-create-menu [data-tree-protocol="tcp"] > span {
+  background: #cff2e4;
+  color: #185c4a;
+}
+#api-create-menu [data-page="grpc"] > span {
+  background: #f9e0bf;
+  color: #70410f;
+}
+#api-create-menu #new-tree-document > span {
+  background: #dce7fb;
+  color: #315193;
+}
+#api-create-menu #new-folder > span {
+  background: #ebddf9;
+  color: #614298;
+}
+body.dark #api-create-menu .api-create-tile > span {
+  background: var(--hover);
+  color: var(--text);
+}
