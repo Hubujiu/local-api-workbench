@@ -197,7 +197,26 @@ export function headerEditorFields(name, header) {
   return `<label>响应头名称<input id="design-header-name" value="${esc(name)}" autocomplete="off"></label><label>响应头定义 JSON<textarea id="design-header-json" rows="10" spellcheck="false">${esc(JSON.stringify(header, null, 2))}</textarea></label>`;
 }
 
-function headerPreview(definition) {
+export function addDesignResponseStringHeader(
+  definition,
+  { name, example = "", description = "" },
+) {
+  if (
+    typeof name !== "string" ||
+    name.length > 256 ||
+    typeof example !== "string" ||
+    example.length > 8192 ||
+    typeof description !== "string" ||
+    description.length > 8192
+  )
+    throw Error("字符串响应头的名称、示例值或描述无效");
+  const header = { schema: { type: "string" } };
+  if (example !== "") header.example = example;
+  if (description !== "") header.description = description;
+  return editDesignResponseHeader(definition, null, name, header);
+}
+
+function headerPreview(definition, index, draft) {
   const headers = record(definition?.headers)
     ? Object.entries(definition.headers)
     : [];
@@ -214,9 +233,17 @@ function headerPreview(definition) {
       return `<tr><td><button type="button" class="ghost" data-response-header="${esc(name)}" aria-label="${esc("编辑响应头 " + name)}">${esc(name)}</button>${type ? ` <span class="design-response-kind">${esc(type)}</span>` : ""}</td><td>${esc(example)}</td><td>${esc(header?.description || "")}</td></tr>`;
     })
     .join("");
+  const pending =
+    draft?.kind === "header" &&
+    draft.index === index &&
+    draft.status === String(definition.status)
+      ? draft
+      : null;
   const add =
-    '<button type="button" class="ghost" id="new-response-header">＋ 添加响应头</button>';
-  return `<table class="design-response-header-table"><thead><tr><th scope="col">参数名</th><th scope="col">示例值</th><th scope="col">描述</th></tr></thead><tbody>${rows || `<tr><td colspan="3">${add}</td></tr>`}</tbody></table>${rows ? add : ""}`;
+    '<button type="button" class="ghost" id="new-response-header">使用 JSON 添加响应头</button>';
+  const input = (key, label, maxlength) =>
+    `<td><input form="design-response-header-form" id="design-new-header-${key}" aria-label="${label}" placeholder="${label}" autocomplete="off" spellcheck="false" maxlength="${maxlength}" value="${esc(pending?.[key] ?? "")}"></td>`;
+  return `<table class="design-response-header-table"><thead><tr><th scope="col">参数名</th><th scope="col">示例值</th><th scope="col">描述</th></tr></thead><tbody>${rows}<tr class="design-response-header-composer">${input("name", "响应头名称", 256)}${input("example", "示例值", 8192)}${input("description", "描述", 8192)}</tr></tbody></table><form id="design-response-header-form" aria-label="新增字符串响应头"><div class="design-response-header-actions">${add}<button type="button" class="ghost" id="design-new-header-cancel"${pending ? "" : " disabled"}>取消</button><button class="primary" type="submit" id="design-new-header-apply"${pending?.name?.trim() ? "" : " disabled"}>添加到草稿</button></div></form>`;
 }
 
 export function exampleMedia(headers) {
@@ -267,7 +294,11 @@ function examplesPreview(definition, media, examples, managed) {
 function responseSettings(definition, index, mediaTypes, examples, draft) {
   const status = String(definition?.status || "");
   const pending =
-    draft?.index === index && draft?.status === status ? draft : null;
+    draft?.kind === "settings" &&
+    draft.index === index &&
+    draft.status === status
+      ? draft
+      : null;
   const delays = examples.filter((ex) => String(ex?.status) === status);
   const format = mediaTypes.length ? mediaTypes.join(" · ") : "未定义";
   return `<form id="design-response-settings-form" aria-label="响应定义设置">
@@ -327,7 +358,7 @@ ${esc(settingsDraft?.rawCurrent ?? JSON.stringify(definitions, null, 2))}</texta
           )
           .join("")}</div>${
           selection?.view === "headers"
-            ? headerPreview(definition)
+            ? headerPreview(definition, index, settingsDraft)
             : selection?.view === "settings"
               ? responseSettings(
                   definition,

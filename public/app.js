@@ -116,6 +116,7 @@ import {
   designResponsePanel,
   responseSelection,
   editDesignResponseHeader,
+  addDesignResponseStringHeader,
   editDesignResponseRoot,
   responseRootTypeFields,
   headerEditorFields,
@@ -126,6 +127,8 @@ import {
 import {
   createDesignResponseSettingsDrafts,
   unappliedDesignResponseSettings,
+  unappliedDesignResponseHeader,
+  unchangedResponseDefinitions,
 } from "./design-response-settings-draft.js";
 import {
   documentCounts,
@@ -1387,8 +1390,8 @@ function rollbackProjectSave(error, rollback) {
 function collect() {
   const r = request();
   if (!r || page !== "apis" || workspaceDocument()) return;
-  if (designResponseSettingsDrafts.hasProject(project))
-    throw Error(unappliedDesignResponseSettings);
+  const responseDraftNotice = designResponseSettingsDrafts.notice(project);
+  if (responseDraftNotice) throw Error(responseDraftNotice);
   for (const [selector, key] of [
     ["#request-name", "name"],
     ["#url", "url"],
@@ -2988,8 +2991,8 @@ function bind() {
   ) => {
     const owner = project;
     if (graphqlDrafts.hasProject(owner)) throw Error(unappliedGraphQL);
-    if (designResponseSettingsDrafts.hasProject(owner))
-      throw Error(unappliedDesignResponseSettings);
+    const responseDraftNotice = designResponseSettingsDrafts.notice(owner);
+    if (responseDraftNotice) throw Error(responseDraftNotice);
     const opening = projectOpenRequestSequence,
       version = editVersion;
     const pendingProtocol =
@@ -3278,7 +3281,7 @@ function bind() {
   on("#method", "change", (_, element) => {
     if (designResponseSettingsDrafts.get(request())) {
       element.value = request().method;
-      throw Error(unappliedDesignResponseSettings);
+      throw Error(designResponseSettingsDrafts.notice(project));
     }
     collect();
     mark();
@@ -3648,6 +3651,119 @@ function bind() {
   on("[data-response-header]", "click", (_, e) =>
     editResponseHeader(e.dataset.responseHeader),
   );
+  const responseHeaderForm = $("#design-response-header-form");
+  if (responseHeaderForm) {
+    const owner = project;
+    const r = request();
+    const key = designResponseKey(r);
+    const { definition, index } = responseSelection(
+      r.responses,
+      designResponseSelections.get(key),
+    );
+    const status = String(definition.status);
+    const raw = $("#response-definitions");
+    const inputs = Object.fromEntries(
+      ["name", "example", "description"].map((field) => [
+        field,
+        $("#design-new-header-" + field),
+      ]),
+    );
+    const apply = $("#design-new-header-apply");
+    const cancel = $("#design-new-header-cancel");
+    const ownsHeader = () =>
+      responseHeaderForm.isConnected &&
+      project === owner &&
+      request() === r &&
+      page === "apis" &&
+      mode === "design" &&
+      !workspaceDocument() &&
+      String(r.responses[index]?.status) === status &&
+      designResponseSelections.get(key)?.view === "headers" &&
+      responseSelection(r.responses, designResponseSelections.get(key))
+        .index === index;
+    const reflect = () => {
+      const pending = designResponseSettingsDrafts.get(r);
+      apply.disabled = !pending?.name.trim();
+      cancel.disabled = !pending;
+    };
+    const reset = () => {
+      if (!ownsHeader()) return;
+      if (designResponseSettingsDrafts.clear(r)) editVersion++;
+      for (const input of Object.values(inputs)) input.value = "";
+      reflect();
+      inputs.name.focus({ preventScroll: true });
+    };
+    on(".design-response-header-composer input", "input", () => {
+      if (!ownsHeader()) return;
+      const pending = designResponseSettingsDrafts.get(r);
+      if (!pending && !unchangedResponseDefinitions(raw.value, r.responses)) {
+        reset();
+        throw Error("响应定义 JSON 有未应用的修改，请先处理后再新增响应头。");
+      }
+      const values = Object.fromEntries(
+        Object.entries(inputs).map(([field, input]) => [field, input.value]),
+      );
+      if (values.name.trim() || values.example || values.description)
+        designResponseSettingsDrafts.stage(r, {
+          ...values,
+          kind: "header",
+          definition: pending?.definition ?? r.responses[index],
+          index,
+          status,
+          raw: pending?.raw ?? raw.value,
+          rawCurrent: pending?.rawCurrent,
+        });
+      else designResponseSettingsDrafts.clear(r);
+      editVersion++;
+      reflect();
+    });
+    const headerKeys = (event) => {
+      if (event.isComposing) return;
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        ["enter", "s"].includes(event.key.toLowerCase())
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (designResponseSettingsDrafts.get(r))
+          toast(unappliedDesignResponseHeader);
+      } else if (
+        event.key === "Escape" &&
+        designResponseSettingsDrafts.get(r)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        reset();
+      }
+    };
+    on(
+      ".design-response-header-composer input,#design-response-header-form",
+      "keydown",
+      headerKeys,
+    );
+    on("#design-new-header-cancel", "click", reset);
+    on("#design-response-header-form", "submit", (event) => {
+      event.preventDefault();
+      const draft = designResponseSettingsDrafts.get(r);
+      if (!draft || draft.kind !== "header" || !draft.name.trim()) return;
+      if (
+        !ownsHeader() ||
+        draft.definition !== r.responses[index] ||
+        draft.raw !== raw.value ||
+        busy ||
+        saving
+      )
+        throw Error("响应头或 JSON 草稿已变化，请取消后再新增。");
+      const update = addDesignResponseStringHeader(draft.definition, draft);
+      const top = $(".http-design-canvas").scrollTop;
+      r.responses[index] = update;
+      designResponseSettingsDrafts.clear(r);
+      mark();
+      render();
+      $(".http-design-canvas").scrollTop = top;
+      $("#design-new-header-name")?.focus({ preventScroll: true });
+    });
+  }
   const responseSettingsForm = $("#design-response-settings-form");
   if (responseSettingsForm) {
     const owner = project;
@@ -3687,19 +3803,9 @@ function bind() {
     on("#design-settings-status,#design-settings-description", "input", () => {
       if (!ownsSettings()) return;
       const pending = designResponseSettingsDrafts.get(r);
-      if (!pending) {
-        let comparable = false;
-        try {
-          comparable =
-            JSON.stringify(JSON.parse(raw.value)) ===
-            JSON.stringify(r.responses);
-        } catch {}
-        if (!comparable) {
-          reset();
-          throw Error(
-            "响应定义 JSON 有未应用的修改，请先处理后再编辑响应设置。",
-          );
-        }
+      if (!pending && !unchangedResponseDefinitions(raw.value, r.responses)) {
+        reset();
+        throw Error("响应定义 JSON 有未应用的修改，请先处理后再编辑响应设置。");
       }
       if (
         statusInput.value === status &&
@@ -3708,6 +3814,7 @@ function bind() {
         designResponseSettingsDrafts.clear(r);
       else
         designResponseSettingsDrafts.stage(r, {
+          kind: "settings",
           definition,
           index,
           status,
