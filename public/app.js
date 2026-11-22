@@ -41,6 +41,7 @@ import {
 } from "./workspace-document.js";
 import { bindWorkspaceDocumentScroll } from "./workspace-document-scroll.js";
 import { markdownEdit, markdownTools } from "./design-markdown.js";
+import { insertTextareaText } from "./textarea-edit-history.js";
 import { emptyCasePanel } from "./case-empty-view.js";
 import {
   cookieManagerHTML,
@@ -2855,17 +2856,7 @@ function bind() {
       input.selectionStart,
       input.selectionEnd,
     );
-    if (!edit) return;
-    const originalStart = input.selectionStart;
-    const originalEnd = input.selectionEnd;
-    const originalDirection = input.selectionDirection;
-    input.focus({ preventScroll: true });
-    input.setSelectionRange(edit.start, edit.end);
-    // Keep formatting in the same native undo history as typing and pasting.
-    if (!document.execCommand("insertText", false, edit.replacement)) {
-      input.setSelectionRange(originalStart, originalEnd, originalDirection);
-      return;
-    }
+    if (!edit || !insertTextareaText(input, edit)) return;
     input.setSelectionRange(edit.anchor, edit.anchor + edit.length);
   };
   on("[data-design-markdown]", "click", (_, el) => {
@@ -6715,11 +6706,8 @@ function bindWorkspaceDocument() {
       input.selectionStart,
       input.selectionEnd,
     );
-    if (!patch) return;
-    input.setRangeText(patch.replacement, patch.start, patch.end, "select");
-    input.focus();
+    if (!patch || !insertTextareaText(input, patch)) return;
     input.setSelectionRange(patch.anchor, patch.anchor + patch.length);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
 
