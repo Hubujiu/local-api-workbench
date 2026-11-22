@@ -182,6 +182,10 @@ import {
   scopedExportRequest,
   assertScopedExportResult,
 } from "./scoped-export-view.js";
+import {
+  bindGraphQLExportNotice,
+  graphqlExportNoticeHTML,
+} from "./graphql-export-notice.js";
 import { createProtocolSessionController } from "./protocol-session-controller.js";
 import {
   planStructureEditor,
@@ -5445,7 +5449,8 @@ function bind() {
   on("#export", "click", () => {
     modal(
       "导出项目",
-      '<button id="scoped-export-open">选择资源导出定义（预览范围和依赖）</button><hr><p>以下为整项目导出；本地项目 JSON 是完整备份，包含环境及历史。</p><label>整项目格式</label><select id="export-format"><option value="native">本地项目 JSON（包含环境和历史）</option><option value="openapi">OpenAPI 3 JSON（接口定义）</option></select><p class="notice">导出内容可能包含密钥、请求凭据和响应数据，请检查后再分享。</p>',
+      '<button id="scoped-export-open">选择资源导出定义（预览范围和依赖）</button><hr><p>以下为整项目导出；本地项目 JSON 是完整备份，包含环境及历史。</p><label>整项目格式</label><select id="export-format"><option value="native">本地项目 JSON（包含环境和历史）</option><option value="openapi">OpenAPI 3 JSON（接口定义）</option></select><p class="notice">导出内容可能包含密钥、请求凭据和响应数据，请检查后再分享。</p>' +
+        graphqlExportNoticeHTML(project),
       async () => {
         await save();
         const format = $("#export-format").value;
@@ -5456,6 +5461,7 @@ function bind() {
       },
       "导出",
     );
+    bindGraphQLExportNotice($("#dialog-content"));
     $("#scoped-export-open").onclick = () => {
       try {
         openScopedDefinitionExport();
