@@ -25,6 +25,9 @@ export function syncMultipartAll(control, rows) {
   if (control) Object.assign(control, multipartSelection(rows));
 }
 
+export const debugFormRowActions = (row, i) =>
+  `<div class="pair-row-actions"><button type="button" data-dynamic-pair="form:${i}">${row.dynamic ? "动态✓" : "动态"}</button><button type="button" data-dictionary-pair="form:${i}">字典</button><button type="button" data-define-pair="form:${i}" title="参数类型、必填与说明">定义</button><button type="button" data-remove-pair="form:${i}" aria-label="删除参数">×</button></div>`;
+
 export function debugMultipartEditor(rows, esc) {
   const all = multipartSelection(rows);
   const automatic = "自动（content-type）";
@@ -42,7 +45,7 @@ export function debugMultipartEditor(rows, esc) {
       <td><div class="debug-multipart-name"><input data-pair="form:${i}:key" aria-label="参数名" value="${esc(row.key)}"><select data-field-type="${i}" aria-label="字段类型"><option value="text"${file ? "" : " selected"}>string</option><option value="file"${file ? " selected" : ""}>file</option></select></div></td>
       <td>${value}</td>
       <td class="debug-multipart-media" title="${esc(row.contentType || automatic)}">${esc(row.contentType || automatic)}</td>
-      <td><div class="pair-row-actions"><button type="button" data-dynamic-pair="form:${i}">${row.dynamic ? "动态✓" : "动态"}</button><button type="button" data-dictionary-pair="form:${i}">字典</button><button type="button" data-define-pair="form:${i}" title="参数类型、必填与说明">定义</button><button type="button" data-remove-pair="form:${i}" aria-label="删除参数">×</button></div></td>
+      <td>${debugFormRowActions(row, i)}</td>
     </tr>`;
     })
     .join("");

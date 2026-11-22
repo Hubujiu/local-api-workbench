@@ -63,6 +63,7 @@ jobs:
       - run: node tests/debug-pair-composer-ui.mjs
       - run: node tests/http-debug-body-empty-ui.mjs
       - run: node tests/debug-multipart-editor-ui.mjs
+      - run: node tests/debug-urlencoded-editor-ui.mjs
       - run: node tests/form-file-privacy-ui.mjs
       - run: node tests/binary-body-editor-ui.mjs
       - run: node tests/http-debug-body-raw-ui.mjs

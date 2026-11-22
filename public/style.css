@@ -4035,6 +4035,7 @@ body:not(.dark) .plans-heading {
         .body-none,
         .http-debug-raw-actions,
         .debug-multipart-editor,
+        .debug-urlencoded-editor,
         .debug-binary-body
       )
     ) {
@@ -4046,6 +4047,7 @@ body:not(.dark) .plans-heading {
         .body-none,
         .http-debug-raw-actions,
         .debug-multipart-editor,
+        .debug-urlencoded-editor,
         .debug-binary-body
       )
     )
@@ -4064,6 +4066,7 @@ body:not(.dark) .plans-heading {
         .body-none,
         .http-debug-raw-actions,
         .debug-multipart-editor,
+        .debug-urlencoded-editor,
         .debug-binary-body
       )
     )
@@ -4080,6 +4083,7 @@ body:not(.dark) .plans-heading {
         .body-none,
         .http-debug-raw-actions,
         .debug-multipart-editor,
+        .debug-urlencoded-editor,
         .debug-binary-body
       )
     )
@@ -4103,6 +4107,7 @@ body:not(.dark) .plans-heading {
         .body-none,
         .http-debug-raw-actions,
         .debug-multipart-editor,
+        .debug-urlencoded-editor,
         .debug-binary-body
       )
     )
@@ -4117,6 +4122,7 @@ body:not(.dark) .plans-heading {
         .body-none,
         .http-debug-raw-actions,
         .debug-multipart-editor,
+        .debug-urlencoded-editor,
         .debug-binary-body
       )
     )
@@ -4130,6 +4136,7 @@ body:not(.dark) .plans-heading {
         .body-none,
         .http-debug-raw-actions,
         .debug-multipart-editor,
+        .debug-urlencoded-editor,
         .debug-binary-body
       )
     )
@@ -4145,6 +4152,7 @@ body:not(.dark) .plans-heading {
           .body-none,
           .http-debug-raw-actions,
           .debug-multipart-editor,
+          .debug-urlencoded-editor,
           .debug-binary-body
         )
       )
