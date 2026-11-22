@@ -73,6 +73,10 @@ import {
   prepareProtocolHistoryExport,
 } from "./protocol-history-view.js";
 import {
+  bindRecentHistoryFilter,
+  recentHistoryPage,
+} from "./recent-history-view.js";
+import {
   createGrpcStreamState,
   renderGrpcStream,
   bindGrpcStream,
@@ -2248,7 +2252,10 @@ function renderPage() {
   if (page === "plans")
     return renderPlans({ project, planId, lastRun, busy, tab: planTab });
   if (page === "history")
-    return `<div class="page"><div class="page-head"><h1>最近请求</h1><button id="history-project-reload" ${busy || saving ? "disabled" : ""}>重新加载项目记录（不重发）</button><span class="muted">本地保留最近 50 条</span></div>${project.history.map((h) => `<div class="card"><div class="row"><span class="method ${h.request?.method}">${h.request?.method}</span><strong class="grow">${esc(h.name)}</strong><span class="${h.response?.status < 400 ? "success" : "failed"}">${h.response?.status || "ERROR"}</span><button data-history="${h.id}">查看</button></div><p class="subtle">${esc(h.createdAt)} · ${esc(h.request?.url)}</p></div>`).join("") || '<div class="empty"><p>暂无请求历史</p></div>'}${protocolHistoryView(project)}</div>`;
+    return recentHistoryPage(project.history, {
+      disabled: busy || saving,
+      protocol: protocolHistoryView(project),
+    });
   if (page === "trash")
     return `<div class="page"><h1>回收站</h1>${projects
       .filter((p) => p.archived)
@@ -6411,6 +6418,7 @@ function bind() {
       restorePlanHistoryFocus(target, button, replacedFocus);
     }
   });
+  bindRecentHistoryFilter($(".recent-http-history"));
   on("#history-project-reload", "click", () => openProject(project.id));
   on("#protocol-history-filter", "submit", (event) => {
     event.preventDefault();
