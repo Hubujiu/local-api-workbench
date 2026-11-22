@@ -144,9 +144,23 @@ body:not(.dark) .api-welcome-card #welcome-mcp {
   background: #716449;
 }
 body.dark .api-welcome {
-  --api-welcome-card: #242017;
-  --api-welcome-border: #473c28;
-  --api-welcome-secondary: var(--muted);
+  --api-welcome-card: #17140f;
+  --api-welcome-border: #2c2721;
+  --api-welcome-canvas: #1d1a13;
+  --api-welcome-secondary: #a69b83;
+  background: var(--api-welcome-canvas);
+}
+body.dark .api-welcome-card #welcome-mcp {
+  background: #e4ca91;
+  border-color: #e4ca91;
+  color: #201a10;
+}
+body.dark .api-welcome-actions button {
+  background: var(--api-welcome-canvas);
+  border-color: #312c26;
+}
+body.dark .api-welcome-actions button:hover {
+  background: var(--hover);
 }
 @media (max-width: 680px) {
   .api-welcome {
