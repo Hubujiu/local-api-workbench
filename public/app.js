@@ -103,6 +103,12 @@ import {
   isDesignPairKind,
 } from "./design-pair-composer.js";
 import {
+  bindDesignQueryTypeMenu,
+  designQueryMetadataHTML,
+  designQueryTypeMenuHTML,
+  prepareDesignQueryType,
+} from "./design-query-metadata.js";
+import {
   httpRequestActions,
   requestCurlAction,
 } from "./http-request-actions.js";
@@ -2156,7 +2162,11 @@ function pairs(rows, key, designOptions, debugOptions, formBodyType) {
     return `<table class="pairs-table request-pairs-table debug-pairs-table debug-pairs-empty"><colgroup><col span="3"></colgroup><thead><tr><th scope="col" class="debug-pair-name-heading">参数名</th><th scope="col">${valueHeading}</th><th scope="col">描述</th></tr></thead><tbody>${debugPairComposer(key, true)}</tbody></table>`;
   const designComposer = design && isDesignPairKind(key);
   const compactEmpty = designComposer && !rows.length;
-  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}${compactEmpty ? " design-pairs-empty" : ""}">${compactEmpty ? '<colgroup class="design-empty-pair-columns"><col><col><col><col></colgroup>' : ""}<thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${rows
+  const queryMetadata = design && key === "query";
+  const inlineQuery =
+    queryMetadata &&
+    rows.some((row) => typeof row.key === "string" && row.key.trim());
+  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}${compactEmpty ? " design-pairs-empty" : ""}${inlineQuery ? " design-query-metadata-table" : ""}">${compactEmpty ? '<colgroup class="design-empty-pair-columns"><col><col><col><col></colgroup>' : ""}<thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${rows
     .map((p, i) => {
       const form = key === "form";
       const fileLike = form ? formFileRepresentation(p) : p.type === "file";
@@ -2171,11 +2181,13 @@ function pairs(rows, key, designOptions, debugOptions, formBodyType) {
           : fileLike
             ? `<span class="pair-file"><input type="file" data-field-file="${i}"><small title="${esc(p.filename || "未选择文件")}">${esc(p.filename || "未选择文件")}</small></span>`
             : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`;
-      return `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td><div class="pair-value">${selector}${value}</div></td>${metadataColumn ? `<td class="pair-description" title="${esc(p.description || "")}">${esc(p.description || "")}</td>` : ""}<td><div class="pair-row-actions"><button data-dynamic-pair="${key}:${i}">${p.dynamic ? "动态✓" : "动态"}</button><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></div></td></tr>`;
+      const name = `<input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}">`;
+      const metadata = inlineQuery ? designQueryMetadataHTML(p, i, esc) : "";
+      return `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td>${metadata ? `<div class="design-query-name">${name}${metadata}</div>` : name}</td><td><div class="pair-value">${selector}${value}</div></td>${metadataColumn ? `<td class="pair-description" title="${esc(p.description || "")}">${esc(p.description || "")}</td>` : ""}<td><div class="pair-row-actions"><button data-dynamic-pair="${key}:${i}">${p.dynamic ? "动态✓" : "动态"}</button><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></div></td></tr>`;
     })
     .join(
       "",
-    )}${debugComposer ? debugPairComposer(key, false) : designComposer ? designPairComposer(key, compactEmpty) : ""}</tbody></table>${designComposer || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
+    )}${debugComposer ? debugPairComposer(key, false) : designComposer ? designPairComposer(key, compactEmpty) : ""}</tbody></table>${inlineQuery ? designQueryTypeMenuHTML() : ""}${designComposer || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
 }
 function bodyParameterHelper(r, tabbed) {
   const reference = `<button type="button" class="raw-helper-action-card" id="raw-helper-reference-variable" aria-label="引用变量"><span class="raw-helper-variable-icon">${lineIcon("helper-variable")}</span><span><strong>引用变量</strong><small>引用已配置的环境、集合或全局变量</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
@@ -5075,6 +5087,74 @@ function bind() {
   };
   on("[data-design-pair-name]", "input", commitDesignPair);
   on("[data-design-pair-name]", "compositionend", commitDesignPair);
+  const queryPanel = $(".design-parameter-panel");
+  const queryMetadataOwner = (button, checked = false) => {
+    if (!ownsDesignPair(button, "query"))
+      throw Error("Query 参数已变化，请重新选择。");
+    const index = Number(
+      checked
+        ? button.dataset.designQueryRequired
+        : button.dataset.designQueryType,
+    );
+    const row = composerRequest.query[index];
+    if (typeof row?.key !== "string" || !row.key.trim())
+      throw Error("Query 参数已变化，请重新选择。");
+    return {
+      button,
+      row,
+      index,
+      version: editVersion,
+      key: row.key,
+      schema: row.schema,
+    };
+  };
+  const updateQueryMetadata = (owner, change, focusedPart) => {
+    if (
+      !owner ||
+      !ownsDesignPair(owner.button, "query") ||
+      editVersion !== owner.version ||
+      composerRequest.query[owner.index] !== owner.row ||
+      owner.row.key !== owner.key ||
+      owner.row.schema !== owner.schema
+    )
+      throw Error("Query 参数已变化，请重新选择。");
+    collect();
+    if (!change(owner.row)) return;
+    const scrollTop = $(".http-design-canvas")?.scrollTop;
+    mark();
+    render();
+    const canvas = $(".http-design-canvas");
+    if (canvas && scrollTop !== undefined) canvas.scrollTop = scrollTop;
+    $(`[data-design-query-${focusedPart}="${owner.index}"]`)?.focus({
+      preventScroll: true,
+    });
+  };
+  bindDesignQueryTypeMenu(queryPanel, {
+    capture: queryMetadataOwner,
+    update: (owner, type) =>
+      updateQueryMetadata(
+        owner,
+        (row) => {
+          const next = prepareDesignQueryType(row, type);
+          if (!next) return false;
+          row.schema = next;
+          delete row.schemaDefined;
+          return true;
+        },
+        "type",
+      ),
+    notify: toast,
+  });
+  on("[data-design-query-required]", "click", (_, button) =>
+    updateQueryMetadata(
+      queryMetadataOwner(button, true),
+      (row) => {
+        row.required = row.required !== true;
+        return true;
+      },
+      "required",
+    ),
+  );
   on("[data-add-pair]", "click", (_, e) => {
     if (staleDebugFormControl(e)) return;
     const key = e.dataset.addPair;

@@ -63,6 +63,9 @@ jobs:
       - run: node tests/http-design-pair-composer-ui.mjs
         env:
           DESIGN_PAIR_COMPOSER_EVIDENCE: /tmp/local-api-design-pair-composer
+      - run: node tests/http-design-query-metadata-ui.mjs
+        env:
+          DESIGN_QUERY_METADATA_EVIDENCE: /tmp/local-api-design-query-metadata
       - run: node tests/http-design-description-scroll-ui.mjs
         env:
           DESIGN_DESCRIPTION_SCROLL_EVIDENCE: /tmp/local-api-http-design-description-scroll
@@ -154,6 +157,7 @@ jobs:
             /tmp/local-api-*.png
             /tmp/local-api-http-success-response/response-*-workbench.png
             /tmp/local-api-design-pair-composer/design-pair-*.png
+            /tmp/local-api-design-query-metadata/design-query-*.png
             /tmp/local-api-http-design-description-scroll/design-description-*.png
             /tmp/local-api-graphql-named-workspace/named-workbench-*.png
             /tmp/local-api-http-workbench.json
