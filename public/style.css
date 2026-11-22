@@ -4683,6 +4683,55 @@ body:not(.dark) .plans-heading {
   .pair-description-heading {
   width: 33.333%;
 }
+.design-empty-pair-columns {
+  display: none;
+}
+@media (min-width: 1240px) and (min-height: 720px) {
+  .design-parameter-panel .design-pairs-empty > .design-empty-pair-columns {
+    display: table-column-group;
+  }
+  .design-parameter-panel .design-pairs-empty col:first-child {
+    width: 37px;
+  }
+  /* Fixed table layout distributes a mixed-unit calc() column as auto in
+     Chromium. Give the name and description columns resolvable percentages
+     and let the value column take the remaining width. */
+  .design-parameter-panel .design-pairs-empty col:nth-child(2) {
+    width: 28%;
+  }
+  .design-parameter-panel .design-pairs-empty col:last-child {
+    width: 31.82%;
+  }
+  .design-parameter-panel .request-pairs-table.design-pairs-empty thead th {
+    width: auto;
+    border-inline-end: 0;
+  }
+  .design-parameter-panel
+    .request-pairs-table.design-pairs-empty
+    thead
+    .pair-description-heading {
+    padding-inline-start: 15px;
+  }
+  .design-parameter-panel
+    .design-pairs-empty
+    th:nth-child(3):not(:has(.design-query-equality)) {
+    padding-inline-start: 32px;
+  }
+  .design-parameter-panel
+    .design-pairs-empty
+    .design-pair-composer
+    > td:first-child {
+    padding-inline-end: 0;
+  }
+  .design-parameter-panel
+    .design-pairs-empty
+    .design-pair-composer
+    .design-empty-pair {
+    width: 100%;
+    padding-inline: 0 5px;
+    text-align: end;
+  }
+}
 .design-parameter-panel .design-pair-composer > td {
   height: 36px;
   padding: 2px 4px;
