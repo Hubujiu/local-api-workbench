@@ -4979,6 +4979,45 @@ body:not(.dark) .plans-heading {
   padding: 3px 10px;
   overflow-wrap: anywhere;
 }
+/* Only the selected response Header view: a real blank composer, no faux schema controls. */
+.design-response-header-table .design-response-header-composer td {
+  height: 37px;
+  padding-block: 2px;
+}
+.design-response-header-composer input {
+  width: 100%;
+  min-width: 0;
+  height: 29px;
+  padding-inline: 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+}
+.design-response-header-composer input:hover {
+  border-color: var(--line);
+}
+.design-response-header-composer input:focus-visible {
+  border-color: var(--accent);
+}
+.design-response-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+.design-response-header-actions #new-response-header {
+  margin-inline-end: auto;
+}
+@media (min-width: 900px) {
+  .design-response-header-table :is(th, td):first-child {
+    padding-inline-start: 39px;
+  }
+  .design-response-header-table :is(th, td):nth-child(2),
+  .design-response-header-table :is(th, td):nth-child(3) {
+    padding-inline-start: 26px;
+  }
+}
 .design-response-header-fields {
   display: grid;
   gap: 12px;

@@ -490,7 +490,9 @@ try {
     JSON.parse(await rawResponses.inputValue()),
     JSON.parse(responseDraft),
   );
-  await responseRegion.getByRole("button", { name: "＋ 添加响应头" }).click();
+  await responseRegion
+    .getByRole("button", { name: "使用 JSON 添加响应头" })
+    .click();
   const headerName = page.getByRole("textbox", { name: "响应头名称" });
   await headerName.fill("x-trace");
   await page.locator("#dialog-save").click();

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   designResponsePanel,
   editDesignResponseHeader,
+  addDesignResponseStringHeader,
   editDesignResponseRoot,
   scopedResponseExamples,
   supportsDesignExamples,
@@ -109,6 +110,58 @@ test("response Header edits preserve other header identities, media and raw cont
     ),
     Object.prototype,
   );
+});
+
+test("inline response header preserves literal strings and advanced siblings", () => {
+  const original = {
+    ...definitions[1],
+    headers: {
+      "X-Advanced": { $ref: "#/components/headers/Example" },
+    },
+  };
+  const next = addDesignResponseStringHeader(original, {
+    name: "  X-Fixture ",
+    example: "0",
+    description: "<header>",
+  });
+  assert.deepEqual(next.headers["X-Fixture"], {
+    schema: { type: "string" },
+    example: "0",
+    description: "<header>",
+  });
+  assert.equal(next.headers["X-Advanced"], original.headers["X-Advanced"]);
+  assert.equal(next.content, original.content);
+  assert.equal(Object.hasOwn(original.headers, "X-Fixture"), false);
+  assert.deepEqual(
+    addDesignResponseStringHeader(original, { name: "X-Blank" }).headers[
+      "X-Blank"
+    ],
+    { schema: { type: "string" } },
+  );
+  for (const [input, error] of [
+    [{ name: "x-ADVANCED" }, /同名响应头/],
+    [{ name: "bad name" }, /有效的响应头/],
+    [{ name: "Content-Type" }, /媒体类型/],
+    [{ name: "X-Fixture", example: 0 }, /无效/],
+  ])
+    assert.throws(() => addDesignResponseStringHeader(original, input), error);
+  const html = designResponsePanel(
+    [next],
+    { status: "404", view: "headers" },
+    false,
+    [],
+    null,
+    {
+      kind: "header",
+      index: 0,
+      status: "404",
+      name: "<synthetic>",
+      example: '"x"',
+    },
+  );
+  assert.match(html, /&lt;synthetic&gt;/);
+  assert.match(html, /&quot;x&quot;/);
+  assert.doesNotMatch(html, /<synthetic>/);
 });
 
 test("Design examples respect status, media, and managed versus raw inline definitions", () => {
