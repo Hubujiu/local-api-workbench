@@ -2,6 +2,7 @@ import { cloneRequestWithTaskSource } from "./imported-native-task-source.mjs";
 import { validatePostmanOAuth2Project } from "../public/postman-oauth2-model.js";
 import { randomUUID } from "node:crypto";
 import { normalizeRequest } from "./core.mjs";
+import { activeGraphQLRequest } from "../public/graphql-named-queries.js";
 export function snapshotCase(input) {
   validatePostmanOAuth2Project({ cases: [input] });
   if (input?.request?.nativeInheritance !== undefined)
@@ -16,7 +17,9 @@ export function snapshotCase(input) {
     sourceRequestId: input.sourceRequestId,
     ...(input.folderId !== undefined ? { folderId: input.folderId } : {}),
     request: {
-      ...normalizeRequest(cloneRequestWithTaskSource(input.request)),
+      ...normalizeRequest(
+        cloneRequestWithTaskSource(activeGraphQLRequest(input.request)),
+      ),
       serviceSnapshot: true,
       parametersSnapshot: true,
       authSnapshot: true,

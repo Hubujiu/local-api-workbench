@@ -1,4 +1,5 @@
 import { snapshotPlan } from "./core.mjs";
+import { activeGraphQLRequest } from "../public/graphql-named-queries.js";
 import { freezeServiceBinding } from "./environments.mjs";
 import { liveRequestId } from "./live-plan-reference.mjs";
 import { mapPlanLeaves, planLeaves } from "./plan-repeat.mjs";
@@ -79,7 +80,8 @@ export function materializeLivePlan(
     const matches = (detached.requests || []).filter((item) => item.id === id);
     if (matches.length !== 1 || matches[0].deletedAt)
       throw Error("实时计划引用的接口不存在、已删除或不唯一");
-    const source = structuredClone(matches[0]);
+    // Authoring variants are neither frozen nor charged against execution bytes.
+    const source = structuredClone(activeGraphQLRequest(matches[0]));
     const template = step.request;
     if (source.postmanCollectionId !== template.postmanCollectionId)
       throw Error("实时计划 Postman collection 身份已变化，须重新创建任务模板");

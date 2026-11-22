@@ -1,0 +1,110 @@
+.graphql-editor-layout:has(.graphql-named-rail) {
+  grid-template-columns: 188px minmax(0, 1fr) minmax(0, 1fr);
+}
+.graphql-named-rail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-inline-end: 0;
+  background: var(--panel);
+}
+.graphql-named-rail ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 276px;
+  overflow: auto;
+}
+.graphql-named-rail li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  min-height: 32px;
+  border-radius: 4px;
+}
+.graphql-named-rail li.selected {
+  color: var(--accent-text, var(--accent));
+  background: var(--hover);
+}
+.graphql-named-rail li > button {
+  min-width: 0;
+  min-height: 30px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+}
+.graphql-named-rail [data-graphql-query-row] {
+  padding-inline: 10px 2px;
+  text-align: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.graphql-named-rail .graphql-named-menu-trigger {
+  padding: 0;
+}
+@media (min-width: 701px) and (hover: hover) {
+  .graphql-named-rail
+    li:not(.selected, :hover, :focus-within)
+    .graphql-named-menu-trigger:not([aria-expanded="true"]) {
+    opacity: 0;
+  }
+}
+#graphql-named-add {
+  min-height: 26px;
+  margin-top: auto;
+  border: 1px dashed var(--accent);
+  background: transparent;
+  color: var(--accent-text, var(--accent));
+}
+#graphql-named-query-menu {
+  position: fixed;
+  inset: var(--graphql-menu-y, 8px) auto auto var(--graphql-menu-x, 8px);
+  margin: 0;
+  padding: 4px;
+  min-width: 114px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  box-shadow: 0 5px 16px #20190f22;
+}
+#graphql-named-query-menu > button {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: start;
+}
+#graphql-named-query-menu > button:is(:hover, :focus-visible) {
+  background: var(--hover);
+}
+@media (max-width: 700px) {
+  .graphql-editor-layout:has(.graphql-named-rail) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .graphql-named-rail {
+    border-inline-end: 1px solid var(--line);
+    border-block-end: 0;
+  }
+  .graphql-named-rail ul {
+    max-height: 120px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .editor.split-layout .graphql-editor-layout:has(.graphql-named-rail) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .editor.split-layout .graphql-named-rail {
+    border-inline-end: 1px solid var(--line);
+    border-block-end: 0;
+  }
+  .editor.split-layout .graphql-editor-layout .graphql-panes {
+    border-inline-start: 1px solid var(--line);
+    border-block-start: 0;
+  }
+}

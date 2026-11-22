@@ -1,11 +1,19 @@
 import { prepareGraphQLEdit, readGraphQLEditor } from "./graphql-editor.js";
 import {
+  bindGraphQLNamedRail,
+  graphqlNamedRailHTML,
+} from "./graphql-named-workspace.js";
+import {
   bindGraphQLSchemaDirectory,
   graphQLSchemaDirectoryHTML,
 } from "./graphql-schema-directory.js";
 
 export const unappliedGraphQL =
   "GraphQL 编辑有未应用的更改。请先回到对应接口应用或放弃。";
+
+const currentNamedQuery = (request) => request.graphqlNamedQueries?.activeId;
+const rawCollectionNotice =
+  "此接口包含命名查询，不能直接切换为原始 HTTP 正文。可将当前查询复制到独立 HTTP 接口。";
 
 export function createGraphQLWorkspaceDrafts() {
   const latest = new WeakMap();
@@ -16,7 +24,14 @@ export function createGraphQLWorkspaceDrafts() {
       const local = latest.get(request);
       if (local) return local;
       const view = readGraphQLEditor(request);
-      return view && { view, original: request.body, patch: {} };
+      return (
+        view && {
+          view,
+          original: request.body,
+          named: currentNamedQuery(request),
+          patch: {},
+        }
+      );
     },
     pending(request) {
       return Boolean(request && latest.has(request));
@@ -36,7 +51,11 @@ export function createGraphQLWorkspaceDrafts() {
     },
     edit(request, field, text) {
       const state = this.read(request);
-      if (!state || state.original !== request.body)
+      if (
+        !state ||
+        state.original !== request.body ||
+        state.named !== currentNamedQuery(request)
+      )
         throw Error("GraphQL 正文已变化，未覆盖现有正文。");
       if (field === "operationName") {
         if (text === state.view.operationName) delete state.patch.operationName;
@@ -54,7 +73,10 @@ export function createGraphQLWorkspaceDrafts() {
     apply(request) {
       const state = latest.get(request);
       if (!state) return false;
-      if (state.original !== request.body)
+      if (
+        state.original !== request.body ||
+        state.named !== currentNamedQuery(request)
+      )
         throw Error("GraphQL 正文已变化，未覆盖现有正文。");
       // Validate only the explicitly edited identifier, not the Query document
       // or an untouched historical string.
@@ -79,6 +101,9 @@ export function createGraphQLWorkspaceDrafts() {
 
 export function graphqlWorkspaceHTML(request, drafts, esc, ownerId) {
   const data = drafts.read(request);
+  const fallback = request.graphqlNamedQueries
+    ? `<span class="muted">${rawCollectionNotice}</span>`
+    : '<button type="button" id="graphql-detach" class="ghost">使用原始 HTTP 正文</button>';
   const opened = data && drafts.variablesOpen(request);
   const pending = data && drafts.pending(request);
   const operation =
@@ -91,10 +116,10 @@ export function graphqlWorkspaceHTML(request, drafts, esc, ownerId) {
     Object.hasOwn(data.patch, key)
       ? (data.patch[key] ?? "")
       : (data.view[key] ?? "");
-  return `<section class="graphql-workspace" data-graphql-owner="${esc(ownerId + ":" + request.id)}" aria-label="GraphQL 请求编辑">
+  return `<section class="graphql-workspace" data-graphql-owner="${esc(JSON.stringify([ownerId, request.id, currentNamedQuery(request)]))}" aria-label="GraphQL 请求编辑">
     ${
       data
-        ? `<div class="graphql-editor-layout">${graphQLSchemaDirectoryHTML()}<div class="graphql-panes${opened ? " variables-open" : ""}">
+        ? `<div class="graphql-editor-layout">${graphqlNamedRailHTML(request, esc)}${graphQLSchemaDirectoryHTML()}<div class="graphql-panes${opened ? " variables-open" : ""}">
       <label class="graphql-source">
         <span>Query</span><textarea id="graphql-query" data-graphql-field="query" spellcheck="false" wrap="off">
 ${esc(value("query"))}</textarea>
@@ -119,10 +144,10 @@ ${esc(value("variablesSource"))}</textarea>
         <button type="button" id="graphql-discard" class="ghost">放弃</button><button type="button" id="graphql-apply" class="primary">应用到正文</button>
       </div>
       <span class="muted">以 HTTP POST 发送 JSON</span>
-      <button type="button" id="graphql-detach" class="ghost">使用原始 HTTP 正文</button>
+      ${fallback}
     </div>`
         : `<p class="notice">该正文无法用 Query / Variables 无损编辑，未修改原有内容。</p>
-    <button type="button" id="graphql-detach" class="ghost">使用原始 HTTP 正文</button>`
+    ${fallback}`
     }
     <p class="graphql-error" role="alert"></p>
   </section>`;
@@ -130,7 +155,7 @@ ${esc(value("variablesSource"))}</textarea>
 
 export function bindGraphQLWorkspace(
   root,
-  { request, drafts, directory, owns, revised, redraw, changed, detach },
+  { request, drafts, directory, named, owns, revised, redraw, changed, detach },
 ) {
   const query = root.querySelector("#graphql-query");
   const error = root.querySelector(".graphql-error");
@@ -147,6 +172,14 @@ export function bindGraphQLWorkspace(
       error.textContent = cause.message;
     }
   };
+  const rail = root.querySelector(".graphql-named-rail");
+  if (rail)
+    bindGraphQLNamedRail(rail, {
+      active,
+      add: (keyboard) => attempt(() => named.add(keyboard)),
+      select: (id, keyboard) => attempt(() => named.select(id, keyboard)),
+      arrange: (type, id) => attempt(() => named.arrange(type, id)),
+    });
   const fieldControls = root.querySelector(".graphql-draft-actions");
   const operationDetails = root.querySelector(".graphql-operation-name");
   const includeOperation = root.querySelector(
@@ -212,7 +245,7 @@ export function bindGraphQLWorkspace(
       redraw();
     }),
   );
-  root.querySelector("#graphql-detach").addEventListener("click", () =>
+  root.querySelector("#graphql-detach")?.addEventListener("click", () =>
     attempt(() => {
       if (drafts.pending(request)) throw Error(unappliedGraphQL);
       detach();

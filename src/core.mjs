@@ -148,6 +148,10 @@ import {
 import { openAPIAuthDefinition } from "./openapi-auth-definition.mjs";
 import { importPostmanResponseExamples } from "./postman-response-examples.mjs";
 import { graphQLEditorVersion } from "../public/graphql-editor.js";
+import {
+  activeGraphQLRequest,
+  normalizeGraphQLNamedQueries,
+} from "../public/graphql-named-queries.js";
 import { assertActiveFormFileEncoding } from "./form-wire-guard.mjs";
 import {
   validateMultipartPartMedia,
@@ -379,6 +383,7 @@ export async function extractResponse(response, extraction) {
 export function normalizeRequest(r = {}) {
   const rawPolicy = postmanRawBodyPolicy(r);
   const editorVersion = graphQLEditorVersion(r);
+  const namedQueries = normalizeGraphQLNamedQueries(r);
   rejectHTTPProtocolScripts(r);
   validatePostmanOAuth2Project({ requests: [r] });
   validatePathSerialization(r);
@@ -517,6 +522,9 @@ export function normalizeRequest(r = {}) {
     ...(editorVersion === undefined
       ? {}
       : { graphqlEditorVersion: editorVersion }),
+    ...(namedQueries === undefined
+      ? {}
+      : { graphqlNamedQueries: namedQueries }),
     ...(rawPolicy ? { postmanRawBody: rawPolicy } : {}),
     body:
       typeof r.body === "string"
@@ -710,7 +718,9 @@ export function snapshotPlan(plan, { allowRuntimeRows = false } = {}) {
                   ? {}
                   : { liveRequestId: liveRequestId(s) }),
                 request: {
-                  ...normalizeRequest(cloneRequestWithTaskSource(s.request)),
+                  ...normalizeRequest(
+                    cloneRequestWithTaskSource(activeGraphQLRequest(s.request)),
+                  ),
                   serviceSnapshot: true,
                   parametersSnapshot: true,
                   authSnapshot: true,
@@ -2728,7 +2738,7 @@ export function prepareLiteralHTTPExport(
   )
     throw Error("cURL不能表达原版函数模板，请使用项目备份或已执行请求证据");
   const r = normalizeRequest(
-    postmanRawExportDefinition(sdkCurlDefinition(input)),
+    postmanRawExportDefinition(sdkCurlDefinition(activeGraphQLRequest(input))),
   );
   assertActiveFormFileEncoding(r);
   // Match ordinary JSON execution without parsing or rewriting literal text.

@@ -72,6 +72,9 @@ jobs:
       - run: node tests/api-create-menu-ui.mjs
       - run: node tests/graphql-workspace-ui.mjs
       - run: node tests/graphql-operation-name-ui.mjs
+      - run: node tests/graphql-named-workspace-ui.mjs
+        env:
+          GRAPHQL_NAMED_WORKSPACE_EVIDENCE: /tmp/local-api-graphql-named-workspace
       - run: node tests/graphql-schema-directory-ui.mjs
       - run: node tests/project-create-form-ui.mjs
       - run: node tests/project-create-settlement-ui.mjs
@@ -136,6 +139,7 @@ jobs:
           name: ui-evidence
           path: |
             /tmp/local-api-*.png
+            /tmp/local-api-graphql-named-workspace/named-workbench-*.png
             /tmp/local-api-http-workbench.json
             /tmp/local-api-trace.zip
             /tmp/local-api-restart-journey-trace.zip
