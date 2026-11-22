@@ -385,6 +385,7 @@ import {
 } from "./dictionary-view.js";
 import { clientConfiguration, mcpClients } from "./mcp-client-config.js";
 import { renderPlans, renderRuns } from "./plan-view.js";
+import { bindPlanInspection } from "./plan-inspection.js";
 import {
   bindRawHelper,
   bindRawHelperFixedChooser,
@@ -2933,6 +2934,13 @@ function showMCPClientConfiguration(configuration) {
     };
 }
 function bind() {
+  const planEditor = $(".plans-page .plan-editor");
+  if (planEditor)
+    bindPlanInspection(
+      planEditor,
+      project,
+      project.plans.find((item) => item.id === planId),
+    );
   const successBody = $(".http-success-response");
   if (successBody) {
     const ownedResponse = response;

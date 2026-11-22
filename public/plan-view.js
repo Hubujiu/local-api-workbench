@@ -62,12 +62,16 @@ export function renderPlans({ project, planId, lastRun, busy, tab = "plans" }) {
     (tab === "runs"
       ? '<div id="plan-run-records">' + renderRuns(runs, lastRun) + "</div>"
       : plan
-        ? renderEditor(plan, busy, project.environments, project.requests || [])
+        ? renderEditor(plan, busy, project, project.requests || [])
         : '<div class="plan-selection-empty"><p>请选择或新建一个执行计划</p></div>') +
     "</section></div></div>"
   );
 }
-function renderEditor(plan, busy, environments, requests) {
+function renderEditor(plan, busy, project, requests) {
+  const environments = project.environments || [];
+  const environmentId =
+    plan.environmentId || project.currentEnvironmentId || environments[0]?.id;
+  const hasEnvironment = environments.some(({ id }) => id === environmentId);
   return (
     '<div class="row plan-editor-heading"><div class="row grow"><h2>执行计划编辑器</h2><time class="subtle">最近修改：' +
     esc(historyDate(plan.updatedAt || plan.createdAt)) +
@@ -91,22 +95,29 @@ function renderEditor(plan, busy, environments, requests) {
     '">' +
     esc(plan.description || "") +
     "</textarea>" +
-    '<label for="plan-env">执行环境</label><select id="plan-env" class="' +
+    '<label for="plan-env">执行环境</label><div class="plan-environment-field"><select id="plan-env" class="' +
     ai(plan, "environmentId") +
     '">' +
+    (hasEnvironment
+      ? ""
+      : '<option value="" selected disabled>环境不可用</option>') +
     environments
       .map(
         (env) =>
           '<option value="' +
-          env.id +
+          esc(env.id) +
           '" ' +
-          (env.id === plan.environmentId ? "selected" : "") +
+          (env.id === environmentId ? "selected" : "") +
           ">" +
           esc(env.name) +
           "</option>",
       )
       .join("") +
-    "</select></div>" +
+    "</select>" +
+    '<button type="button" id="view-plan-environment" aria-label="查看执行环境" aria-haspopup="dialog" aria-controls="plan-environment-inspection"' +
+    (hasEnvironment ? "" : " disabled") +
+    ">查看</button></div></div>" +
+    '<dialog id="plan-environment-inspection" aria-labelledby="plan-environment-inspection-title"><header><button type="button" aria-label="关闭执行环境">×</button><h2 id="plan-environment-inspection-title"></h2></header><div class="plan-environment-scroll"><p>查看当前项目的环境和全局变量。变量值不显示，不会运行计划。</p><div id="plan-environment-inspection-tabs"></div></div></dialog>' +
     '<section class="plan-editor-workflow"><h3>执行步骤</h3>' +
     renderStepPicker(requests) +
     plan.steps
@@ -127,8 +138,24 @@ function renderEditor(plan, busy, environments, requests) {
     '<div class="row"><button id="edit-plan">编辑 JSON</button><button id="edit-plan-structure">编辑步骤结构</button></div></section>'
   );
 }
-function stepOverview(step, position, inheritedDisabled = false) {
+function stepOverview(
+  step,
+  position,
+  inheritedDisabled = false,
+  inspectIndex = null,
+) {
   const summary = planStepSummary(step);
+  const title = esc(step.name || summary.kind);
+  const heading =
+    inspectIndex === null
+      ? "<strong>" + title + "</strong>"
+      : '<button type="button" class="plan-snapshot-opener" data-plan-inspect-step="' +
+        inspectIndex +
+        '" aria-expanded="false" aria-controls="plan-snapshot-' +
+        inspectIndex +
+        '">' +
+        title +
+        "</button>";
   return (
     '<span class="step-number">' +
     esc(position) +
@@ -136,9 +163,8 @@ function stepOverview(step, position, inheritedDisabled = false) {
     '<span class="method">' +
     esc(summary.kind) +
     "</span>" +
-    '<div class="grow"><strong>' +
-    esc(step.name || summary.kind) +
-    "</strong>" +
+    '<div class="grow">' +
+    heading +
     '<div class="subtle">' +
     esc(summary.detail) +
     "</div>" +
@@ -184,7 +210,7 @@ function renderPlanStep(step, index, plan) {
     '" ' +
     (step.enabled !== false ? "checked" : "") +
     ' aria-label="启用步骤">' +
-    stepOverview(step, index + 1) +
+    stepOverview(step, index + 1, false, advanced ? null : index) +
     '<button data-step-up="' +
     index +
     '" ' +
@@ -202,6 +228,13 @@ function renderPlanStep(step, index, plan) {
     '<button data-step-delete="' +
     index +
     '" class="danger">移除</button></div>' +
+    (advanced
+      ? ""
+      : '<section class="plan-snapshot-inspection" id="plan-snapshot-' +
+        index +
+        '" aria-label="请求快照" hidden><h4>请求 <span>步骤快照 · 不读取源接口</span></h4><div id="plan-snapshot-tabs-' +
+        index +
+        '" class="plan-snapshot-tabs"></div></section>') +
     nestedSteps(step, index + 1) +
     (advanced
       ? '<p class="subtle">循环/条件可视化修改；协议和结构详情使用完整 JSON，未修改字段保留。</p>'
