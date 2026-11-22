@@ -165,3 +165,34 @@ body:not(.dark) .recent-history-day > summary {
     flex-wrap: wrap;
   }
 }
+.recent-saved-selection:not([hidden]) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-height: 36px;
+  padding-inline: 16px;
+}
+.recent-saved-selection > button {
+  min-height: 28px;
+}
+.recent-saved-selecting
+  .recent-history-day:nth-child(1 of .recent-history-day:not([hidden]))[open]
+  > summary {
+  display: none;
+}
+.recent-saved-checkbox {
+  margin: 0 2px 0 0;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+body:not(.dark) .recent-saved-checkbox {
+  accent-color: #8f7950;
+}
+.recent-history-row.recent-saved-selected {
+  background: var(--hover);
+}
+body:not(.dark) .recent-history-row.recent-saved-selected {
+  background: #f7f2e6;
+}

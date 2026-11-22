@@ -78,20 +78,20 @@ const timeline = (groups, row) =>
     )
     .join("");
 
-function savedRow({ record, time }) {
-  return `<li class="recent-history-row" data-recent-history-row><div class="recent-history-item"><span class="recent-history-icon" aria-hidden="true">${icon("▤")}</span><span class="method ${/^[A-Z]+$/.test(record.method) ? record.method : ""}">${esc(record.method)}</span><strong data-recent-history-name>${esc(record.name || "未命名接口")}</strong></div><div class="recent-history-meta"><time datetime="${esc(time.iso)}">${esc(time.label)}</time></div><span class="recent-version-number">${record.version === 1 ? "起始版本（首次记录）" : "已记录版本 " + record.version}</span></li>`;
+function savedRow({ record, time }, selectable) {
+  return `<li class="recent-history-row" data-recent-history-row><div class="recent-history-item">${selectable ? `<input type="checkbox" class="recent-saved-checkbox" data-recent-saved-select="${esc(record.requestId)}" aria-label="选择 ${esc(record.name || "未命名接口")}">` : ""}<span class="recent-history-icon" aria-hidden="true">${icon("▤")}</span><span class="method ${/^[A-Z]+$/.test(record.method) ? record.method : ""}">${esc(record.method)}</span><strong data-recent-history-name>${esc(record.name || "未命名接口")}</strong></div><div class="recent-history-meta"><time datetime="${esc(time.iso)}">${esc(time.label)}</time></div><span class="recent-version-number">${record.version === 1 ? "起始版本（首次记录）" : "已记录版本 " + record.version}</span></li>`;
 }
 
 export function recentHistoryPage(
   history = [],
   { disabled = false, protocol = "", now = new Date() } = {},
 ) {
-  return `<div class="page recent-workspace"><section class="recent-http-history" aria-label="最近"><div class="recent-history-toolbar"><div class="recent-history-tabs" role="tablist" aria-label="最近活动"><button id="recent-sent-tab" type="button" role="tab" aria-controls="recent-sent-panel" aria-selected="true">历史发送记录</button><button id="recent-saved-tab" type="button" role="tab" aria-controls="recent-saved-panel" aria-selected="false" tabindex="-1">已保存版本</button></div><button id="history-project-reload" type="button" ${disabled ? "disabled" : ""}>重新加载项目记录（不重发）</button><span class="recent-history-count muted" id="recent-history-count" role="status">匹配 ${history.length} / ${history.length} 条记录</span><label class="recent-history-search"><span aria-hidden="true">⌕</span><input id="recent-history-query" type="search" aria-label="按发送记录名称筛选" placeholder="请输入名称" maxlength="200" autocomplete="off"></label></div><div id="recent-sent-panel" role="tabpanel" aria-labelledby="recent-sent-tab"><div class="recent-history-timeline">${timeline(groupRecentHistory(history, now), renderRow)}<p class="recent-history-empty muted"${history.length ? " hidden" : ""}>暂无请求历史</p></div></div><div id="recent-saved-panel" role="tabpanel" aria-labelledby="recent-saved-tab" hidden><div id="recent-saved-info"><p class="recent-saved-explanation muted">仅显示已保存且有版本记录的活动接口。首次记录可能来自旧项目建立追踪；版本时间不代表某个人的编辑时间。</p><p id="recent-saved-status" class="muted" role="status"></p><button id="recent-saved-reload" type="button" hidden>重新读取已保存版本</button></div><div id="recent-saved-list"></div></div></section><div class="recent-protocol-history">${protocol}</div></div>`;
+  return `<div class="page recent-workspace"><section class="recent-http-history" aria-label="最近"><div class="recent-history-toolbar"><div class="recent-history-tabs" role="tablist" aria-label="最近活动"><button id="recent-sent-tab" type="button" role="tab" aria-controls="recent-sent-panel" aria-selected="true">历史发送记录</button><button id="recent-saved-tab" type="button" role="tab" aria-controls="recent-saved-panel" aria-selected="false" tabindex="-1">已保存版本</button></div><button id="history-project-reload" type="button" ${disabled ? "disabled" : ""}>重新加载项目记录（不重发）</button><span class="recent-history-count muted" id="recent-history-count" role="status">匹配 ${history.length} / ${history.length} 条记录</span><label class="recent-history-search"><span aria-hidden="true">⌕</span><input id="recent-history-query" type="search" aria-label="按发送记录名称筛选" placeholder="请输入名称" maxlength="200" autocomplete="off"></label></div><div id="recent-sent-panel" role="tabpanel" aria-labelledby="recent-sent-tab"><div class="recent-history-timeline">${timeline(groupRecentHistory(history, now), renderRow)}<p class="recent-history-empty muted"${history.length ? " hidden" : ""}>暂无请求历史</p></div></div><div id="recent-saved-panel" role="tabpanel" aria-labelledby="recent-saved-tab" hidden><div id="recent-saved-info"><p class="recent-saved-explanation muted">仅显示已保存且有版本记录的活动接口。首次记录可能来自旧项目建立追踪；版本时间不代表某个人的编辑时间。</p><p id="recent-saved-status" class="muted" role="status"></p><button id="recent-saved-reload" type="button" hidden>重新读取已保存版本</button></div><div id="recent-saved-selection" class="recent-saved-selection" hidden><span role="status" id="recent-saved-selection-count"></span><button type="button" id="recent-saved-trash">批量删除</button><button type="button" id="recent-saved-selection-cancel">取消</button></div><div id="recent-saved-list"></div></div></section><div class="recent-protocol-history">${protocol}</div></div>`;
 }
 
 export function bindRecentHistoryFilter(
   root,
-  { projectId, active, loadSaved } = {},
+  { projectId, active, loadSaved, canSelectSaved, confirmMoveSaved } = {},
 ) {
   const search = root?.querySelector("#recent-history-query");
   if (!search) return;
@@ -100,6 +100,101 @@ export function bindRecentHistoryFilter(
   const summary = root.querySelector("#recent-saved-status");
   const list = root.querySelector("#recent-saved-list");
   const info = root.querySelector("#recent-saved-info");
+  const batch = root.querySelector("#recent-saved-selection");
+  const move = root.querySelector("#recent-saved-trash");
+  const cancel = root.querySelector("#recent-saved-selection-cancel");
+  const selectionCount = root.querySelector("#recent-saved-selection-count");
+  const checks = () => [...list.querySelectorAll("[data-recent-saved-select]")];
+  const selectedChecks = () =>
+    checks().filter(
+      (input) =>
+        input.checked &&
+        !input.disabled &&
+        !input.closest("[data-recent-history-row]").hidden &&
+        !input.closest(".recent-history-day").hidden &&
+        input.closest(".recent-history-day").open,
+    );
+  let receipt,
+    selectionVersion = 0,
+    moved = false;
+  const selectedIds = () =>
+    selectedChecks().map((input) => input.dataset.recentSavedSelect);
+  const updateSelection = () => {
+    selectionVersion++;
+    const chosen = new Set(selectedChecks());
+    for (const input of checks()) {
+      if (!chosen.has(input)) input.checked = false;
+      input
+        .closest("[data-recent-history-row]")
+        .classList.toggle("recent-saved-selected", chosen.has(input));
+    }
+    batch.hidden = !chosen.size;
+    selectionCount.textContent = `已选择 ${chosen.size} 项`;
+    saved.classList.toggle("recent-saved-selecting", Boolean(chosen.size));
+  };
+  const clearSelection = () => {
+    for (const input of checks()) input.checked = false;
+    updateSelection();
+  };
+  cancel.addEventListener("click", () => {
+    const first = selectedChecks()[0];
+    clearSelection();
+    first?.focus({ preventScroll: true });
+  });
+  list.addEventListener("change", (event) => {
+    if (!event.target.matches("[data-recent-saved-select]")) return;
+    if (!canSelectSaved?.(receipt)) event.target.checked = false;
+    updateSelection();
+  });
+  list.addEventListener(
+    "toggle",
+    () => {
+      if (
+        selectedChecks().length !==
+        checks().filter((input) => input.checked).length
+      )
+        updateSelection();
+    },
+    true,
+  );
+  move.addEventListener("click", () => {
+    const ids = selectedIds();
+    const previous = receipt;
+    const version = selectionVersion;
+    const current = () => {
+      if (
+        !root.isConnected ||
+        !active() ||
+        !ready ||
+        selected !== 1 ||
+        receipt !== previous ||
+        selectionVersion !== version ||
+        !canSelectSaved?.(previous)
+      )
+        return false;
+      const latestIds = selectedIds();
+      return (
+        ids.length === latestIds.length &&
+        ids.every((id, index) => id === latestIds[index])
+      );
+    };
+    if (!ids.length || !current()) return;
+    confirmMoveSaved({
+      ids,
+      receipt: previous,
+      current,
+      opener: move,
+      applied: () => {
+        moved = true;
+        clearSelection();
+        list.querySelectorAll("[data-recent-saved-select]").forEach((input) => {
+          input.disabled = true;
+        });
+        summary.textContent =
+          "所选接口已在项目草稿中移到回收站；点击「保存项目」才会写入。";
+      },
+    });
+  });
   const reload = root.querySelector("#recent-saved-reload");
   const reloadHistory = root.querySelector("#history-project-reload");
   const counter = root.querySelector("#recent-history-count");
@@ -153,6 +248,9 @@ export function bindRecentHistoryFilter(
     const current = () =>
       root.isConnected && active() && selected === 1 && generation === ticket;
     ready = false;
+    clearSelection();
+    receipt = undefined;
+    // Keep the pending draft notice even when the persisted metadata is reread.
     list.before(info);
     list.replaceChildren();
     summary.textContent = "正在读取已保存版本…";
@@ -161,16 +259,20 @@ export function bindRecentHistoryFilter(
     try {
       const response = await loadSaved(projectId);
       if (!current()) return;
-      const data = validateSavedVersionSummary(response, projectId);
+      const data = (receipt = validateSavedVersionSummary(response, projectId));
+      const selectable = Boolean(canSelectSaved?.(data));
       const rows = data.rows.map((row) => ({
         ...row,
         createdAt: row.currentCreatedAt,
       }));
       list.innerHTML =
-        timeline(groupRecentHistory(rows), savedRow) +
+        timeline(groupRecentHistory(rows), (row) => savedRow(row, selectable)) +
         '<p class="recent-history-empty muted" hidden></p>';
       if (rows.length) list.after(info);
       summary.textContent = `已记录 ${data.tracked} 个接口${data.tracked > data.rows.length ? `，显示最近 ${data.rows.length} 个` : ""}；另有 ${data.untracked} 个接口未建立版本记录。`;
+      if (moved)
+        summary.textContent +=
+          " 所选接口已在项目草稿中移到回收站；点击「保存项目」才会写入。";
       counter.hidden = false;
       ready = true;
       filter();
@@ -182,6 +284,7 @@ export function bindRecentHistoryFilter(
   };
   const select = (index, focus = false) => {
     if (selected !== index) {
+      if (selected) clearSelection();
       drafts[selected] = search.value;
       selected = index;
       generation++;
@@ -205,7 +308,10 @@ export function bindRecentHistoryFilter(
     }
     if (focus) tabs[index].focus();
   };
-  search.addEventListener("input", filter);
+  search.addEventListener("input", () => {
+    if (selected) clearSelection();
+    filter();
+  });
   reload.addEventListener("click", refresh);
   for (const [index, tab] of tabs.entries()) {
     tab.addEventListener("click", () => select(index));

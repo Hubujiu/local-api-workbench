@@ -79,6 +79,10 @@ import {
   recentHistoryPage,
 } from "./recent-history-view.js";
 import {
+  recentSavedTrashAvailable,
+  recentSavedTrashTargets,
+} from "./recent-saved-trash.js";
+import {
   createGrpcStreamState,
   renderGrpcStream,
   bindGrpcStream,
@@ -6418,16 +6422,85 @@ function bind() {
   if (historyRoot) {
     const owner = project,
       openedVersion = projectOpenSequence;
+    const active = () =>
+      page === "history" &&
+      project === owner &&
+      projectOpenSequence === openedVersion;
+    const state = () => ({ dirty, busy, saving });
+    const loadSaved = (id) =>
+      api("/projects/" + encodeURIComponent(id) + "/recent-saved-definitions");
+    const canSelectSaved = (receipt) => {
+      if (!active() || !recentSavedTrashAvailable(owner, receipt, state()))
+        return false;
+      try {
+        nativeRequestLifecycle.assertCanSave(owner.id);
+        projectImports.assertCanSave(owner.id);
+        return true;
+      } catch {
+        return false;
+      }
+    };
     bindRecentHistoryFilter(historyRoot, {
       projectId: owner.id,
-      active: () =>
-        page === "history" &&
-        project === owner &&
-        projectOpenSequence === openedVersion,
-      loadSaved: (id) =>
-        api(
-          "/projects/" + encodeURIComponent(id) + "/recent-saved-definitions",
-        ),
+      active,
+      loadSaved,
+      canSelectSaved,
+      confirmMoveSaved: ({
+        ids,
+        receipt,
+        current: selectionCurrent,
+        opener,
+        applied,
+      }) => {
+        const version = editVersion;
+        let dialogRevision,
+          moved = false;
+        const ownsDialog = () =>
+          selectionCurrent() &&
+          modalRevision === dialogRevision &&
+          $("#dialog").open &&
+          editVersion === version;
+        const requireOwner = () => {
+          if (!ownsDialog())
+            throw Error("已保存版本或项目已变化，未移到回收站；请重新读取");
+        };
+        modal(
+          `将所选 ${ids.length} 个接口移到回收站？`,
+          "<p>只更新当前项目草稿，不会立即写入。请显式保存项目；已保存的接口可以从回收站恢复。</p>",
+          async () => {
+            requireOwner();
+            const latest = await loadSaved(owner.id);
+            if (modalRevision !== dialogRevision || !$("#dialog").open) return;
+            requireOwner();
+            const targets = recentSavedTrashTargets(
+              owner,
+              ids,
+              receipt,
+              latest,
+              state(),
+            );
+            const deletedAt = new Date().toISOString();
+            for (const entry of targets) entry.deletedAt = deletedAt;
+            if (ids.includes(current)) {
+              current = owner.requests.find((entry) => !entry.deletedAt)?.id;
+              response = responses.get(owner.id + ":" + current) || null;
+            }
+            mark();
+            moved = true;
+            applied();
+          },
+          "移到回收站",
+          () => {
+            if (!active()) return;
+            if (moved) $("#save-project")?.focus({ preventScroll: true });
+            else if (opener.isConnected && !opener.closest("[hidden]"))
+              opener.focus({ preventScroll: true });
+            else $("#recent-saved-tab")?.focus({ preventScroll: true });
+          },
+        );
+        dialogRevision = modalRevision;
+        $('#dialog footer button[value="cancel"]').focus();
+      },
     });
   }
   on("#protocol-history-filter", "submit", (event) => {
