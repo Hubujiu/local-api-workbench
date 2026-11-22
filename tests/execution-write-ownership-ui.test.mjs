@@ -239,6 +239,17 @@ for (const change of ["edit", "navigate", "replace"]) {
     assert.throws(() => h.guard.assertCanSave("a"), /重新加载/);
   });
 }
+const protocolRunMarker = '  on("#protocol-run", "click",';
+function assertProtocolRunAdmission(text) {
+  const [before, handler, ...duplicates] = text.split(protocolRunMarker);
+  assert.ok(before !== text, "missing protocol-run click handler");
+  assert.equal(duplicates.length, 0, "multiple protocol-run click handlers");
+  assert.match(
+    handler,
+    /^\s*async\s*\([^)]*\)\s*=>\s*\{\s*assertExecutionReady\(\);/,
+    "protocol-run must check execution admission before reading or dispatching",
+  );
+}
 test("pending write blocks every direct execution admission and imports", async () => {
   const h = harness(),
     op = h.guard.begin("a", "case");
@@ -251,7 +262,6 @@ test("pending write blocks every direct execution admission and imports", async 
     "async function send() {",
     "  async function runInterfaceCaseBatch(ids) {",
     '  on("#load-run", "click", async () => {',
-    '  on("#protocol-run", "click", async () => {',
   ]) {
     assert(
       source
@@ -260,6 +270,29 @@ test("pending write blocks every direct execution admission and imports", async 
       marker,
     );
   }
+  assertProtocolRunAdmission(source);
+});
+test("protocol execution admission detector is independent of click callback arity and fails closed", () => {
+  const registration = (parameters, first = "assertExecutionReady();") =>
+    `${protocolRunMarker} async (${parameters}) => { ${first} });`;
+  assert.doesNotThrow(() => assertProtocolRunAdmission(registration("")));
+  assert.doesNotThrow(() =>
+    assertProtocolRunAdmission(registration("_, button")),
+  );
+  assert.throws(() => assertProtocolRunAdmission(""), /missing/);
+  assert.throws(
+    () =>
+      assertProtocolRunAdmission(registration("") + registration("_, button")),
+    /multiple/,
+  );
+  for (const wrong of [
+    "const request = prepare(); assertExecutionReady();",
+    "// assertExecutionReady();\nprepare();",
+  ])
+    assert.throws(
+      () => assertProtocolRunAdmission(registration("_, button", wrong)),
+      /before reading or dispatching/,
+    );
 });
 test("savePlan applies only its owned receipt and retains newer selection", async () => {
   const h = harness(),

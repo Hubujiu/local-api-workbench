@@ -27,6 +27,7 @@ try {
   app = await createApp({ root, port: 0 });
   const project = await app.store.create("采集回执合成项目");
   const urls = ["http://127.0.0.1:1/events-a", "http://127.0.0.1:1/events-b"];
+  const updatedUrl = "http://127.0.0.1:1/events-b-retargeted";
   project.protocols = ["a", "b"].map((id, i) =>
     normalizeProtocol({
       id,
@@ -53,7 +54,8 @@ try {
   page.setDefaultTimeout(7000);
   const origin = new URL(app.launchUrl).origin;
   const routePath = "/api/projects/" + project.id;
-  let reads = 0;
+  let reads = 0,
+    saves = 0;
   page.on("pageerror", (error) => refused.push(error.message));
   await page.addInitScript((id) => {
     localStorage.setItem("theme", "light");
@@ -80,6 +82,13 @@ try {
         await pendingDisconnect.promise;
         return route.fulfill({ json: { ok: true } });
       }
+      if (method === "PUT" && url.pathname === routePath && saves === 0) {
+        saves += 1;
+        const { protocols } = request.postDataJSON();
+        assert.equal(protocols.find((item) => item.id === "a").url, urls[0]);
+        assert.equal(protocols.find((item) => item.id === "b").url, updatedUrl);
+        return route.continue();
+      }
       if (method === "GET" && url.pathname === routePath + "/protocol-runs") {
         assert.equal(url.search, "?type=sse");
         reads += 1;
@@ -91,6 +100,7 @@ try {
           runId: input.runId,
           status: "cancelled",
           result: null,
+          error: "old-capture-payload-fixture",
         };
         return route.fulfill({
           json:
@@ -102,7 +112,13 @@ try {
                     definition: { ...record.definition, url: urls[0] },
                   },
                 ]
-              : [record],
+              : [
+                  record,
+                  {
+                    ...record,
+                    definition: { ...record.definition, url: updatedUrl },
+                  },
+                ],
         });
       }
       if (method === "GET" && !url.pathname.endsWith("/protocol-runs"))
@@ -224,9 +240,32 @@ try {
     /未核对到这一笔/,
   );
   assert.equal(await start.isEnabled(), false);
+  const target = page.locator("#protocol-url");
+  const previousTarget = page.locator("#sse-capture-target-note");
+  const savedResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      response.url().endsWith(routePath),
+  );
+  assert.equal(await previousTarget.isVisible(), false);
+  await target.fill(updatedUrl);
+  await page.locator("#save-protocol").click();
+  assert.equal((await savedResponse).ok(), true);
+  await previousTarget.waitFor();
+  assert.match(
+    await previousTarget.textContent(),
+    /之前的采集.*不代表当前地址已执行/,
+  );
+  assert.equal(await target.inputValue(), updatedUrl);
+  assert.equal(await start.isEnabled(), false);
+  assert.equal(await check.isEnabled(), true);
+  assert.equal(await missed.count(), 1);
+  assert.equal(reads, 1, "saving does not check/replay");
   await page.setViewportSize({ width: 430, height: 900 });
   await check.press("Enter");
   await status("采集已取消 · 本机记录已保存");
+  assert.equal(await previousTarget.isVisible(), true);
+  assert.equal(await result.textContent(), "");
   assert.equal(
     await missed.count(),
     0,
@@ -236,6 +275,8 @@ try {
     await page.locator("#toast").textContent(),
     /未核对到这一笔/,
   );
+  if (process.env.SSE_CAPTURE_EVIDENCE)
+    await page.locator("#toast").waitFor({ state: "hidden" });
   await capture("cancelled-b-narrow");
   assert.equal(await check.isVisible(), false);
   assert.equal(await start.isEnabled(), true);
@@ -255,12 +296,22 @@ try {
     ["capture", "capture", "cancel"],
   );
   assert.deepEqual(posted[2][1], { id: inputB.runId });
-  assert.deepEqual(await app.store.get(project.id), baseline);
+  const after = await app.store.get(project.id);
+  assert.equal(saves, 1);
+  assert.equal(after.revision, baseline.revision + 1);
+  assert.equal(after.configRevision, baseline.configRevision + 1);
+  assert.deepEqual(
+    after.protocols,
+    baseline.protocols.map((item) =>
+      item.id === "b" ? { ...item, url: updatedUrl } : item,
+    ),
+  );
+  assert.deepEqual(after.protocolRuns, baseline.protocolRuns);
   assert.deepEqual(await app.store.get(other.id), otherBaseline);
   assert.deepEqual(refused, []);
   assert.deepEqual(breaches, []);
   console.log(
-    "SSE_CAPTURE_OWNER_UI_PASS held same-origin receipts, no SSE dispatch",
+    "SSE_CAPTURE_OWNER_UI_PASS held receipts, one explicit target save, no SSE dispatch",
   );
 } finally {
   first.release({ status: 500, json: {} });

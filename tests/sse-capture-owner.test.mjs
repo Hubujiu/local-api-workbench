@@ -29,17 +29,13 @@ const row = (overrides = {}) => ({
   ...overrides,
 });
 
-test("a late successful response is isolated by project, selected definition and saved target", () => {
+test("a late successful response is isolated by project and selected definition", () => {
   const calls = createSSECaptureOwner();
   const a = calls.start(owner, run());
   assert.equal(sseCaptureView(calls.current(owner)).canCancel, true);
   assert.equal(calls.start(other, run("run-b")), null);
   calls.settle(a, receipt());
-  for (const wrong of [
-    other,
-    { ...owner, projectId: "b" },
-    { ...owner, definitionUrl: url + "/edited" },
-  ]) {
+  for (const wrong of [other, { ...owner, projectId: "b" }]) {
     assert.equal(calls.current(wrong), undefined);
     assert.equal(sseCaptureView(calls.current(wrong)).canCancel, false);
   }
@@ -125,4 +121,56 @@ test("known completion is evictable, unresolved attempts are not silently evicte
   assert.ok(calls.start({ ...owner, definitionId: "five" }, run()));
   assert.equal(calls.current(owner), undefined);
   assert.equal(calls.current(other).phase, "unknown");
+});
+
+test("a save to a new target keeps unknown and terminal state under the same definition, not its prior URL", () => {
+  const calls = createSSECaptureOwner();
+  const original = url + "?marker=old-fixture";
+  const scope = { ...owner, definitionUrl: original };
+  const newerUrl = url + "/new";
+  const dispatched = { runId: "run-a", url: original };
+  const a = calls.start(scope, dispatched);
+  calls.settle(a, undefined);
+  scope.definitionUrl = newerUrl;
+  dispatched.url = newerUrl;
+  assert.equal(calls.current(scope), a);
+  assert.equal(calls.start(scope, { runId: "never", url: newerUrl }), null);
+  assert.equal(a.dispatch.url, original);
+  assert.equal(a.owner.definitionUrl, original);
+  assert.equal(sseCaptureView(a, newerUrl).blocksStart, true);
+  assert.match(sseCaptureView(a, newerUrl).targetNote, /不代表当前地址已执行/);
+  assert.equal(
+    calls.check(a, [row({ definition: { type: "sse", url: newerUrl } })]),
+    false,
+  );
+  assert.equal(
+    calls.check(a, [
+      row({
+        definition: { type: "sse", url: original },
+        status: "completed",
+        result: { events: [{ data: "old-fixture" }] },
+      }),
+    ]),
+    true,
+  );
+  assert.equal(calls.current(scope), a);
+  const view = sseCaptureView(a, newerUrl);
+  assert.match(view.notice, /采集完成/);
+  assert.match(view.targetNote, /之前的采集/);
+  assert.doesNotMatch(JSON.stringify(view), /old-fixture/);
+  assert.equal(view.result, "");
+  assert.equal(view.blocksStart, false);
+  assert.match(sseCaptureView(a, original).result, /old-fixture/);
+});
+
+test("an unsaved override keeps its real response visible until the saved target changes to a third value", () => {
+  const calls = createSSECaptureOwner();
+  const target = url + "/one-time";
+  const a = calls.start(owner, { runId: "run-a", url: target });
+  calls.settle(a, receipt());
+  for (const matches of [owner.definitionUrl, target]) {
+    assert.equal(sseCaptureView(a, matches).targetNote, "");
+    assert.match(sseCaptureView(a, matches).result, /only A/);
+  }
+  assert.equal(sseCaptureView(a, target + "-new").result, "");
 });
