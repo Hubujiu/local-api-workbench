@@ -1,4 +1,5 @@
 import { inlineImageURI } from "./inline-image.js";
+import { insertTextareaText } from "./textarea-edit-history.js";
 
 const imageLimit = 128 * 1024;
 const previewLimit = 256 * 1024;
@@ -113,11 +114,16 @@ export function bindLocalDocumentImage({
       const uri = await readLocalDocumentImage(file);
       if (!current(ticket)) return;
       const insertion = documentImagePatch(ticket.text, ticket.end, uri);
-      input.setRangeText(insertion, ticket.end, ticket.end, "end");
-      input.focus({ preventScroll: true });
+      if (
+        !insertTextareaText(input, {
+          start: ticket.end,
+          end: ticket.end,
+          replacement: insertion,
+        })
+      )
+        throw Error("无法在当前编辑器插入图片");
       if (ticket.start !== ticket.end)
         input.setSelectionRange(ticket.start, ticket.end, ticket.direction);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
       notify("图片已插入到草稿，尚未保存");
     } catch (error) {
       if (current(ticket)) {
