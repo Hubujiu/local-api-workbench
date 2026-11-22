@@ -3713,9 +3713,89 @@ body:not(.dark) .plans-heading {
   .editor[data-editor-mode="debug"]:not(.split-layout)
     > .request-panel:has(> .body-none)
     .body-types {
+    display: grid;
+    /* Native radio center-to-center distances, independent of system fonts. */
+    grid-template-columns: 65px 94px 103px 72px 90px max-content;
+    gap: 0;
     min-height: 30px;
     padding-inline: 8px;
     margin-bottom: 10px;
+  }
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    > .request-panel:has(> .body-none)
+    .body-types
+    .body-type-caption {
+    min-width: 0;
+    margin-inline-end: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    > .request-panel:has(> .body-none)
+    .body-types
+    input[type="radio"] {
+    appearance: none;
+    box-sizing: border-box;
+    flex: 0 0 13px;
+    width: 13px;
+    height: 13px;
+    margin: 0;
+    padding: 0;
+    border-color: var(--muted);
+    border-radius: 50%;
+    background: var(--bg);
+    cursor: pointer;
+  }
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    > .request-panel:has(> .body-none)
+    .body-types
+    input[type="radio"]:checked {
+    border-color: var(--accent);
+    background: radial-gradient(circle, var(--accent) 0 3.5px, var(--bg) 4px);
+  }
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    > .request-panel:has(> .body-none)
+    .body-types
+    label:has(> input:checked) {
+    color: var(--text);
+  }
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    > .request-panel:has(> .body-none)
+    .body-types
+    input[type="radio"]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  @media (forced-colors: active) {
+    .editor[data-editor-mode="debug"]:not(.split-layout)
+      > .request-panel:has(> .body-none)
+      .body-types
+      input[type="radio"] {
+      appearance: auto;
+    }
+  }
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    > .request-panel
+    > .body-none {
+    align-content: start;
+    gap: 0;
+    padding-block-start: 12px;
+  }
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    > .request-panel
+    > .body-none
+    .body-none-icon
+    svg {
+    color: color-mix(in srgb, var(--muted) 43%, var(--bg));
+    scale: 1 1.2;
+    transform-origin: top;
+  }
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    > .request-panel
+    > .body-none
+    > p {
+    margin-top: 18px;
+    line-height: 18px;
   }
   .editor[data-editor-mode="debug"]:not(.split-layout) > .response {
     margin-inline: -16px;
