@@ -1,0 +1,218 @@
+/* Dictionary list: an independent surface, leaving the model workspace intact. */
+.page.dictionary-page {
+  padding: 0;
+}
+.dictionary-page .dictionary-surface {
+  min-height: 100%;
+}
+.dictionary-page .dictionary-title-strip {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  height: 38px;
+  background: var(--panel);
+}
+body:not(.dark) .dictionary-page .dictionary-title-strip,
+body:not(.dark) .sidebar:has(> .dictionary-side-nav) {
+  background: #f9f5ea;
+}
+.dictionary-page .dictionary-title-strip h1 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  margin: 0;
+  padding: 0 14px;
+  border-radius: 5px 5px 0 0;
+  background: var(--bg);
+  font-size: 14px;
+}
+.dictionary-title-strip svg,
+.dictionary-side-nav svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.dictionary-title-strip svg {
+  color: #4b79bd;
+}
+.dictionary-page .dictionary-model-shortcut {
+  display: none;
+  align-self: center;
+}
+.dictionary-side-nav {
+  margin-top: 38px;
+}
+.dictionary-side-nav button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 30px;
+  border: 0;
+  padding: 4px 8px;
+  background: transparent;
+  text-align: left;
+}
+.dictionary-side-nav button:hover,
+.dictionary-side-nav button:focus-visible,
+.dictionary-side-nav button[aria-current] {
+  background: var(--hover);
+}
+.dictionary-page .dictionary-content {
+  margin-inline: 20px;
+}
+.dictionary-page .dictionary-tabs {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  height: 55px;
+  border-bottom: 1px solid var(--line);
+}
+.dictionary-page .dictionary-tabs button {
+  height: 42px;
+  margin-bottom: -1px;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  font-size: 14px;
+}
+.dictionary-page .dictionary-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+.dictionary-page .dictionary-controls,
+.dictionary-page .dictionary-actions,
+.dictionary-page .dictionary-builtin-option {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dictionary-page .dictionary-controls {
+  justify-content: space-between;
+  min-height: 32px;
+  margin: 12px 0 15px;
+}
+.dictionary-page .dictionary-controls button {
+  min-height: 32px;
+  padding: 3px 12px;
+}
+.dictionary-page .dictionary-search {
+  position: relative;
+  flex: 0 1 220px;
+  min-width: 0;
+}
+.dictionary-page .dictionary-search span {
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  font-size: 17px;
+  line-height: 18px;
+  pointer-events: none;
+}
+.dictionary-page .dictionary-search input {
+  width: 100%;
+  height: 32px;
+  padding: 4px 8px 4px 28px;
+}
+.dictionary-page .dictionary-builtin-option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+.dictionary-page .dictionary-empty {
+  justify-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.dictionary-page .dictionary-empty:not([hidden]) {
+  display: grid;
+}
+.dictionary-page .dictionary-empty svg {
+  width: 46px;
+  height: 52px;
+  color: color-mix(in srgb, var(--muted), var(--bg) 30%);
+}
+.dictionary-page .dictionary-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.dictionary-page .dictionary-table {
+  min-width: 280px;
+}
+.dictionary-page .dictionary-table th {
+  height: 35px;
+  background: var(--bg);
+  font-size: 14px;
+}
+.dictionary-page .dictionary-table td {
+  height: 42px;
+  overflow-wrap: anywhere;
+}
+.dictionary-page .dictionary-table th,
+.dictionary-page .dictionary-table td {
+  padding: 5px 8px;
+}
+.dictionary-page .dictionary-table :is(th, td):first-child {
+  width: 200px;
+}
+.dictionary-page .dictionary-table tr:last-child td {
+  border-bottom: 0;
+}
+.dictionary-page .dictionary-name-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.dictionary-page .dictionary-type {
+  padding: 4px 7px;
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--accent);
+  font-size: 11px;
+}
+.dictionary-page .dictionary-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.dictionary-page .dictionary-temporary {
+  margin-top: 24px;
+}
+.dictionary-page .dictionary-models {
+  padding: 24px 20px;
+}
+.dictionary-page .dictionary-models h2 {
+  margin: 0 0 7px;
+  font-size: 23px;
+  font-weight: 600;
+}
+
+@media (min-width: 1240px) {
+  .shell > .sidebar:has(> .dictionary-side-nav) {
+    width: 314px;
+  }
+}
+body.compact-ui .dictionary-page .dictionary-model-shortcut {
+  display: inline-block;
+}
+@media (max-width: 650px) {
+  .shell > .sidebar:has(> .dictionary-side-nav) {
+    display: none;
+  }
+  .dictionary-page .dictionary-model-shortcut {
+    display: inline-block;
+  }
+  .dictionary-page .dictionary-content {
+    margin-inline: 12px;
+  }
+  .dictionary-page .dictionary-table :is(th, td):first-child {
+    width: auto;
+  }
+}

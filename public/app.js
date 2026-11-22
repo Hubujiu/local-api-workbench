@@ -194,6 +194,9 @@ import { adoptVariableWrites } from "./variable-write-receipt.js";
 import { stepEditor, bindStepEditor } from "./step-editor.js";
 import {
   dictionaryPanel,
+  dictionarySidebar,
+  dictionaryViewPosition,
+  bindDictionaryView,
   dictionaryValue,
   insertDictionaryField,
   effectiveParameterDictionary,
@@ -1566,6 +1569,10 @@ function render(preserveEditingFocus = false) {
     : null;
   const r = request();
   const doc = workspaceDocument();
+  const dictionaryPosition = dictionaryViewPosition(
+    $(".dictionary-page"),
+    project?.id,
+  );
   document.body.classList.toggle("compact-ui", compactUI);
   $("#app").innerHTML =
     `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" ${busy || saving ? "disabled" : ""} class="ghost">＋ 新建/导入项目</button></div><div class="top-group project-group"><select id="project-select" ${busy || saving ? "disabled" : ""} aria-label="项目">${projects
@@ -1579,23 +1586,25 @@ function render(preserveEditingFocus = false) {
       )}</select><button id="open-location" class="ghost">打开位置</button><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost top-plan ${page === "plans" ? "active" : ""}"><span class="icon">${lineIcon("plan-play")}</span>执行计划</button><button id="mcp-status" data-page="settings" data-settings-target="settings-mcp" class="offline" title="打开 MCP 连接设置">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail" aria-label="工作区导航">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}" ${page === "trash" ? 'aria-current="page"' : ""}><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar" data-sidebar-page="${page}">${
       page === "settings"
         ? settingsSidebar(settingsSection)
-        : `<div class="search"><div class="search-filter"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><select id="tree-type" aria-label="内容类型">${[
-            ["all", "全部"],
-            ["http", "HTTP"],
-            ["sse", "SSE"],
-            ["websocket", "WebSocket"],
-            ["tcp", "TCP"],
-            ["grpc", "gRPC"],
-            ["socketio", "Socket.IO"],
-            ["document", "文档"],
-          ]
-            .map(
-              ([value, label]) =>
-                `<option value="${value}" ${value === searchType ? "selected" : ""}>${label}</option>`,
-            )
-            .join(
-              "",
-            )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="${doc ? "定位当前文档" : "定位当前接口"}" aria-label="${doc ? "定位当前文档" : "定位当前接口"}">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button><button data-page="grpc">gRPC unary</button><button data-page="socketio">Socket.IO</button><button id="new-folder">新建目录</button></div></details>`
+        : page === "dictionary"
+          ? dictionarySidebar()
+          : `<div class="search"><div class="search-filter"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><select id="tree-type" aria-label="内容类型">${[
+              ["all", "全部"],
+              ["http", "HTTP"],
+              ["sse", "SSE"],
+              ["websocket", "WebSocket"],
+              ["tcp", "TCP"],
+              ["grpc", "gRPC"],
+              ["socketio", "Socket.IO"],
+              ["document", "文档"],
+            ]
+              .map(
+                ([value, label]) =>
+                  `<option value="${value}" ${value === searchType ? "selected" : ""}>${label}</option>`,
+              )
+              .join(
+                "",
+              )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="${doc ? "定位当前文档" : "定位当前接口"}" aria-label="${doc ? "定位当前文档" : "定位当前接口"}">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button><button data-page="grpc">gRPC unary</button><button data-page="socketio">Socket.IO</button><button id="new-folder">新建目录</button></div></details>`
     }</aside><main class="workspace">${
       page === "apis"
         ? `<div class="tabs"><div class="tab-scroll">${opened
@@ -1612,6 +1621,8 @@ function render(preserveEditingFocus = false) {
         : renderPage()
     }</main></div><footer class="statusbar"><span>◈ 本地工作空间 &nbsp; / &nbsp; ${esc(project?.name || "")} &nbsp; <span id="saved-state">${dirty ? "● 未保存" : "✓ 已保存"}</span></span><span class="status-actions"><button id="compact-ui" aria-pressed="${compactUI}" title="隐藏项目树，保留导航和工作区">${compactUI ? "完整模式" : "精简模式"}</button><button id="response-layout" ${page !== "apis" || doc || mode !== "debug" ? "disabled" : ""} aria-pressed="${responseLayout === "split"}">${responseLayout === "split" ? "上下布局" : "左右布局"}</button><span>Local API 0.1.0</span></span></footer>`;
   bind();
+  if (page === "dictionary")
+    bindDictionaryView($(".dictionary-page"), dictionaryPosition);
   const tabScroll = $(".tab-scroll");
   if (tabScroll) {
     tabScroll.scrollLeft = oldTabScroll;
@@ -2026,7 +2037,7 @@ function renderPage() {
         .join("") || '<div class="empty"><p>回收站为空</p></div>'
     }</div>`;
   if (page === "dictionary")
-    return `<div class="page">${dictionaryPanel(project, temporaryParameters.get(project.id) || [])}<div class="page-head"><div><h1>数据模型</h1><span class="muted">统一管理可复用的字段定义与枚举</span></div><div class="toolbar"><button id="add-model-folder">＋ 新建目录</button><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div></div>${modelCards(project)}</div>`;
+    return `<div class="page dictionary-page" data-dictionary-project="${esc(project.id)}">${dictionaryPanel(project, temporaryParameters.get(project.id) || [])}<section class="dictionary-models" aria-labelledby="dictionary-models-heading"><div class="page-head"><div><h2 id="dictionary-models-heading" tabindex="-1">数据模型</h2><span class="muted">统一管理可复用的字段定义与枚举</span></div><div class="toolbar"><button id="add-model-folder">＋ 新建目录</button><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div></div>${modelCards(project)}</section></div>`;
   if (page === "protocols")
     return `<div class="page"><h1>实时协议调试</h1><div class="row"><input id="protocol-name" placeholder="连接名称" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.name || "")}"><button id="save-protocol">保存连接定义</button><button id="delete-protocol" class="danger">删除连接定义</button></div><p class="muted">支持短时采集与交互会话。交互会话最长 15 分钟、8 MiB，保留最近 200 条消息。</p><div class="form-grid"><label>协议</label><select id="protocol-type">${[
       ["sse", "SSE"],

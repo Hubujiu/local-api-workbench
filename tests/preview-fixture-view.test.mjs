@@ -18,7 +18,10 @@ test("preview fixture navigates actual editable views, not read-only documentati
   assert.equal(dictionary.page, "dictionary");
   const dictionaryHTML = dictionaryPanel(project);
   assert(dictionaryHTML.includes(`id="${dictionary.button.slice(1)}"`));
-  assert.match(dictionaryHTML, /<table>[\s\S]*owned_value[\s\S]*<\/table>/);
+  assert.match(
+    dictionaryHTML,
+    /<table class="dictionary-table" aria-label="自定义参数">[\s\S]*owned_value[\s\S]*<\/table>/,
+  );
 
   const codes = previewImportViews["error-codes"];
   assert.equal(codes.page, "settings");
