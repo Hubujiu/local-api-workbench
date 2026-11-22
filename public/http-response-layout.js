@@ -1,3 +1,4 @@
+import { focusHTTPBodyModeAfterLayout } from "./http-body-modes.js";
 import { icon } from "./icons.js";
 
 const layoutOptions = [
@@ -62,7 +63,10 @@ export function bindHTTPResponseLayout({
   const update = () => {
     const layout = preferredLayout();
     const split = layout === "split";
+    const switched = editor.classList.contains("split-layout") !== split;
+    const active = editor.ownerDocument.activeElement;
     editor.classList.toggle("split-layout", split);
+    if (switched) focusHTTPBodyModeAfterLayout(editor, active, split);
     for (const option of options)
       option.setAttribute(
         "aria-checked",
