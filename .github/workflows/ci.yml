@@ -72,6 +72,7 @@ jobs:
       - run: node tests/dictionary-page-ui.mjs
       - run: node tests/dictionary-entry-ui.mjs
       - run: node tests/model-workspace-ui.mjs
+      - run: node tests/model-raw-editor-ui.mjs
       - run: node tests/ui-smoke.mjs
         env:
           HTTP_WORKBENCH_CHECKOUT_COMMIT: ${{ steps.browser_checkout.outputs.commit }}
