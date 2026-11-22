@@ -4547,18 +4547,50 @@ body:not(.dark) .plans-heading {
   padding: 8px;
 }
 .design-description-editor > textarea {
+  height: 100px;
+  overflow: auto;
+  resize: vertical;
   border: 0;
   border-radius: 0;
   border-right: 1px solid var(--line);
 }
 .design-description-editor > .markdown-content {
+  contain: size;
   overflow: auto;
 }
-#design-description-count {
-  display: block;
-  padding: 4px 14px;
+.design-description-footer {
+  display: flex;
+  min-height: 26px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  padding: 2px 14px;
   border-top: 1px solid var(--line);
   color: var(--muted);
+}
+.design-description-scroll-controls,
+.design-description-scroll-controls label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.design-description-scroll-controls {
+  gap: 8px;
+  margin-inline-start: auto;
+  font-size: calc(12 * var(--app-type-unit));
+}
+.design-description-scroll-controls #design-description-sync {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+.design-description-scroll-controls #design-description-top {
+  min-height: 20px;
+  padding: 1px 4px;
+  color: var(--text);
 }
 .design-request-structure > div,
 .design-response-structure > div {

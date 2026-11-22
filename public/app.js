@@ -369,6 +369,8 @@ const uid = () => crypto.randomUUID();
 const responses = new Map();
 const graphqlResponseFence = createGraphQLResponseFence();
 const openDesignDescriptions = new WeakMap();
+const designDescriptionScroll = new WeakMap();
+let rememberDesignDescriptionScroll;
 const designParameterTabs = [
   ["headers", "Header"],
   ["query", "Query"],
@@ -1903,6 +1905,8 @@ function tree() {
 }
 
 function render(preserveEditingFocus = false) {
+  rememberDesignDescriptionScroll?.();
+  rememberDesignDescriptionScroll = undefined;
   const namedDelete = $("#graphql-named-delete-confirm");
   if (namedDelete?.matches(":popover-open")) namedDelete.hidePopover();
   manualResponseView.observe(
@@ -2377,7 +2381,7 @@ function modePanel(r) {
     const descriptionOpen =
       openDesignDescriptions.get(r) ?? Boolean(r.description);
     return `<div class="page http-design-canvas">${r.importNotes?.length ? `<div class="notice import-notes" role="region" aria-label="导入兼容性提示" tabindex="0">导入提示：${r.importNotes.map(esc).join("<br>")}</div>` : ""}${importedScriptTasksHTML(r.importedScriptTasks)}<div class="design-meta"><label for="folder">目录<input id="folder" value="${esc(r.folder)}" placeholder="根目录"></label><label for="request-service">绑定服务<select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select></label></div>
-    <section class="request-description-section" aria-label="详细说明"><h2><span>${lineIcon("▧")}</span>详细说明</h2><details id="design-description" ${descriptionOpen ? "open" : ""}><summary><span class="design-description-closed">＋ 添加详细说明</span><span class="design-description-open">收起</span></summary><div class="design-description-toolbar" role="group" aria-label="说明格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-design-markdown="${key}" aria-label="${label}" title="${label}">${esc(glyph)}</button>`).join("")}</div><div class="design-description-editor"><textarea id="description" aria-label="接口详细说明" spellcheck="false">${esc(r.description)}</textarea><div id="design-description-preview" class="markdown-content" role="region" aria-label="说明预览">${descriptionOpen ? renderMarkdown(r.description) : ""}</div></div><small id="design-description-count">字数: ${Array.from(r.description || "").length}　行数: ${(r.description || "").split("\n").length}</small></details></section>
+    <section class="request-description-section" aria-label="详细说明"><h2><span>${lineIcon("▧")}</span>详细说明</h2><details id="design-description" ${descriptionOpen ? "open" : ""}><summary><span class="design-description-closed">＋ 添加详细说明</span><span class="design-description-open">收起</span></summary><div class="design-description-toolbar" role="group" aria-label="说明格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-design-markdown="${key}" aria-label="${label}" title="${label}">${esc(glyph)}</button>`).join("")}</div><div class="design-description-editor"><textarea id="description" aria-label="接口详细说明" spellcheck="false">${esc(r.description)}</textarea><div id="design-description-preview" class="markdown-content" role="region" aria-label="说明预览" tabindex="0">${descriptionOpen ? renderMarkdown(r.description) : ""}</div></div><div class="design-description-footer"><small id="design-description-count">${documentCounts(r.description || "")}</small><div class="design-description-scroll-controls"><label><input type="checkbox" id="design-description-sync"${designDescriptionScroll.get(r)?.linked === false ? "" : " checked"}>同步滚动</label><button type="button" class="ghost" id="design-description-top">回到顶部</button></div></div></details></section>
     <section class="design-request-parameters" aria-label="设计请求参数"><h2><span>${lineIcon("☷")}</span>设计请求参数</h2>${designParameterPanel(r)}</section>
     <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2>${designResponsePanel(r.responses || [], designResponseSelections.get(designResponseKey(r)), r.openapiExampleBindingsVersion === 1, r.examples, collapsedDesignResponseRoots.get(r))}</section>
     <section class="design-request-structure" aria-label="请求数据结构"><h2><span>${lineIcon("☷")}</span>请求数据结构</h2><div><button id="visual-schema" type="button">可视化编辑结构</button>${r.graphqlEditorVersion === 1 || r.bodyType === "binary" || (designParameter === "body" && r.bodyType !== "none") ? "" : '<button id="generate-body" type="button" class="ghost">基于数据结构生成</button>'}<textarea id="schema" aria-label="请求 JSON Schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div></section>
@@ -3619,10 +3623,71 @@ function bind() {
     mark();
   });
   on("#response-definitions", "input", () => mark());
+  const description = $("#description");
+  const descriptionPreview = $("#design-description-preview");
+  const descriptionDetails = $("#design-description");
+  const descriptionSync = $("#design-description-sync");
+  let descriptionScroll;
+  if (
+    description &&
+    descriptionPreview &&
+    descriptionDetails &&
+    descriptionSync
+  ) {
+    const target = request();
+    const owner = project;
+    const view = designDescriptionScroll.get(target) || {
+      linked: true,
+      editorTop: 0,
+      previewTop: 0,
+    };
+    designDescriptionScroll.set(target, view);
+    const active = () =>
+      descriptionDetails.isConnected &&
+      descriptionDetails.open &&
+      page === "apis" &&
+      mode === "design" &&
+      project === owner &&
+      request() === target &&
+      !workspaceDocument();
+    const remember = () => {
+      if (!descriptionDetails.isConnected || !descriptionDetails.open) return;
+      view.editorTop = description.scrollTop;
+      view.previewTop = descriptionPreview.scrollTop;
+    };
+    descriptionScroll = bindWorkspaceDocumentScroll(
+      description,
+      descriptionPreview,
+      {
+        active,
+        enabled: () => view.linked,
+      },
+    );
+    rememberDesignDescriptionScroll = remember;
+    const restore = () => {
+      if (!active()) return;
+      descriptionScroll.restore(view);
+      if (view.linked) descriptionScroll.refreshPreview();
+    };
+    restore();
+    descriptionDetails.addEventListener("toggle", restore);
+    on("#design-description-sync", "change", (_, checkbox) => {
+      if (!active() || checkbox !== descriptionSync) return;
+      view.linked = checkbox.checked;
+      if (view.linked) descriptionScroll.refreshPreview();
+      remember();
+    });
+    on("#design-description-top", "click", () => {
+      if (!active()) return;
+      descriptionScroll.top();
+      remember();
+    });
+  }
   on("#design-description > summary", "click", (_, el) => {
     const r = request();
     const willOpen = !el.parentElement.open;
     openDesignDescriptions.set(r, willOpen);
+    if (!willOpen) rememberDesignDescriptionScroll?.();
     if (willOpen)
       $("#design-description-preview").innerHTML = renderMarkdown(
         r.description,
@@ -3658,11 +3723,8 @@ function bind() {
   });
   on("#description", "input", (_, el) => {
     $("#design-description-preview").innerHTML = renderMarkdown(el.value);
-    $("#design-description-count").textContent =
-      "字数: " +
-      Array.from(el.value).length +
-      "　行数: " +
-      el.value.split("\n").length;
+    $("#design-description-count").textContent = documentCounts(el.value);
+    descriptionScroll?.refreshPreview();
   });
   on("#request-design-preview", "click", () => {
     collect();
