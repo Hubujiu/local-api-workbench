@@ -43,7 +43,11 @@ export function prepareFormTypeChange(field, nextType, bodyType) {
   const row = { ...field, type: nextType, value: "" };
   delete row.filename;
   delete row.requiresFile;
-  if (isFile) row.requiresFile = true;
+  if (isFile) {
+    row.requiresFile = true;
+    // An explicit file type is a declaration, not just an imported example.
+    if (row.schemaDefined === false) delete row.schemaDefined;
+  }
   return { row, confirm };
 }
 

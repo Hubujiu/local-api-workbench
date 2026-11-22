@@ -206,6 +206,51 @@ try {
   assert.equal(await file.evaluate((node) => node.files.length), 0);
   assert.equal(await page.locator("#url").inputValue(), "");
 
+  // Legacy form-schema smoke exercises the dense multipart action lane at
+  // 1000 and 1440. Tables may scroll in their own region on narrow screens,
+  // but their row actions must stay within the table's last column.
+  for (const width of [1440, 1000, 760, 680, 430]) {
+    await page.setViewportSize({ width, height: 760 });
+    await top();
+    const layout = await first.evaluate((row) => {
+      const table = row.closest("table");
+      const scroller = table.parentElement;
+      const cell = row.lastElementChild.getBoundingClientRect();
+      const buttons = [...row.lastElementChild.querySelectorAll("button")].map(
+        (button) => button.getBoundingClientRect(),
+      );
+      return {
+        table: [table.clientWidth, table.scrollWidth],
+        scroller: [scroller.clientWidth, scroller.scrollWidth],
+        panel: row.closest(".request-panel").getBoundingClientRect().width,
+        buttons: buttons.map(({ left, top, right }) => [left, top, right]),
+        actionCell: [cell.left, cell.right],
+        documentWidth: document.documentElement.scrollWidth,
+      };
+    });
+    const diagnostic = `${width}px multipart layout: ${JSON.stringify(layout)}`;
+    console.log("DEBUG_MULTIPART_ACTION_LAYOUT", diagnostic);
+    assert.equal(layout.documentWidth, width, diagnostic);
+    assert.ok(layout.scroller[0] <= layout.panel + 1, diagnostic);
+    if (layout.table[0] > layout.scroller[0])
+      assert.ok(layout.scroller[1] > layout.scroller[0], diagnostic);
+    assert.ok(layout.table[1] - layout.table[0] <= 1, diagnostic);
+    metrics[`actionLayout${width}`] = layout;
+    assert.ok(
+      layout.buttons.every(
+        ([left, , right]) =>
+          left >= layout.actionCell[0] - 1 && right <= layout.actionCell[1] + 1,
+      ),
+      diagnostic,
+    );
+    assert.ok(
+      layout.buttons.every(
+        ([, top]) => Math.abs(top - layout.buttons[0][1]) <= 2,
+      ),
+      diagnostic,
+    );
+  }
+
   await page.setViewportSize({ width: 430, height: 760 });
   await top();
   assert.equal(
@@ -238,7 +283,7 @@ try {
       JSON.stringify({ metrics, blocked, errors }, null, 2) + "\n",
     );
   console.log(
-    "DEBUG_MULTIPART_EDITOR_UI_PASS 1363+430/inline-composer/real-file/keyboard/toggle-all/draft-only/no-send",
+    "DEBUG_MULTIPART_EDITOR_UI_PASS 1363+1440+1000+760+680+430/inline-composer/real-file/keyboard/toggle-all/draft-only/no-send",
   );
 } finally {
   await browser?.close();

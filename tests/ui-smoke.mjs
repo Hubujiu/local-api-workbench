@@ -5258,9 +5258,32 @@ try {
   );
   await page.locator('[data-param="body"]').click();
   await page.locator('[data-pair="form:2:value"]').fill("payload edit only");
+  const uploadValue = page.locator('[data-pair="form:4:value"]');
+  const uploadType = page.locator('[data-field-type="4"]');
+  await uploadValue.fill("example to retain");
+  const cancelConversion = page.waitForEvent("dialog");
+  const canceledSelection = uploadType.selectOption("file");
+  const conversionDialog = await cancelConversion;
+  assert.equal(conversionDialog.type(), "confirm");
+  assert.match(conversionDialog.message(), /切换字段类型会清除/);
+  await conversionDialog.dismiss();
+  await canceledSelection;
+  assert.equal(await uploadType.inputValue(), "text");
+  assert.equal(await uploadValue.inputValue(), "example to retain");
   await saveAndWait("#save-project");
   let formState = await app.store.get(formSchemaProject.id);
   assert.equal(formState.requests[0].form[2].schemaDefined, false);
+  assert.equal(formState.requests[0].form[4].schemaDefined, false);
+  assert.equal(formState.requests[0].form[4].value, "example to retain");
+  assert.equal(
+    Object.hasOwn(
+      exportOpenAPI(formState).paths["/form"].post.requestBody.content[
+        "multipart/form-data"
+      ].schema.properties,
+      "upload",
+    ),
+    false,
+  );
   assert.equal(
     Object.hasOwn(
       exportOpenAPI(formState).paths["/form"].post.requestBody.content[
@@ -5280,9 +5303,14 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.locator('[data-pair="form:3:key"]').fill("renamed");
-  await page.locator('[data-field-type="4"]').selectOption("file");
+  const acceptConversion = page.waitForEvent("dialog");
+  const acceptedSelection = uploadType.selectOption("file");
+  await (await acceptConversion).accept();
+  await acceptedSelection;
   await saveAndWait("#save-project");
   formState = await app.store.get(formSchemaProject.id);
+  assert.notEqual(formState.requests[0].form[4].schemaDefined, false);
+  assert.equal(formState.requests[0].form[4].value, "");
   const formContract =
     exportOpenAPI(formState).paths["/form"].post.requestBody.content[
       "multipart/form-data"

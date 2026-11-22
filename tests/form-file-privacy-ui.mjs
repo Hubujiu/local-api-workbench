@@ -4,7 +4,11 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../src/server.mjs";
-import { normalizeRequest } from "../src/core.mjs";
+import {
+  exportOpenAPI,
+  importDocument,
+  normalizeRequest,
+} from "../src/core.mjs";
 
 const { chromium } = createRequire(import.meta.url)(
   process.env.PLAYWRIGHT_PACKAGE || "playwright",
@@ -58,6 +62,30 @@ try {
       ],
     }),
   ];
+  const [exampleOnly] = importDocument({
+    openapi: "3.1.0",
+    paths: {
+      "/multipart-contract": {
+        post: {
+          summary: "Imported example-only multipart",
+          requestBody: {
+            content: {
+              "multipart/form-data": {
+                schema: {
+                  type: "object",
+                  properties: {},
+                  additionalProperties: false,
+                },
+                example: { upload: "synthetic example" },
+              },
+            },
+          },
+          responses: { 200: { description: "OK" } },
+        },
+      },
+    },
+  });
+  owner.requests.push(exampleOnly);
   owner = await app.store.save(owner);
   browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || undefined,
@@ -69,7 +97,10 @@ try {
   });
   const origin = new URL(app.launchUrl).origin,
     blocked = [],
-    errors = [];
+    errors = [],
+    savePath = "/api/projects/" + owner.id;
+  let allowSave = false,
+    saves = 0;
   page.on("pageerror", () => errors.push("unexpected page error"));
   await page.addInitScript((id) => {
     sessionStorage.setItem("project", id);
@@ -87,6 +118,16 @@ try {
     const req = route.request(),
       u = new URL(req.url());
     if (u.origin === origin && req.method() === "GET") return route.continue();
+    if (
+      allowSave &&
+      saves === 0 &&
+      u.origin === origin &&
+      u.pathname === savePath &&
+      req.method() === "PUT"
+    ) {
+      saves++;
+      return route.continue();
+    }
     blocked.push(req.method());
     return route.abort();
   });
@@ -215,6 +256,67 @@ try {
   assert.deepEqual(errors, []);
   console.log(
     "FORM_FILE_PRIVACY_UI_PASS deselection/ABA-body-tab-type/metadata/URLencoded/no-copy/no-writes/no-transport",
+  );
+
+  // Reload without saving the privacy drafts, then check the imported contract.
+  await page.reload();
+  await page
+    .locator("#tree [data-request]")
+    .getByText(exampleOnly.name, { exact: true })
+    .click();
+  await bodyTab.press("Enter");
+  const upload = (snapshot) =>
+    snapshot.requests.find(({ id }) => id === exampleOnly.id).form[0];
+  const properties = (snapshot) =>
+    exportOpenAPI({
+      name: snapshot.name,
+      requests: snapshot.requests.filter(({ id }) => id === exampleOnly.id),
+    }).paths["/multipart-contract"].post.requestBody.content[
+      "multipart/form-data"
+    ].schema.properties;
+  assert.equal(upload(owner).schemaDefined, false);
+  assert.equal(Object.hasOwn(properties(owner), "upload"), false);
+  assert.equal(await value(0).inputValue(), "synthetic example");
+  await hostConfirm(0, "file", false);
+  assert.equal(await type(0).inputValue(), "text");
+  assert.equal(await value(0).inputValue(), "synthetic example");
+  assert.deepEqual(await app.store.get(owner.id), owner);
+
+  await hostConfirm(0, "file", true);
+  assert.equal(await value(0).count(), 0);
+  await row(0).getByText("请选择文件", { exact: true }).waitFor();
+  assert.deepEqual(await app.store.get(owner.id), owner);
+  assert.equal(saves, 0);
+  allowSave = true;
+  const [receipt] = await Promise.all([
+    page.waitForResponse(
+      (res) =>
+        new URL(res.url()).pathname === savePath &&
+        res.request().method() === "PUT",
+    ),
+    page.locator("#save-project").click(),
+  ]);
+  allowSave = false;
+  assert.equal(receipt.status(), 200);
+  await page
+    .locator("#saved-state")
+    .getByText("✓ 已保存", { exact: true })
+    .waitFor();
+  const snapshot = await app.store.get(owner.id);
+  const stored = upload(snapshot);
+  assert.equal(stored.type, "file");
+  assert.equal(stored.value, "");
+  assert.notEqual(stored.schemaDefined, false);
+  assert.deepEqual(properties(snapshot).upload, {
+    type: "string",
+    format: "binary",
+  });
+  assert.deepEqual(snapshot.requests.slice(0, 2), owner.requests.slice(0, 2));
+  assert.equal(saves, 1);
+  assert.deepEqual(blocked, []);
+  assert.deepEqual(errors, []);
+  console.log(
+    "FORM_EXAMPLE_FILE_DECLARATION_UI_PASS import/dismiss/accept/one-explicit-save/export",
   );
 } finally {
   await browser?.close();
