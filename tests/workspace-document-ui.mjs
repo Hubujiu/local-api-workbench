@@ -276,9 +276,13 @@ try {
     const narrowEditor = await content.boundingBox();
     const narrowPreview = await preview.boundingBox();
     assert(narrowPreview.y >= narrowEditor.y + narrowEditor.height);
-    assert.equal(
-      await page.evaluate(() => document.documentElement.scrollWidth),
-      430,
+    assert.deepEqual(
+      await page.evaluate(() => {
+        const { clientWidth, scrollWidth } = document.documentElement;
+        return [window.innerWidth, scrollWidth - clientWidth];
+      }),
+      [430, 0],
+      "a classic vertical scrollbar may reduce the usable width, but not create horizontal overflow",
     );
     const narrowTools = await toolbarMetrics();
     validateTools(narrowTools);

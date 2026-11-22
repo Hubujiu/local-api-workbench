@@ -20,6 +20,11 @@ class Pane extends EventTarget {
     this.value = Math.round(top);
     this.moves++;
   }
+  scrollTo({ top, behavior }) {
+    assert.equal(behavior, "instant");
+    this.pendingKeyboardScroll = false;
+    this.scrollTop = top;
+  }
   scroll(top = this.scrollTop) {
     this.value = top;
     this.dispatchEvent(new Event("scroll"));
@@ -94,4 +99,19 @@ test("refreshing Markdown only redraws the preview's link and does not drive the
   assert.equal(rendered.scrollTop, 400);
   rendered.scroll();
   assert.equal(source.moves, 0);
+});
+
+test("return-to-top cancels a keyboard transition scheduled before the first scroll frame", () => {
+  const editor = new Pane(500),
+    preview = new Pane(700);
+  const controls = bindWorkspaceDocumentScroll(editor, preview, {
+    active: () => true,
+    enabled: () => false,
+  });
+  preview.pendingKeyboardScroll = true;
+  assert.equal(preview.scrollTop, 0);
+  controls.top();
+  assert.equal(preview.pendingKeyboardScroll, false);
+  assert.equal(editor.scrollTop, 0);
+  assert.equal(preview.scrollTop, 0);
 });
