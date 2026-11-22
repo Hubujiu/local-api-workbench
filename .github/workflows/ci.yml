@@ -69,6 +69,7 @@ jobs:
       - run: node tests/project-switcher-ui.mjs
       - run: node tests/project-switch-aftermath-ui.mjs
       - run: node tests/project-switch-confirmation-ui.mjs
+      - run: node tests/project-switch-target-read-ui.mjs
       - run: node tests/api-welcome-ui.mjs
       - run: node tests/appearance-settings-ui.mjs
       - run: node tests/appearance-font-scale-ui.mjs

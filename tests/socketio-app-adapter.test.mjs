@@ -281,7 +281,7 @@ test("project switch never injects same-id definition from B into cached A state
     `
     let openedDocuments=[],activeDocumentId=null;
     const documentModes=new Map();
-    let project=initial,editVersion=0,dirty=false,busy=false,saving=false,projectOpenSequence=0,current,opened,response,lastRun,loadResult,planId,selectedProtocolId;
+    let project=initial,editVersion=0,dirty=false,busy=false,saving=false,projectOpenSequence=0,projectOpenRequestSequence=0,current,opened,response,lastRun,loadResult,planId,selectedProtocolId;
     let grpcWorkbenchState=null,grpcWorkbenchProject='',grpcNavigationGeneration=0;
     let socketioWorkbenchState=createSocketIOState(),socketioWorkbenchProject=project.id,socketioNavigationGeneration=0;
     selectSocketIO(socketioWorkbenchState,initial.settings.socketioDefinitions[0]);

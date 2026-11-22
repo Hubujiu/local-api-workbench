@@ -26,13 +26,13 @@ function harness() {
     "initial",
     "calls",
     `
-    let project=initial,current="r",editVersion=0,projectOpenSequence=0,bodyGenerationSequence=0,dirty=false,page="apis",mode="debug";
+    let project=initial,current="r",editVersion=0,projectOpenSequence=0,projectOpenRequestSequence=0,bodyGenerationSequence=0,dirty=false,page="apis",mode="debug";
     const request=()=>project.requests.find(r=>r.id===current);
     const collect=()=>{},render=()=>{},mark=()=>{editVersion++;dirty=true};
     const api=(url,method,data)=>new Promise((resolve,reject)=>calls.push({url,method,data,resolve,reject}));
     let run;const on=(s,e,fn)=>run=fn;
     ${body}
-    return {run,state:()=>({project,current,dirty}),edit(){request().body="new draft";mark()},switchRequest(){project.requests.push({id:"other",body:"other draft",schema:{}});current="other"},switchProject(){project={id:"b",requests:[{id:"r",body:"other project",schema:{}}]};projectOpenSequence++},navigate(){page="settings"},reopen(){projectOpenSequence++}};
+    return {run,state:()=>({project,current,dirty}),edit(){request().body="new draft";mark()},switchRequest(){project.requests.push({id:"other",body:"other draft",schema:{}});current="other"},switchProject(){project={id:"b",requests:[{id:"r",body:"other project",schema:{}}]};projectOpenSequence++;projectOpenRequestSequence++},navigate(){page="settings"},reopen(){projectOpenSequence++;projectOpenRequestSequence++}};
   `,
   );
   return { ...create(initial, calls), calls };

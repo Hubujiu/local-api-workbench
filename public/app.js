@@ -144,6 +144,8 @@ import { createProjectImportGuard } from "./project-import-guard.js";
 const projectImports = createProjectImportGuard();
 import { createNativeRequestLifecycle } from "./native-request-lifecycle.js";
 const nativeRequestLifecycle = createNativeRequestLifecycle();
+// All admitted reads compete; a canceled picker read does not replace the mounted workspace.
+let projectOpenRequestSequence = 0;
 let projectOpenSequence = 0;
 let bodyGenerationSequence = 0;
 import { mysqlPortInput, mongoPortInput } from "./mysql-port-input.js";
@@ -1075,11 +1077,12 @@ const env = () => {
     ? selected
     : project?.environments[0]?.id;
 };
-async function api(path, method = "GET", data) {
+async function api(path, method = "GET", data, { signal } = {}) {
   const r = await fetch("/api" + path, {
     method,
     headers: { "content-type": "application/json", "x-local-token": token },
     body: data === undefined ? undefined : JSON.stringify(data),
+    signal,
   });
   const b = await r.json();
   if (!r.ok) {
@@ -1336,8 +1339,11 @@ async function changeNativeRequestLifecycle(requestId, restore) {
     },
   });
 }
-async function openProject(id, { fromPicker = false, pickerGuard } = {}) {
-  if (pickerGuard && !pickerGuard()) return false;
+async function openProject(
+  id,
+  { fromPicker = false, pickerGuard, targetSignal } = {},
+) {
+  if (targetSignal?.aborted || (pickerGuard && !pickerGuard())) return false;
   if (
     socketioWorkbenchState?.draftDirty &&
     socketioWorkbenchProject === project?.id &&
@@ -1357,12 +1363,21 @@ async function openProject(id, { fromPicker = false, pickerGuard } = {}) {
     return;
   const reloadCheckpoint = nativeRequestLifecycle.reloadCheckpoint();
   const importCheckpoint = projectImports.reloadCheckpoint();
-  const sequence = ++projectOpenSequence,
+  const intent = ++projectOpenRequestSequence,
+    sequence = targetSignal ? projectOpenSequence : ++projectOpenSequence,
     previousProject = project,
     version = editVersion,
     previousDirty = dirty;
-  const loaded = await api("/projects/" + id);
-  if (sequence !== projectOpenSequence) return false;
+  const path = "/projects/" + id;
+  const loaded = targetSignal
+    ? await api(path, "GET", undefined, { signal: targetSignal })
+    : await api(path);
+  if (
+    targetSignal?.aborted ||
+    intent !== projectOpenRequestSequence ||
+    sequence !== projectOpenSequence
+  )
+    return false;
   if (
     project !== previousProject ||
     editVersion !== version ||
@@ -1395,6 +1410,7 @@ async function openProject(id, { fromPicker = false, pickerGuard } = {}) {
   socketioNavigationGeneration++;
   const resetWorkspace =
     fromPicker && previousProject && previousProject.id !== id;
+  if (targetSignal) projectOpenSequence++;
   project = loaded;
   nativeRequestLifecycle.acknowledgeReload(id, reloadCheckpoint);
   projectImports.acknowledgeReload(id, importCheckpoint);
@@ -1482,7 +1498,7 @@ function bindOpenAPIFileReview(shell) {
       const owner = project;
       const configRevision = owner.configRevision ?? owner.revision;
       const version = editVersion;
-      const opening = projectOpenSequence;
+      const opening = projectOpenRequestSequence;
       const importCheckpoint = projectImports.reloadCheckpoint();
       const nativeCheckpoint = nativeRequestLifecycle.reloadCheckpoint();
       const assertOwner = (dialogRevision, beforeApply = true) => {
@@ -1490,7 +1506,7 @@ function bindOpenAPIFileReview(shell) {
           project !== owner ||
           (project.configRevision ?? project.revision) !== configRevision ||
           editVersion !== version ||
-          projectOpenSequence !== opening ||
+          projectOpenRequestSequence !== opening ||
           modalRevision !== dialogRevision ||
           !$("#dialog").open
         )
@@ -2434,7 +2450,7 @@ async function prepareProjectWrite(mode) {
       throw Error("项目或草稿在保存期间已变化，未开始后续操作");
     const owner = project,
       version = editVersion,
-      openingSequence = projectOpenSequence,
+      openingSequence = projectOpenRequestSequence,
       plans = JSON.stringify(project.plans);
     return {
       projectId,
@@ -2447,7 +2463,7 @@ async function prepareProjectWrite(mode) {
           project !== owner ||
           editVersion !== version ||
           dirty ||
-          projectOpenSequence !== openingSequence ||
+          projectOpenRequestSequence !== openingSequence ||
           saving ||
           planChanged ||
           (updated && updated.id !== projectId)
@@ -2752,7 +2768,7 @@ function bind() {
     focusSelector = "#project-search-trigger",
   ) => {
     const owner = project,
-      opening = projectOpenSequence,
+      opening = projectOpenRequestSequence,
       version = editVersion;
     const pendingProtocol =
       (socketioWorkbenchState?.draftDirty &&
@@ -2779,11 +2795,11 @@ function bind() {
           }
         } else $(focusSelector)?.focus({ preventScroll: true });
       },
-      async run(decision) {
+      async run(decision, readTarget) {
         if (
           !isCurrent() ||
           project !== owner ||
-          projectOpenSequence !== opening ||
+          projectOpenRequestSequence !== opening ||
           !dirty
         )
           throw Error("项目或草稿已变化，请重新选择目标项目");
@@ -2791,27 +2807,33 @@ function bind() {
           // A different project cannot reconcile an uncertain save on this owner.
           nativeRequestLifecycle.assertCanSave(owner.id);
           projectImports.assertCanSave(owner.id);
-          return openProject(id, {
-            fromPicker: true,
-            pickerGuard: () => isCurrent() && project === owner && dirty,
-          });
+          return readTarget((targetSignal) =>
+            openProject(id, {
+              fromPicker: true,
+              targetSignal,
+              pickerGuard: () => isCurrent() && project === owner && dirty,
+            }),
+          );
         }
         const receipt = await save();
         if (
           !receipt ||
           receipt.owner !== owner ||
           receipt.version !== version ||
-          projectOpenSequence !== opening ||
+          projectOpenRequestSequence !== opening ||
           project !== receipt.applied ||
           dirty ||
           !isCurrent()
         )
           throw Error("保存未应用到当前草稿，未切换项目");
-        return openProject(id, {
-          fromPicker: true,
-          pickerGuard: () =>
-            isCurrent() && project === receipt.applied && !dirty,
-        });
+        return readTarget((targetSignal) =>
+          openProject(id, {
+            fromPicker: true,
+            targetSignal,
+            pickerGuard: () =>
+              isCurrent() && project === receipt.applied && !dirty,
+          }),
+        );
       },
     });
   };
@@ -4223,7 +4245,7 @@ function bind() {
     const targetProject = project,
       targetRequest = request(),
       version = editVersion,
-      openingSequence = projectOpenSequence,
+      openingSequence = projectOpenRequestSequence,
       generation = ++bodyGenerationSequence,
       targetPage = page,
       targetMode = mode;
@@ -4240,7 +4262,7 @@ function bind() {
       project !== targetProject ||
       request() !== targetRequest ||
       editVersion !== version ||
-      projectOpenSequence !== openingSequence ||
+      projectOpenRequestSequence !== openingSequence ||
       page !== targetPage ||
       mode !== targetMode
     )
@@ -4687,12 +4709,12 @@ function bind() {
             throw Error("项目、草稿或导入内容已变化，未执行导入");
           const targetProject = project,
             version = editVersion,
-            openingSequence = projectOpenSequence;
+            openingSequence = projectOpenRequestSequence;
           const stopped = () =>
             inputChanged() ||
             project !== targetProject ||
             editVersion !== version ||
-            projectOpenSequence !== openingSequence ||
+            projectOpenRequestSequence !== openingSequence ||
             dirty ||
             busy ||
             saving;
@@ -5789,7 +5811,7 @@ function bind() {
           throw Error("项目、草稿或用例内容已变化，未保存用例");
         const targetProject = project,
           version = editVersion,
-          openingSequence = projectOpenSequence;
+          openingSequence = projectOpenRequestSequence;
         posted = true;
         const result = await api(
           "/projects/" + ownerProjectId + "/cases",
@@ -5808,7 +5830,7 @@ function bind() {
           inputChanged() ||
           project !== targetProject ||
           editVersion !== version ||
-          projectOpenSequence !== openingSequence ||
+          projectOpenRequestSequence !== openingSequence ||
           dirty ||
           busy ||
           saving ||
@@ -8134,7 +8156,7 @@ function rawHelperBodyOwner() {
   const ownerProject = project,
     ownerEnvironment = env(),
     ownerCollectionId = owner.postmanCollectionId,
-    ownerOpening = projectOpenSequence,
+    ownerOpening = projectOpenRequestSequence,
     ownerEdit = editVersion,
     ownerText = editor.value;
   return {
@@ -8154,7 +8176,7 @@ function rawHelperBodyOwner() {
       owner.bodyType === "json" &&
       owner.postmanCollectionId === ownerCollectionId &&
       env() === ownerEnvironment &&
-      projectOpenSequence === ownerOpening &&
+      projectOpenRequestSequence === ownerOpening &&
       editVersion === ownerEdit &&
       $("#body-code") === editor &&
       editor.value === ownerText,

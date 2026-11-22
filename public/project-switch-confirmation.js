@@ -1,3 +1,5 @@
+const targetReadTimeoutMs = 15_000;
+
 export function confirmDirtyProjectSwitch(dialog, { run, restoreFocus }) {
   if (dialog.open) return;
   dialog.innerHTML = `<div class="project-switch-warning" aria-hidden="true">!</div>
@@ -16,17 +18,46 @@ export function confirmDirtyProjectSwitch(dialog, { run, restoreFocus }) {
   const progress = dialog.querySelector("#project-switch-confirm-progress");
   const controller = new AbortController();
   const options = { signal: controller.signal };
-  let pending = false;
+  let pending = false,
+    target;
   const close = (switched) => {
     controller.abort();
+    target?.abort();
     dialog.close();
     restoreFocus(switched);
+  };
+  const canCancel = () => !pending || Boolean(target);
+  const readTarget = async (read, saved) => {
+    const attempt = new AbortController();
+    target = attempt;
+    cancel.disabled = false;
+    cancel.focus({ preventScroll: true });
+    progress.textContent = saved
+      ? "原项目已保存，正在打开目标项目…"
+      : "正在打开目标项目…";
+    const timeout = Error("读取目标项目超时，未切换项目。");
+    const interrupted = new Promise((_, reject) => {
+      attempt.signal.addEventListener(
+        "abort",
+        () => reject(attempt.signal.reason),
+        {
+          once: true,
+        },
+      );
+    });
+    const timer = setTimeout(() => attempt.abort(timeout), targetReadTimeoutMs);
+    try {
+      return await Promise.race([read(attempt.signal), interrupted]);
+    } finally {
+      clearTimeout(timer);
+      target = undefined;
+    }
   };
   dialog.addEventListener(
     "cancel",
     (event) => {
       event.preventDefault();
-      if (!pending) close(false);
+      if (canCancel()) close(false);
     },
     options,
   );
@@ -35,16 +66,24 @@ export function confirmDirtyProjectSwitch(dialog, { run, restoreFocus }) {
     async (event) => {
       const decision = event.target.closest("[data-project-switch-choice]")
         ?.dataset.projectSwitchChoice;
+      if (decision === "cancel") {
+        if (canCancel()) close(false);
+        return;
+      }
       if (!decision || pending) return;
-      if (decision === "cancel") return close(false);
       pending = true;
       for (const action of actions) action.disabled = true;
       progress.textContent =
-        decision === "save" ? "正在保存并核对原项目…" : "正在打开目标项目…";
+        decision === "save" ? "正在保存并核对原项目…" : "正在核对当前草稿…";
       try {
-        if (!(await run(decision))) throw Error("未切换项目，请回到工作区核对");
+        const switched = await run(decision, (read) =>
+          readTarget(read, decision === "save"),
+        );
+        if (controller.signal.aborted) return;
+        if (!switched) throw Error("未切换项目，请回到工作区核对");
         close(true);
       } catch (error) {
+        if (controller.signal.aborted) return;
         progress.textContent = error.message;
         // After an uncertain/stale transition, never reuse the same decision.
         cancel.disabled = false;

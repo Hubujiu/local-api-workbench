@@ -412,8 +412,10 @@ async function openHarness(
     app.indexOf("\nfunction modal("),
   );
   const gets = [];
-  const api = (path) =>
-    new Promise((resolve, reject) => gets.push({ path, resolve, reject }));
+  const api = (path, method, data, options) =>
+    new Promise((resolve, reject) =>
+      gets.push({ path, method, data, options, resolve, reject }),
+    );
   const create = new Function(
     "initial",
     "nativeRequestLifecycle",
@@ -425,10 +427,10 @@ async function openHarness(
  let openedDocuments=[],activeDocumentId=null;
  const documentModes=new Map();
  let project=initial, dirty=false, editVersion=0, busy=false, saving=false,
-      projectOpenSequence=0,current,opened,response,lastRun,loadResult,planId,selectedProtocolId;
+      projectOpenSequence=0,projectOpenRequestSequence=0,current,opened,response,lastRun,loadResult,planId,selectedProtocolId;
     const confirm=()=>true,sessionStorage={setItem(){}},render=()=>{};
     ${source}
-    return {open:openProject,getState:()=>({project,dirty,editVersion,busy,saving}),
+    return {open:openProject,getState:()=>({project,dirty,editVersion,busy,saving,projectOpenSequence,projectOpenRequestSequence}),
       seedDocuments(){openedDocuments=["doc"];activeDocumentId="doc";documentModes.set("doc","edit");},
       documents(){return {opened:[...openedDocuments],active:activeDocumentId,modes:[...documentModes]};},
       edit(){project.requests[0].name="new draft";dirty=true;editVersion++;},
@@ -441,6 +443,55 @@ async function openHarness(
     controller,
   };
 }
+test("aborted picker GET forwards its signal and cannot adopt a delivered late response", async () => {
+  const h = await openHarness();
+  const original = h.getState().project;
+  const canceled = new AbortController();
+  canceled.abort();
+  assert.equal(
+    await h.open("never-read", { targetSignal: canceled.signal }),
+    false,
+  );
+  assert.equal(h.gets.length, 0);
+
+  const target = new AbortController();
+  const pending = h.open("other", {
+    fromPicker: true,
+    targetSignal: target.signal,
+  });
+  assert.equal(h.gets[0].path, "/projects/other");
+  assert.equal(h.gets[0].method, "GET");
+  assert.equal(h.gets[0].options.signal, target.signal);
+  assert.equal(h.getState().projectOpenSequence, 0);
+  assert.equal(h.getState().projectOpenRequestSequence, 1);
+  target.abort();
+  h.gets[0].resolve({ ...original, id: "other" });
+  assert.equal(await pending, false);
+  assert.equal(h.getState().project, original);
+  assert.equal(h.getState().projectOpenSequence, 0);
+  assert.equal(h.getState().projectOpenRequestSequence, 1);
+});
+
+test("pending picker GET supersedes older read but cannot supersede a newer regular read", async () => {
+  const h = await openHarness();
+  const owner = h.getState().project;
+  const older = h.open(owner.id);
+  const target = new AbortController();
+  const pending = h.open("target", {
+    fromPicker: true,
+    targetSignal: target.signal,
+  });
+  h.gets[0].resolve({ ...owner, name: "obsolete mounted reload" });
+  assert.equal(await older, false);
+  assert.equal(h.getState().project, owner);
+  const newer = h.open("latest");
+  h.gets[1].resolve({ ...owner, id: "target" });
+  assert.equal(await pending, false);
+  h.gets[2].resolve({ ...owner, id: "latest" });
+  assert.equal(await newer, true);
+  assert.equal(h.getState().project.id, "latest");
+  assert.equal(h.getState().projectOpenRequestSequence, 3);
+});
 async function unknownCommand(h) {
   await assert.rejects(
     h.controller.run({

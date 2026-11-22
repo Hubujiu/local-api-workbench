@@ -62,7 +62,7 @@ function harness(initial = fixture(), transport) {
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
  let openedDocuments=[],activeDocumentId=null;
  const documentModes=new Map();
- let project=initial,projects=[{id:initial.id}],editVersion=0,dirty=true,saving=false,busy=false,projectOpenSequence=0,current='r',opened=[],response,lastRun,loadResult,planId,selectedProtocolId;
+ let project=initial,projects=[{id:initial.id}],editVersion=0,dirty=true,saving=false,busy=false,projectOpenSequence=0,projectOpenRequestSequence=0,current='r',opened=[],response,lastRun,loadResult,planId,selectedProtocolId;
  const nativeRequestLifecycle={assertCanSave(){},reloadCheckpoint(){return 0},assertReloadCurrent(){},acknowledgeReload(){}};
  let modalCallback, rendered;
  const fields={"#error-code-value":{value:"2"},"#error-code-label":{value:"candidate"},"#error-code-http":{checked:false}};
