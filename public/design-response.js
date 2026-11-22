@@ -264,12 +264,26 @@ function examplesPreview(definition, media, examples, managed) {
   }</div>`;
 }
 
-function responseSettings(definition, mediaTypes, examples) {
-  const delays = examples.filter(
-    (ex) => String(ex?.status) === String(definition?.status),
-  );
+function responseSettings(definition, index, mediaTypes, examples, draft) {
+  const status = String(definition?.status || "");
+  const pending =
+    draft?.index === index && draft?.status === status ? draft : null;
+  const delays = examples.filter((ex) => String(ex?.status) === status);
   const format = mediaTypes.length ? mediaTypes.join(" · ") : "未定义";
-  return `<div class="design-response-settings"><div><span>响应说明</span><output>${esc(definition?.description || "未填写")}</output></div><div><span>HTTP 状态</span><output>${esc(definition?.status || "未定义")}</output></div><div><span>内容格式</span><output>${esc(format)}</output></div><div><span>示例延迟</span><output>${delays.length ? esc(delays.map((ex) => (ex.name || "未命名") + "：" + (ex.delayMs == null ? "未单独设置" : ex.delayMs + " ms")).join(" · ")) : "尚无响应示例"}</output></div></div><div class="design-response-settings-actions"><button type="button" id="edit-design-response-settings">编辑响应定义</button><span class="muted">格式在 Body 中编辑；延迟属于各个 Mock 示例，不是 OpenAPI 响应定义。</span></div>`;
+  return `<form id="design-response-settings-form" aria-label="响应定义设置">
+    <div class="design-response-settings">
+      <label for="design-settings-description">响应说明<textarea id="design-settings-description" maxlength="8192" rows="1">
+${esc(pending?.description ?? definition?.description ?? "")}</textarea></label>
+      <label for="design-settings-status">HTTP 状态<input id="design-settings-status" value="${esc(pending?.value ?? status)}" placeholder="200 / 4XX / default" autocomplete="off" spellcheck="false"></label>
+      <div><span id="design-settings-format-label">内容格式</span><output aria-labelledby="design-settings-format-label">${esc(format)}</output></div>
+      <div><span id="design-settings-delay-label">示例延迟</span><output aria-labelledby="design-settings-delay-label">${delays.length ? esc(delays.map((ex) => (ex.name || "未命名") + "：" + (ex.delayMs == null ? "未单独设置" : ex.delayMs + " ms")).join(" · ")) : "尚无响应示例"}</output></div>
+    </div>
+    <div class="design-response-settings-actions">
+      <span class="muted">格式在 Body 中编辑；延迟属于各个 Mock 示例，不是 OpenAPI 响应定义。</span>
+      <button type="button" id="design-settings-cancel" class="ghost"${pending ? "" : " disabled"}>取消</button>
+      <button type="submit" id="design-settings-apply" class="primary"${pending ? "" : " disabled"}>应用响应设置</button>
+    </div>
+  </form>`;
 }
 
 export function designResponsePanel(
@@ -278,6 +292,7 @@ export function designResponsePanel(
   bindingNotice,
   examples = [],
   collapsedRootScopes = null,
+  settingsDraft = null,
 ) {
   const { index, definition, media, mediaTypes } = responseSelection(
     definitions,
@@ -288,7 +303,8 @@ export function designResponsePanel(
     index < 0
       ? ""
       : `<button type="button" class="ghost" data-response-schema="${esc(JSON.stringify([index, media || "application/json"]))}">编辑结构</button>`;
-  const raw = `<div class="design-response-json"><label for="response-definitions">响应定义 JSON</label>${bindingNotice ? '<p class="muted">可在此编辑 Schema。绑定示例请用示例编辑器；响应状态请用可视编辑按钮，避免导出冲突。</p>' : ""}<textarea id="response-definitions" spellcheck="false">${esc(JSON.stringify(definitions, null, 2))}</textarea></div>`;
+  const raw = `<div class="design-response-json"><label for="response-definitions">响应定义 JSON</label>${bindingNotice ? '<p class="muted">可在此编辑 Schema。绑定示例请用示例编辑器；响应状态请用可视编辑按钮，避免导出冲突。</p>' : ""}<textarea id="response-definitions" spellcheck="false">
+${esc(settingsDraft?.rawCurrent ?? JSON.stringify(definitions, null, 2))}</textarea></div>`;
   return `<div class="design-response-shell"><div class="design-response-bar"><div class="design-response-tabs" role="tablist" aria-label="响应状态">${definitions
     .map((item, i) => {
       const status = String(item?.status ?? "");
@@ -313,7 +329,13 @@ export function designResponsePanel(
           selection?.view === "headers"
             ? headerPreview(definition)
             : selection?.view === "settings"
-              ? responseSettings(definition, mediaTypes, examples)
+              ? responseSettings(
+                  definition,
+                  index,
+                  mediaTypes,
+                  examples,
+                  settingsDraft,
+                )
               : `<div class="${showingExamples ? "" : "design-response-schema-pane"}"><div class="design-response-tools"><div class="design-response-body-views" role="group" aria-label="Body 视图">${[
                   ["schema", "数据结构"],
                   ["examples", "示例"],

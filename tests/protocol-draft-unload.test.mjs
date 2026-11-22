@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { newGraphQLEditorRequest } from "../public/graphql-editor.js";
 import { createGraphQLWorkspaceDrafts } from "../public/graphql-workspace.js";
+import { createDesignResponseSettingsDrafts } from "../public/design-response-settings-draft.js";
 import {
   createGrpcUnaryState,
   selectGrpcUnary,
@@ -27,6 +28,7 @@ function unload({
   socket = null,
   project = { id: "p" },
   graphqlDrafts = createGraphQLWorkspaceDrafts(),
+  responseDrafts = createDesignResponseSettingsDrafts(),
 } = {}) {
   let listener;
   new Function(
@@ -38,6 +40,7 @@ function unload({
     "socketioWorkbenchProject",
     "socketioWorkbenchState",
     "graphqlDrafts",
+    "designResponseSettingsDrafts",
     block,
   )(
     {
@@ -53,6 +56,7 @@ function unload({
     socketProject,
     socket,
     graphqlDrafts,
+    responseDrafts,
   );
   const e = {
     prevented: false,
@@ -145,4 +149,19 @@ test("unapplied GraphQL editor drafts protect only their owning request and clea
   assert.equal(graphqlDrafts.discard(request), true);
   assert.equal(unload({ project, graphqlDrafts }).prevented, false);
   assert.equal(JSON.stringify(project), before);
+});
+
+test("inline response settings protect only the owning response draft and clear on Cancel", () => {
+  const request = { id: "same", responses: [{ status: "404" }] };
+  const project = { id: "p", requests: [request] };
+  const responseDrafts = createDesignResponseSettingsDrafts();
+  responseDrafts.stage(request, { status: "404", value: "422" });
+  assert.equal(unload({ project, responseDrafts }).prevented, true);
+  assert.equal(
+    unload({ project: structuredClone(project), responseDrafts }).prevented,
+    false,
+  );
+  assert.equal(request.responses[0].status, "404");
+  responseDrafts.clear(request);
+  assert.equal(unload({ project, responseDrafts }).prevented, false);
 });
