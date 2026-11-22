@@ -1,3 +1,8 @@
+import {
+  bindProjectSwitcher,
+  projectSwitcherHTML,
+  selectableProjects,
+} from "./project-switcher.js";
 import { hasVisibleTrash, openEmptyTrash } from "./empty-trash.js";
 import { databaseConnectionHTML } from "./database-connection-view.js";
 import {
@@ -1822,15 +1827,16 @@ function render(preserveEditingFocus = false) {
   );
   document.body.classList.toggle("compact-ui", compactUI);
   $("#app").innerHTML =
-    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" ${busy || saving ? "disabled" : ""} class="ghost">＋ 新建/导入项目</button></div><div class="top-group project-group"><select id="project-select" ${busy || saving ? "disabled" : ""} aria-label="项目">${projects
-      .filter((p) => !p.archived && !p.error)
+    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" ${busy || saving ? "disabled" : ""} class="ghost">＋ 新建/导入项目</button></div><div class="top-group project-group"><select id="project-select" ${busy || saving ? "disabled" : ""} aria-label="项目">${selectableProjects(
+      projects,
+    )
       .map(
         (p) =>
           `<option value="${p.id}" ${p.id === project?.id ? "selected" : ""}>${esc(p.name)}</option>`,
       )
       .join(
         "",
-      )}</select><button id="open-location" class="ghost">打开位置</button><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost top-plan ${page === "plans" ? "active" : ""}"><span class="icon">${lineIcon("plan-play")}</span>执行计划</button><button id="mcp-status" data-page="settings" data-settings-target="settings-mcp" class="offline" title="打开 MCP 连接设置">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail" aria-label="工作区导航">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}" ${page === "trash" ? 'aria-current="page"' : ""}><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar" data-sidebar-page="${page}">${
+      )}</select>${projectSwitcherHTML(busy || saving)}<button id="open-location" class="ghost">打开位置</button><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost top-plan ${page === "plans" ? "active" : ""}"><span class="icon">${lineIcon("plan-play")}</span>执行计划</button><button id="mcp-status" data-page="settings" data-settings-target="settings-mcp" class="offline" title="打开 MCP 连接设置">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail" aria-label="工作区导航">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}" ${page === "trash" ? 'aria-current="page"' : ""}><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar" data-sidebar-page="${page}">${
       page === "settings"
         ? settingsSidebar(settingsSection)
         : page === "dictionary" || page === "database-manager"
@@ -2676,6 +2682,15 @@ function bind() {
     refreshResponsiveRawHelper();
   });
   on("#project-select", "change", (_, e) => openProject(e.value));
+  const switcherOwner = project;
+  bindProjectSwitcher($(".project-group"), {
+    projects,
+    current: switcherOwner?.id,
+    allowed: () =>
+      project === switcherOwner && !busy && !saving && !$("#dialog").open,
+    open: openProject,
+    notify: toast,
+  });
   on("#env", "change", (_, e) => {
     project.currentEnvironmentId = e.value;
     mark();
