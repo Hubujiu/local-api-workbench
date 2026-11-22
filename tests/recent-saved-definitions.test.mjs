@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createApp } from "../src/server.mjs";
 import { normalizeRequest } from "../src/core.mjs";
 import { recentSavedDefinitions } from "../src/recent-saved-definitions.mjs";
@@ -66,7 +68,7 @@ test("saved definition projection bounds, orders and returns only active owner m
 });
 
 test("owner route returns canonical metadata only and does not accept mutations", async () => {
-  const root = await mkdtemp("/tmp/recent-saved-route-");
+  const root = await mkdtemp(join(tmpdir(), "recent-saved-route-"));
   const app = await createApp({ root, port: 0 });
   try {
     let project = await app.store.create("Saved route fixture");
