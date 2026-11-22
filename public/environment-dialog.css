@@ -421,3 +421,62 @@ body.dark #dialog:has(.environment-dialog) > form > footer .primary {
     grid-template-columns: 128px minmax(0, 1fr);
   }
 }
+
+.environment-global-content .environment-dialog-notice {
+  min-height: 49px;
+  box-sizing: border-box;
+  margin-bottom: 15px;
+}
+#dialog-content #environment-global-search {
+  width: 100%;
+  height: 31px;
+  margin: 0 0 15px;
+}
+.environment-global-table th:first-child {
+  width: 31.3%;
+}
+.environment-global-table th:nth-child(2) {
+  width: 32.2%;
+}
+.environment-global-table th small {
+  font-size: 9px;
+}
+.environment-global-table :is(input:not([type="checkbox"]), textarea) {
+  width: 100%;
+  min-width: 0;
+}
+#dialog-content .environment-global-table textarea {
+  min-height: 30px;
+  height: 32px;
+}
+.environment-global-table [data-global-details] {
+  padding: 2px 0;
+}
+.environment-global-value,
+.environment-global-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.environment-global-value button {
+  flex: 0 0 auto;
+  padding-inline: 5px;
+}
+.environment-global-tools {
+  flex-wrap: wrap;
+}
+#environment-global-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+#environment-global-error {
+  color: var(--danger);
+}
+.environment-global-advanced {
+  padding: 5px 0;
+}
+@media (max-width: 680px) {
+  .environment-global-content .environment-global-table {
+    min-width: 450px;
+  }
+}
