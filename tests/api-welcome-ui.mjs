@@ -98,7 +98,7 @@ try {
   const capture = async (label, narrow = false) => {
     if (!evidence) return;
     await mkdir(evidence, { recursive: true });
-    await page.mouse.move(1090, 85);
+    await page.mouse.move(narrow ? 424 : 1090, 85);
     await page.screenshot({
       path: join(evidence, "api-welcome-" + label + ".png"),
       ...(narrow ? {} : { clip: { x: 0, y: 0, width: 1363, height: 880 } }),
@@ -110,12 +110,35 @@ try {
   assert.equal(await request.count(), 0);
   assert.equal(await card.getByRole("listitem").count(), 4);
   assert.equal(await page.locator(".tab-scroll .tab-switch").count(), 0);
-  const desktop = {
+  const geometry = async () => ({
     brand: await bounds(welcome.locator(".api-welcome-brand")),
     card: await bounds(card),
     mcp: await bounds(mcp),
     actions: await bounds(welcome.locator(".api-welcome-actions")),
+  });
+  const resetWelcomeScroll = async () => {
+    const scroll = await welcome.evaluate(async (view) => {
+      const workspace = view.closest(".workspace");
+      const root = view.ownerDocument.scrollingElement;
+      for (const node of [view, workspace, root]) {
+        node.scrollTop = 0;
+        node.scrollLeft = 0;
+      }
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      return [
+        view.scrollTop,
+        workspace.scrollTop,
+        root.scrollTop,
+        root.scrollLeft,
+      ];
+    });
+    assert.deepEqual(
+      scroll,
+      [0, 0, 0, 0],
+      "compare and capture the welcome view at the top",
+    );
   };
+  const desktop = await geometry();
   console.log("API_WELCOME_GEOMETRY", JSON.stringify(desktop));
   await capture("desktop");
   assert(Math.abs(desktop.brand[0] - 549) <= 2);
@@ -141,7 +164,85 @@ try {
     assert(await focused(importer));
     assert.equal(await request.count(), 0);
   };
+  const theme = page.locator("#theme");
+  const isDark = () => page.locator("body.dark").count();
+  const palette = () =>
+    welcome.evaluate((view) => {
+      const css = (selector) => getComputedStyle(view.querySelector(selector));
+      const own = getComputedStyle(view);
+      const doc = getComputedStyle(view.ownerDocument.body);
+      const sidebar = getComputedStyle(
+        view.ownerDocument.querySelector(".sidebar"),
+      );
+      const panel = css(".api-welcome-card");
+      const primary = css("#welcome-mcp");
+      const importButton = css("#welcome-import");
+      const createButton = css("#welcome-add");
+      return {
+        canvas: own.backgroundColor,
+        canvasFallback: doc.backgroundColor,
+        sidebar: sidebar.backgroundColor,
+        panel: panel.backgroundColor,
+        panelBorder: panel.borderTopColor,
+        copy: css(".api-welcome-card p").color,
+        intro: css(".api-welcome-intro").color,
+        primary: primary.backgroundColor,
+        primaryText: primary.color,
+        import: importButton.backgroundColor,
+        importBorder: importButton.borderTopColor,
+        create: createButton.backgroundColor,
+        createBorder: createButton.borderTopColor,
+      };
+    });
+  const contrast = (left, right) => {
+    const linear = (x) =>
+      x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    const lum = (rgb) =>
+      [...rgb.matchAll(/\d+/g)]
+        .slice(0, 3)
+        .map(
+          ([n], index) =>
+            [0.2126, 0.7152, 0.0722][index] * linear(Number(n) / 255),
+        )
+        .reduce((a, b) => a + b, 0);
+    const values = [lum(left), lum(right)].sort((a, b) => b - a);
+    return (values[0] + 0.05) / (values[1] + 0.05);
+  };
+  const light = await palette();
+  assert.deepEqual(
+    [light.canvas, light.panel, light.primary],
+    ["rgba(0, 0, 0, 0)", "rgb(249, 245, 234)", "rgb(138, 107, 60)"],
+  );
+  await theme.click();
+  assert.equal(await isDark(), 1);
+  const dark = await palette();
+  console.log("API_WELCOME_DARK_PALETTE", JSON.stringify(dark));
+  assert.deepEqual(dark, {
+    canvas: "rgb(29, 26, 19)",
+    canvasFallback: "rgb(30, 26, 18)",
+    sidebar: "rgb(21, 18, 13)",
+    panel: "rgb(23, 20, 15)",
+    panelBorder: "rgb(44, 39, 33)",
+    copy: "rgb(166, 155, 131)",
+    intro: "rgb(166, 155, 131)",
+    primary: "rgb(228, 202, 145)",
+    primaryText: "rgb(32, 26, 16)",
+    import: "rgb(29, 26, 19)",
+    importBorder: "rgb(49, 44, 38)",
+    create: "rgb(29, 26, 19)",
+    createBorder: "rgb(49, 44, 38)",
+  });
+  assert(contrast(dark.copy, dark.panel) >= 4.5);
+  assert(contrast(dark.intro, dark.canvas) >= 4.5);
+  assert(contrast(dark.primaryText, dark.primary) >= 4.5);
+  assert.deepEqual(await geometry(), desktop);
+  await capture("desktop-dark");
+  await mcp.press("Tab");
+  assert(await focused(importer));
   await openAndCloseImport(true);
+  await theme.click();
+  assert.equal(await isDark(), 0);
+  assert.deepEqual(await palette(), light);
   await mcp.press("Enter");
   const settings = page.getByRole("heading", { name: "MCP 连接", exact: true });
   await settings.waitFor();
@@ -153,6 +254,7 @@ try {
   await page.locator('.rail [data-page="apis"]').press("Enter");
   await welcome.waitFor();
   await page.setViewportSize({ width: 430, height: 760 });
+  await resetWelcomeScroll();
   await capture("narrow", true);
   assert.equal(
     await page.evaluate(() => document.documentElement.scrollWidth),
@@ -162,6 +264,26 @@ try {
     await welcome.evaluate((node) => node.scrollWidth - node.clientWidth),
     0,
   );
+  const narrowLight = await geometry();
+  await theme.click();
+  assert.equal(await isDark(), 1);
+  await resetWelcomeScroll();
+  const narrowDark = await geometry();
+  console.log(
+    "API_WELCOME_NARROW_GEOMETRY",
+    JSON.stringify({ light: narrowLight, dark: narrowDark }),
+  );
+  assert.deepEqual(narrowDark, narrowLight);
+  assert.equal(
+    await welcome.evaluate((node) => node.scrollWidth - node.clientWidth),
+    0,
+  );
+  await capture("narrow-dark", true);
+  await openAndCloseImport(true);
+  await theme.click();
+  assert.equal(await isDark(), 0);
+  await resetWelcomeScroll();
+  assert.deepEqual(await geometry(), narrowLight);
   await openAndCloseImport(false);
   await creator.click();
   await request.waitFor();
@@ -173,11 +295,20 @@ try {
   assert.equal(stored.configRevision, destination.configRevision);
   await page.setViewportSize({ width: 1363, height: 1023 });
   await to(source.id, true);
+  await welcome.waitFor();
+  assert.equal(await request.count(), 0);
+  assert.equal(await page.locator('#tree [data-request="fixture"]').count(), 1);
+  await theme.click();
+  assert.equal(await isDark(), 1);
+  assert.deepEqual(await palette(), dark);
+  await resetWelcomeScroll();
+  assert.deepEqual(await geometry(), desktop);
+  await capture("desktop-dark-populated-tree");
   assert.deepEqual(blocked, []);
   assert.deepEqual(errors, []);
   assert.equal((await app.store.get(destination.id)).requests.length, 0);
   console.log(
-    "API_WELCOME_UI_PASS after-real-switch/620px/1363+430/import-cancel/off-MCP/draft-only/no-writes",
+    "API_WELCOME_UI_PASS after-real-switch/620px/1363+430/light-dark/contrast/geometry/import-cancel/off-MCP/draft-only/no-writes",
   );
 } finally {
   await browser?.close();
