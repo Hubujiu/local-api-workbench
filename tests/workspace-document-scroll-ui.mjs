@@ -34,6 +34,8 @@ try {
   browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || undefined,
     headless: true,
+    // Playwright hides even styled scrollbars by default in headless Chrome.
+    ignoreDefaultArgs: ["--hide-scrollbars"],
   });
   const page = await browser.newPage({
     viewport: { width: 1363, height: 1023 },
@@ -113,9 +115,82 @@ try {
     );
     await page.mouse.wheel(0, amount);
   };
+  const visualMetrics = await page.evaluate(() => {
+    const footer = document.querySelector(".workspace-document-footer");
+    const preview = document.querySelector("#workspace-document-preview");
+    const h2 = preview.querySelector("h2");
+    const frame = footer.closest(".workspace-document-editor");
+    return {
+      footerY: footer.getBoundingClientRect().y,
+      frameBottom: frame.getBoundingClientRect().bottom,
+      previewInk: getComputedStyle(preview).color,
+      h2Rule: getComputedStyle(h2).borderBottomColor,
+      h2RuleWidth: getComputedStyle(h2).borderBottomWidth,
+    };
+  });
+  assert.deepEqual(visualMetrics, {
+    footerY: 931,
+    frameBottom: 958,
+    previewInk: "rgb(96, 98, 102)",
+    h2Rule: "rgb(220, 220, 226)",
+    h2RuleWidth: "1px",
+  });
+
+  const assertCapturePixels = async (png) => {
+    const pixels = await page.evaluate(async (encoded) => {
+      const source = new Image();
+      source.src = "data:image/png;base64," + encoded;
+      await source.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = source.width;
+      canvas.height = source.height;
+      const context = canvas.getContext("2d");
+      context.drawImage(source, 0, 0);
+      const color = (x, y) =>
+        [...context.getImageData(x, y, 1, 1).data.slice(0, 3)].join(",");
+      const find = (x, target, range) =>
+        range
+          .map((y) => (color(x, y) === target ? y : null))
+          .filter((y) => y !== null);
+      const rule = "220,220,226";
+      const thumb = "235,224,203";
+      const thumbPixels = (x0, x1) => {
+        let count = 0;
+        for (let x = x0; x <= x1; x++)
+          count += find(
+            x,
+            thumb,
+            Array.from({ length: 92 }, (_, i) => 210 + i),
+          ).length;
+        return count;
+      };
+      return {
+        footer: color(722, 931),
+        rules: [264, 322, 478].map((target) =>
+          find(
+            1190,
+            rule,
+            Array.from({ length: 7 }, (_, i) => target + i - 3),
+          ),
+        ),
+        editorThumb: thumbPixels(850, 858),
+        previewThumb: thumbPixels(1338, 1345),
+      };
+    }, png.toString("base64"));
+    assert.equal(pixels.footer, "232,229,223", JSON.stringify(pixels));
+    assert(
+      pixels.rules.every((rule) => rule.length === 1),
+      JSON.stringify(pixels),
+    );
+    assert(
+      pixels.editorThumb > 45 && pixels.previewThumb > 45,
+      JSON.stringify(pixels),
+    );
+    return pixels;
+  };
   const capture = async (name) => {
     if (captures)
-      await page.screenshot({
+      return page.screenshot({
         path: join(captures, "docs-scroll-workbench-" + name + ".png"),
         clip: { x: 0, y: 0, width: 1363, height: 980 },
         caret: "hide",
@@ -155,7 +230,9 @@ try {
   await atTop();
   assert(await focusIs(top));
   assert.equal(await linked.isChecked(), false);
-  await capture("top-off");
+  const topOffCapture = await capture("top-off");
+  const capturedPixels =
+    topOffCapture && (await assertCapturePixels(topOffCapture));
 
   await linked.press("Space");
   await wheel(preview, 320);
@@ -228,6 +305,8 @@ try {
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify({
+      visualMetrics,
+      capturedPixels,
       synchronized,
       independent,
       reverse,
