@@ -124,6 +124,10 @@ import {
   supportsDesignExamples,
 } from "./design-response.js";
 import {
+  createDesignResponseSettingsDrafts,
+  unappliedDesignResponseSettings,
+} from "./design-response-settings-draft.js";
+import {
   documentCounts,
   documentWorkspaceTabs,
   prepareWorkspaceDocumentLinks,
@@ -407,6 +411,7 @@ const graphqlDrafts = createGraphQLWorkspaceDrafts();
 const graphqlSchemaDirectory = createGraphQLSchemaDirectory();
 let debugParameterOwner = "";
 const designResponseKey = (r) => JSON.stringify([project?.id, r.id]);
+const designResponseSettingsDrafts = createDesignResponseSettingsDrafts();
 const caseResults = createCaseResultStore();
 const sseCaptures = createSSECaptureOwner();
 const caseSelections = new Map();
@@ -1382,6 +1387,8 @@ function rollbackProjectSave(error, rollback) {
 function collect() {
   const r = request();
   if (!r || page !== "apis" || workspaceDocument()) return;
+  if (designResponseSettingsDrafts.hasProject(project))
+    throw Error(unappliedDesignResponseSettings);
   for (const [selector, key] of [
     ["#request-name", "name"],
     ["#url", "url"],
@@ -2419,7 +2426,7 @@ function modePanel(r) {
     return `<div class="page http-design-canvas">${r.importNotes?.length ? `<div class="notice import-notes" role="region" aria-label="导入兼容性提示" tabindex="0">导入提示：${r.importNotes.map(esc).join("<br>")}</div>` : ""}${importedScriptTasksHTML(r.importedScriptTasks)}<div class="design-meta"><label for="folder">目录<input id="folder" value="${esc(r.folder)}" placeholder="根目录"></label><label for="request-service">绑定服务<select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select></label></div>
     <section class="request-description-section" aria-label="详细说明"><h2><span>${lineIcon("▧")}</span>详细说明</h2><details id="design-description" ${descriptionOpen ? "open" : ""}><summary><span class="design-description-closed">＋ 添加详细说明</span><span class="design-description-open">收起</span></summary><div class="design-description-toolbar" role="group" aria-label="说明格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-design-markdown="${key}" aria-label="${label}" title="${label}">${esc(glyph)}</button>`).join("")}</div><div class="design-description-editor"><textarea id="description" aria-label="接口详细说明" spellcheck="false">${esc(r.description)}</textarea><div id="design-description-preview" class="markdown-content" role="region" aria-label="说明预览" tabindex="0">${descriptionOpen ? renderMarkdown(r.description) : ""}</div></div><div class="design-description-footer"><small id="design-description-count">${documentCounts(r.description || "")}</small><div class="design-description-scroll-controls"><label><input type="checkbox" id="design-description-sync"${designDescriptionScroll.get(r)?.linked === false ? "" : " checked"}>同步滚动</label><button type="button" class="ghost" id="design-description-top">回到顶部</button></div></div></details></section>
     <section class="design-request-parameters" aria-label="设计请求参数"><h2><span>${lineIcon("☷")}</span>设计请求参数</h2>${designParameterPanel(r)}</section>
-    <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2>${designResponsePanel(r.responses || [], designResponseSelections.get(designResponseKey(r)), r.openapiExampleBindingsVersion === 1, r.examples, collapsedDesignResponseRoots.get(r))}</section>
+    <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2>${designResponsePanel(r.responses || [], designResponseSelections.get(designResponseKey(r)), r.openapiExampleBindingsVersion === 1, r.examples, collapsedDesignResponseRoots.get(r), designResponseSettingsDrafts.get(r))}</section>
     <section class="design-request-structure" aria-label="请求数据结构"><h2><span>${lineIcon("☷")}</span>请求数据结构</h2><div><button id="visual-schema" type="button">可视化编辑结构</button>${r.graphqlEditorVersion === 1 || r.bodyType === "binary" || (designParameter === "body" && r.bodyType !== "none") ? "" : '<button id="generate-body" type="button" class="ghost">基于数据结构生成</button>'}<textarea id="schema" aria-label="请求 JSON Schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div></section>
     <section class="design-advanced" aria-label="请求选项"><h2><span>${lineIcon("⚙")}</span>请求选项</h2><div class="form-grid"><label>全局请求参数</label><label><input id="inherit-global-parameters" type="checkbox" ${r.inheritGlobalParameters !== false ? "checked" : ""}>继承项目及目录 Header / Query / Cookie / 表单参数</label><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>HTTPS代理 CA（PEM，与目标站点CA分开）</label><textarea data-tls="proxyCa">${esc(r.tls?.proxyCa || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}">${attributeFields(project.settings?.attributes || [], r.attributes)}</div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div></section></div>`;
   }
@@ -2981,6 +2988,8 @@ function bind() {
   ) => {
     const owner = project;
     if (graphqlDrafts.hasProject(owner)) throw Error(unappliedGraphQL);
+    if (designResponseSettingsDrafts.hasProject(owner))
+      throw Error(unappliedDesignResponseSettings);
     const opening = projectOpenRequestSequence,
       version = editVersion;
     const pendingProtocol =
@@ -3240,7 +3249,15 @@ function bind() {
   });
   on("#save,#save-project", "click", save);
   on("#request-name,#url,#body-code,#description", "input", (_, element) => {
-    collect();
+    if (designResponseSettingsDrafts.get(request())) {
+      const field = {
+        "request-name": "name",
+        url: "url",
+        "body-code": "body",
+        description: "description",
+      }[element.id];
+      request()[field] = element.value;
+    } else collect();
     mark();
     if (element.id === "request-name") {
       const id = CSS.escape(current);
@@ -3258,7 +3275,11 @@ function bind() {
       }
     }
   });
-  on("#method", "change", () => {
+  on("#method", "change", (_, element) => {
+    if (designResponseSettingsDrafts.get(request())) {
+      element.value = request().method;
+      throw Error(unappliedDesignResponseSettings);
+    }
     collect();
     mark();
     render();
@@ -3627,38 +3648,129 @@ function bind() {
   on("[data-response-header]", "click", (_, e) =>
     editResponseHeader(e.dataset.responseHeader),
   );
-  on("#edit-design-response-settings", "click", () => {
+  const responseSettingsForm = $("#design-response-settings-form");
+  if (responseSettingsForm) {
+    const owner = project;
     const r = request();
-    collect();
     const key = designResponseKey(r);
     const selection = designResponseSelections.get(key);
     const { definition, index } = responseSelection(r.responses, selection);
-    if (!definition) throw Error("请先选择响应");
-    const top = $(".http-design-canvas").scrollTop;
-    modal(
-      "编辑响应定义设置",
-      `<div class="design-response-header-fields"><label>HTTP 状态<input id="design-settings-status" value="${esc(definition.status)}" placeholder="200 / 4XX / default"></label><label>响应说明<textarea id="design-settings-description" maxlength="8192" rows="4">${esc(definition.description || "")}</textarea></label><p class="muted">更改状态会更新绑定的 OpenAPI 示例。独立 Mock 示例保留原有状态，可在原示例编辑器中调整。</p></div>`,
-      () => {
-        if (request() !== r || r.responses[index] !== definition)
-          throw Error("响应草稿已变化，请重新打开");
-        Object.assign(
-          r,
-          editRequestResponseSettings(r, index, {
-            status: $("#design-settings-status").value,
-            description: $("#design-settings-description").value,
-          }),
-        );
-        designResponseSelections.set(key, {
-          ...selection,
-          status: String(r.responses[index].status),
+    const status = String(definition.status);
+    const description = String(definition.description ?? "");
+    const visibleDescription = description.replace(/\r\n?/g, "\n");
+    const raw = $("#response-definitions");
+    const statusInput = $("#design-settings-status");
+    const descriptionInput = $("#design-settings-description");
+    const apply = $("#design-settings-apply");
+    const cancel = $("#design-settings-cancel");
+    const ownsSettings = () =>
+      responseSettingsForm.isConnected &&
+      project === owner &&
+      request() === r &&
+      page === "apis" &&
+      mode === "design" &&
+      !workspaceDocument() &&
+      r.responses[index] === definition &&
+      responseSelection(r.responses, designResponseSelections.get(key))
+        .index === index;
+    const reflect = () => {
+      apply.disabled = cancel.disabled = !designResponseSettingsDrafts.get(r);
+    };
+    const reset = () => {
+      if (!ownsSettings()) return;
+      if (designResponseSettingsDrafts.clear(r)) editVersion++;
+      statusInput.value = status;
+      descriptionInput.value = description;
+      reflect();
+      statusInput.focus({ preventScroll: true });
+    };
+    on("#design-settings-status,#design-settings-description", "input", () => {
+      if (!ownsSettings()) return;
+      const pending = designResponseSettingsDrafts.get(r);
+      if (!pending) {
+        let comparable = false;
+        try {
+          comparable =
+            JSON.stringify(JSON.parse(raw.value)) ===
+            JSON.stringify(r.responses);
+        } catch {}
+        if (!comparable) {
+          reset();
+          throw Error(
+            "响应定义 JSON 有未应用的修改，请先处理后再编辑响应设置。",
+          );
+        }
+      }
+      if (
+        statusInput.value === status &&
+        descriptionInput.value === visibleDescription
+      )
+        designResponseSettingsDrafts.clear(r);
+      else
+        designResponseSettingsDrafts.stage(r, {
+          definition,
+          index,
+          status,
+          value: statusInput.value,
+          description:
+            descriptionInput.value === visibleDescription
+              ? description
+              : descriptionInput.value,
+          raw: pending?.raw ?? raw.value,
+          rawCurrent: pending?.rawCurrent,
         });
-        mark();
-        render();
-        $(".http-design-canvas").scrollTop = top;
-        $("#edit-design-response-settings")?.focus();
-      },
-    );
-  });
+      editVersion++;
+      reflect();
+    });
+    on("#design-settings-cancel", "click", reset);
+    on("#design-response-settings-form", "keydown", (event) => {
+      if (event.isComposing) return;
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        ["enter", "s"].includes(event.key.toLowerCase())
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (designResponseSettingsDrafts.get(r))
+          toast(unappliedDesignResponseSettings);
+      } else if (
+        event.key === "Escape" &&
+        designResponseSettingsDrafts.get(r)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        reset();
+      }
+    });
+    on("#design-response-settings-form", "submit", (event) => {
+      event.preventDefault();
+      const draft = designResponseSettingsDrafts.get(r);
+      if (!draft) return;
+      if (
+        !ownsSettings() ||
+        draft.definition !== definition ||
+        draft.raw !== raw.value ||
+        busy ||
+        saving
+      )
+        throw Error("响应设置或 JSON 草稿已变化，请取消后再编辑。");
+      const update = editRequestResponseSettings(r, index, {
+        status: draft.value,
+        description: draft.description,
+      });
+      const top = $(".http-design-canvas").scrollTop;
+      Object.assign(r, update);
+      designResponseSettingsDrafts.clear(r);
+      designResponseSelections.set(key, {
+        ...selection,
+        status: String(r.responses[index].status),
+      });
+      mark();
+      render();
+      $(".http-design-canvas").scrollTop = top;
+      $("#design-settings-status")?.focus({ preventScroll: true });
+    });
+  }
   on("#new-response-schema", "click", () => editResponseSchema());
   on("[data-response-schema]", "click", (_, element) =>
     editResponseSchema(...JSON.parse(element.dataset.responseSchema)),
@@ -3699,7 +3811,11 @@ function bind() {
     request().httpVersion = element.value;
     mark();
   });
-  on("#response-definitions", "input", () => mark());
+  on("#response-definitions", "input", (_, raw) => {
+    const pending = designResponseSettingsDrafts.get(request());
+    if (pending) pending.rawCurrent = raw.value;
+    mark();
+  });
   const description = $("#description");
   const descriptionPreview = $("#design-description-preview");
   const descriptionDetails = $("#design-description");
@@ -8294,6 +8410,7 @@ document.addEventListener("keydown", (e) => {
 window.addEventListener("beforeunload", (e) => {
   if (
     dirty ||
+    designResponseSettingsDrafts.hasProject(project) ||
     graphqlDrafts.hasProject(project) ||
     (grpcWorkbenchProject === project?.id && grpcWorkbenchState?.draftDirty) ||
     (socketioWorkbenchProject === project?.id &&

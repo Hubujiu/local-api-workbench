@@ -60,6 +60,9 @@ jobs:
       - run: node tests/workspace-global-variables-ui.mjs
       - run: node tests/workspace-global-parameters-ui.mjs
       - run: node tests/http-design-pane-ui.mjs
+      - run: node tests/http-design-response-settings-inline-ui.mjs
+        env:
+          DESIGN_RESPONSE_SETTINGS_INLINE_EVIDENCE: /tmp/local-api-design-response-settings-inline
       - run: node tests/http-design-pair-composer-ui.mjs
         env:
           DESIGN_PAIR_COMPOSER_EVIDENCE: /tmp/local-api-design-pair-composer
@@ -155,6 +158,7 @@ jobs:
           name: ui-evidence
           path: |
             /tmp/local-api-*.png
+            /tmp/local-api-design-response-settings-inline/design-response-settings-*.png
             /tmp/local-api-http-success-response/response-*-workbench.png
             /tmp/local-api-design-pair-composer/design-pair-*.png
             /tmp/local-api-design-query-metadata/design-query-*.png
