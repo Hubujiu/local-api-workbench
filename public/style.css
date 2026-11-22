@@ -5278,3 +5278,128 @@ body:not(.dark) .workspace-document-toolbar {
     transform: translate(min(15vw, 194px), -34px);
   }
 }
+
+#dialog:has(.scoped-export-surface) {
+  width: min(972px, calc(100vw - 24px));
+}
+.scoped-export-surface fieldset {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.scoped-export-surface .scoped-export-types {
+  border: 0;
+  padding: 0;
+}
+.scoped-export-surface legend {
+  font-weight: 600;
+}
+.scoped-export-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+#dialog-content .scoped-export-card {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 52px;
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+#dialog-content .scoped-export-card:has(:checked) {
+  border-color: var(--accent);
+}
+#dialog-content .scoped-export-card:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+#dialog-content .scoped-export-card input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+.scoped-export-surface [hidden] {
+  display: none;
+}
+.scoped-export-surface #scoped-export-resources {
+  padding: 0;
+}
+.scoped-export-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+.scoped-export-tabs button {
+  min-height: 37px;
+  white-space: normal;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+}
+.scoped-export-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+.scoped-export-panel {
+  min-height: 140px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 6px 12px;
+}
+.scoped-export-panel:focus-visible,
+.scoped-export-tabs button:focus-visible {
+  outline-offset: -2px;
+}
+.scoped-export-extra {
+  padding: 6px 12px;
+  border-top: 1px solid var(--line);
+}
+.scoped-export-extra h3 {
+  margin: 4px 0;
+  font-size: 13px;
+}
+#dialog-content .scoped-export-resource {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-height: 28px;
+  margin: 0;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.scoped-export-resource input {
+  accent-color: var(--accent);
+}
+.scoped-export-resource-kind,
+.scoped-export-resource small {
+  color: var(--muted);
+}
+@media (max-width: 560px) {
+  .scoped-export-cards {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  #dialog-content .scoped-export-card {
+    min-height: 36px;
+    margin: 3px 0 0;
+  }
+  .scoped-export-tabs {
+    padding: 0 3px;
+  }
+  .scoped-export-tabs button {
+    flex: 1;
+    padding: 4px;
+  }
+}

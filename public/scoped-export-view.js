@@ -76,14 +76,89 @@ export function scopedExportResources(project) {
   if (output.length > 10000) throw Error("资源超过选择上限，请拆分项目后导出");
   return output;
 }
+const resourceGroups = [
+  [
+    "interface",
+    "接口和接口用例",
+    ["api", "folder", "document", "case", "case-folder"],
+  ],
+  ["model", "数据模型", ["model", "model-folder"]],
+  ["environment", "环境", ["environment"]],
+];
 export function scopedExportSelectionHTML(resources) {
-  return `<p>只导出已保存的所选定义，不是完整备份；不包含执行记录、历史版本、回收站或执行计划。未保存修改请先保存，再重新打开。</p><label>格式<select id="scoped-export-format">${Object.entries(
-    scopedExportFormats,
-  )
-    .map(([id, name]) => `<option value="${id}">${esc(name)}</option>`)
-    .join(
-      "",
-    )}</select></label><p class="notice">文件不是脱敏文件：认证、URL、Header、脚本、请求体、示例及变量可能包含秘密。预览将列出必需依赖，下载前必须明确确认。Postman 仅支持接口/目录，不含环境和全局变量值，不能保证独立重放。无法保真的配置会明确拒绝。</p><label><input id="scoped-export-rebind" type="checkbox">允许数据库定义仅保留重绑定信息（不包含运行时授权；仅原生格式）</label><fieldset id="scoped-export-resources"><legend>选择资源（默认全不选）</legend>${resources.map((r, i) => `<label style="display:block"><input type="checkbox" data-export-resource="${i}" data-kind="${esc(r.kind)}" data-id="${esc(r.id)}">${esc(labels[r.kind])} · ${esc(r.name)} <small>${esc(r.id)}</small></label>`).join("")}</fieldset>`;
+  const rows = (matching) =>
+    resources
+      .map((r, i) =>
+        matching(r.kind)
+          ? `<label class="scoped-export-resource"><input type="checkbox" data-export-resource="${i}" data-kind="${esc(r.kind)}" data-id="${esc(r.id)}"><span class="scoped-export-resource-kind">${esc(labels[r.kind])}</span><span class="scoped-export-resource-name">${esc(r.name)}</span><small>${esc(r.id)}</small></label>`
+          : "",
+      )
+      .join("");
+  const formats = Object.entries(scopedExportFormats);
+  const tabs = resourceGroups
+    .map(([id, name, kinds], index) => {
+      const total = resources.filter((r) => kinds.includes(r.kind)).length;
+      return `<button type="button" role="tab" id="scoped-export-tab-${id}" data-export-tab="${id}" aria-selected="${index === 0}" aria-controls="scoped-export-panel-${id}" tabindex="${index ? -1 : 0}">${name} <span data-export-count>${`(0/${total})`}</span></button>`;
+    })
+    .join("");
+  const panels = resourceGroups
+    .map(
+      ([id, , kinds], index) =>
+        `<div id="scoped-export-panel-${id}" class="scoped-export-panel" role="tabpanel" aria-labelledby="scoped-export-tab-${id}" tabindex="0"${index ? " hidden" : ""}>${rows((kind) => kinds.includes(kind)) || '<p class="muted">此分组没有可选资源</p>'}</div>`,
+    )
+    .join("");
+  const extra = rows(
+    (kind) => !resourceGroups.some((group) => group[2].includes(kind)),
+  );
+  return `<section class="scoped-export-surface"><p>只导出已保存的所选定义，不是完整备份；不包含执行记录、历史版本、回收站或执行计划。未保存修改请先保存，再重新打开。</p><fieldset class="scoped-export-types"><legend>导出类型</legend><div class="scoped-export-cards">${formats.map(([id, name], index) => `<label class="scoped-export-card"><input type="radio" name="scoped-export-card-format" value="${id}"${!index ? " checked" : ""}><span>${esc(name)}</span></label>`).join("")}</div><select id="scoped-export-format" hidden>${formats.map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join("")}</select></fieldset><p class="notice">文件不是脱敏文件：认证、URL、Header、脚本、请求体、示例及变量可能包含秘密。预览将列出必需依赖，下载前必须明确确认。无法保真的配置会明确拒绝。</p><p class="notice" data-export-postman hidden>Postman 仅支持接口/目录，不含环境和全局变量值，不能保证独立重放。切换格式不自动清除已选资源；若有不兼容的选项，请在预览前手动取消。</p><label class="scoped-export-rebind-option"><input id="scoped-export-rebind" type="checkbox">允许数据库定义仅保留重绑定信息（不包含运行时授权；仅原生格式）</label><fieldset id="scoped-export-resources"><legend>导出范围（默认全不选）</legend><div class="scoped-export-tabs" role="tablist" aria-label="资源分组">${tabs}</div>${panels}${extra ? `<section class="scoped-export-extra" aria-label="其他整组资源"><h3>其他整组资源</h3>${extra}</section>` : ""}</fieldset></section>`;
+}
+export function bindScopedExportSelection(root) {
+  const surface = root.querySelector(".scoped-export-surface");
+  if (!surface) return;
+  const format = surface.querySelector("#scoped-export-format");
+  const cards = [
+    ...surface.querySelectorAll('[name="scoped-export-card-format"]'),
+  ];
+  const note = surface.querySelector("[data-export-postman]");
+  for (const card of cards) {
+    card.addEventListener("change", () => {
+      format.value = card.value;
+      note.hidden = card.value !== "postman-collection-v2.1";
+    });
+  }
+  const tabs = [...surface.querySelectorAll("[data-export-tab]")];
+  const panels = [...surface.querySelectorAll('[role="tabpanel"]')];
+  const activate = (index, focus = false) => {
+    tabs.forEach((tab, i) => {
+      const selected = index === i;
+      tab.setAttribute("aria-selected", String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      panels[i].hidden = !selected;
+    });
+    if (focus) tabs[index].focus();
+  };
+  tabs.forEach((tab, i) => {
+    tab.addEventListener("click", () => activate(i));
+    tab.addEventListener("keydown", (event) => {
+      let next;
+      if (event.key === "ArrowLeft") next = (i + tabs.length - 1) % tabs.length;
+      else if (event.key === "ArrowRight") next = (i + 1) % tabs.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = tabs.length - 1;
+      else return;
+      event.preventDefault();
+      activate(next, true);
+    });
+  });
+  surface.addEventListener("change", (event) => {
+    const panel = event.target.closest(".scoped-export-panel");
+    if (!panel || !event.target.hasAttribute("data-export-resource")) return;
+    const count = tabs[panels.indexOf(panel)].querySelector(
+      "[data-export-count]",
+    );
+    const all = panel.querySelectorAll("[data-export-resource]");
+    count.textContent = `(${[...all].filter((input) => input.checked).length}/${all.length})`;
+  });
 }
 export function readScopedExportInput(root, resources) {
   const format = root.querySelector("#scoped-export-format").value;

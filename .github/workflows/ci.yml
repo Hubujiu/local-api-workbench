@@ -65,6 +65,7 @@ jobs:
       - run: node tests/http-debug-body-raw-ui.mjs
       - run: node tests/plan-step-picker-ui.mjs
       - run: node tests/api-sidebar-tree-ui.mjs
+      - run: node tests/scoped-export-surface-ui.mjs
       - run: node tests/workspace-document-ui.mjs
       - run: node tests/workspace-document-image-ui.mjs
       - run: node tests/workspace-document-history-ui.mjs

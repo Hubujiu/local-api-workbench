@@ -82,7 +82,10 @@ test("resource inventory has inferred ancestor folders, live models and indivisi
   assert(resources.some((r) => r.kind === "collection-bundle"));
   assert(!resources.some((r) => r.id === "dead"));
   assert(!JSON.stringify(resources).includes("SECRET"));
-  assert(!view.scopedExportSelectionHTML(resources).includes("checked"));
+  assert.doesNotMatch(
+    view.scopedExportSelectionHTML(resources),
+    /<input[^>]*data-export-resource[^>]*checked/,
+  );
 });
 test("confirmation renders exact escaped server warnings and exposes dependencies without automatic consent", () => {
   const input = {

@@ -88,6 +88,7 @@ import {
 import {
   scopedExportResources,
   scopedExportSelectionHTML,
+  bindScopedExportSelection,
   readScopedExportInput,
   assertScopedExportPreview,
   scopedExportConfirmationHTML,
@@ -1432,6 +1433,7 @@ function openScopedDefinitionExport() {
     "预览范围",
   );
   context.bindDialog();
+  bindScopedExportSelection($("#dialog-content"));
 }
 function modal(title, html, onSave, label = "确定", afterClose) {
   const d = $("#dialog"),
