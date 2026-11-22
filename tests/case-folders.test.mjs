@@ -259,4 +259,15 @@ test("compact case rows preserve existing action handles and expose only genuine
   );
   assert.match(result, /data-run-case="case" disabled/);
   assert.match(result, /case-row-selected/);
+  assert.match(result, /<pre data-case-result-body>/);
+  const expanded = caseCards(
+    p,
+    "api",
+    new Map([["case", { outcome: "passed" }]]),
+  );
+  assert.match(
+    expanded,
+    /<pre data-case-result-body>[\s\S]*&quot;outcome&quot;: &quot;passed&quot;/,
+  );
+  assert.doesNotMatch(expanded, /<details class="case-result"/);
 });
