@@ -482,10 +482,15 @@ try {
   await responseRegion
     .getByRole("button", { name: "编辑响应头 X-Trace" })
     .click();
-  const headerJson = page.getByRole("textbox", { name: "响应头定义 JSON" });
-  await headerJson.fill('{"schema":{"type":"integer"}}');
-  await page.locator("#dialog").press("Escape");
-  await page.locator("#dialog").waitFor({ state: "hidden" });
+  const headerEdit = page.getByRole("dialog", {
+    name: "编辑响应头",
+    exact: true,
+  });
+  await headerEdit
+    .getByRole("textbox", { name: "响应头定义 JSON", exact: true })
+    .fill('{"schema":{"type":"integer"}}');
+  await headerEdit.press("Escape");
+  await headerEdit.waitFor({ state: "hidden" });
   assert.deepEqual(
     JSON.parse(await rawResponses.inputValue()),
     JSON.parse(responseDraft),
@@ -493,9 +498,20 @@ try {
   await responseRegion
     .getByRole("button", { name: "使用 JSON 添加响应头" })
     .click();
-  const headerName = page.getByRole("textbox", { name: "响应头名称" });
+  const headerAdd = page.getByRole("dialog", {
+    name: "新增响应头",
+    exact: true,
+  });
+  const headerName = headerAdd.getByRole("textbox", {
+    name: "响应头名称",
+    exact: true,
+  });
+  const headerJson = headerAdd.getByRole("textbox", {
+    name: "响应头定义 JSON",
+    exact: true,
+  });
   await headerName.fill("x-trace");
-  await page.locator("#dialog-save").click();
+  await headerAdd.locator("#dialog-save").click();
   await page
     .getByText("同名响应头已存在（不区分大小写）", { exact: true })
     .waitFor();
@@ -507,7 +523,7 @@ try {
   await headerJson.fill(
     '{"description":"Synthetic failure","schema":{"type":"string","maxLength":80},"example":"not-found","x-retain":true}',
   );
-  await page.locator("#dialog-save").click();
+  await headerAdd.locator("#dialog-save").click();
   await responseRegion
     .getByRole("button", { name: "编辑响应头 X-Reason" })
     .waitFor();

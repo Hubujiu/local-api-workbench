@@ -178,8 +178,14 @@ try {
   assert.equal(await raw.inputValue(), base);
   await name.press("Escape");
   await view("编辑响应头 X-Advanced").press("Enter");
-  const modal = page.getByRole("dialog");
-  const json = modal.getByRole("textbox", { name: "响应头定义 JSON" });
+  const modal = page.getByRole("dialog", {
+    name: "编辑响应头",
+    exact: true,
+  });
+  const json = modal.getByRole("textbox", {
+    name: "响应头定义 JSON",
+    exact: true,
+  });
   assert.deepEqual(
     JSON.parse(await json.inputValue()),
     baseline.requests[0].responses[1].headers["X-Advanced"],
