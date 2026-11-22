@@ -1721,7 +1721,7 @@ function paramPanel(r, param, design = false) {
               .map((_, i) => i + 1)
               .join(
                 "\n",
-              )}</pre><pre id="code-highlight" aria-hidden="true">${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle" aria-label="参数助手" aria-expanded="${helperOpen}"><span class="helper-label" aria-hidden="true"><span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
+              )}</pre><pre id="code-highlight" aria-hidden="true"${debugRawJSON ? ' class="debug-raw-json-highlight"' : ""}>${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle" aria-label="参数助手" aria-expanded="${helperOpen}"><span class="helper-label" aria-hidden="true"><span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
               helperOpen
                 ? `<aside class="parameter-helper"><h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
                     r.bodyDynamic || {},
@@ -3729,12 +3729,15 @@ function bind() {
     render();
   });
   on("#format-json", "click", (event, button) => {
+    const debugRawJSON = Boolean(button.closest(".http-debug-raw-actions"));
     const keepFocus =
-      event.detail === 0 &&
-      button === document.activeElement &&
-      button.closest(".http-debug-raw-actions");
+      debugRawJSON && event.detail === 0 && button === document.activeElement;
     collect();
-    request().body = JSON.stringify(JSON.parse(request().body), null, 2);
+    request().body = JSON.stringify(
+      JSON.parse(request().body),
+      null,
+      debugRawJSON ? 4 : 2,
+    );
     mark();
     render();
     if (keepFocus) $("#format-json")?.focus({ preventScroll: true });
