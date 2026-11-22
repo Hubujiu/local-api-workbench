@@ -49,13 +49,25 @@ try {
   });
   const origin = new URL(app.launchUrl).origin;
   const blocked = [],
-    errors = [];
+    errors = [],
+    writes = [];
+  let allowToggleSave = false;
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route("**/*", (route) => {
     const request = route.request(),
       url = new URL(request.url());
     if (url.origin === origin && request.method() === "GET")
       return route.continue();
+    if (
+      allowToggleSave &&
+      url.origin === origin &&
+      url.pathname === "/api/projects/" + project.id &&
+      request.method() === "PUT"
+    ) {
+      allowToggleSave = false;
+      writes.push(request.postDataJSON().settings.builtinDictionary);
+      return route.continue();
+    }
     blocked.push(request.method() + " " + url.pathname);
     return route.abort();
   });
@@ -137,13 +149,30 @@ try {
     [Math.round(shell.x), Math.round(shell.y), Math.round(row.height)],
     [385, 197, 42],
   );
-  assert(
-    await builtinPanel
-      .getByRole("checkbox", { name: "启用内置常用参数" })
-      .isChecked(),
-  );
+  const toggle = builtinPanel.getByRole("checkbox", {
+    name: "启用内置常用参数",
+  });
+  assert(await toggle.isChecked());
+  const readToggleStyle = () =>
+    toggle.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const { width, height } = element.getBoundingClientRect();
+      return {
+        width,
+        height,
+        appearance: style.appearance,
+        track: style.backgroundColor,
+        thumb: style.getPropertyValue("--dictionary-thumb-x").trim(),
+        focus: [style.outlineStyle, style.outlineWidth],
+      };
+    });
   await builtinSearch.blur();
   await capture("builtins");
+  const { width, height, appearance, track, thumb } = await readToggleStyle();
+  assert.deepEqual(
+    [width, height, appearance, track, thumb],
+    [28, 16, "none", "rgb(137, 107, 58)", "20px"],
+  );
   await builtinSearch.fill("电子邮");
   await systemTable.getByText("email", { exact: true }).waitFor();
   assert.equal(await systemTable.getByRole("row").count(), 2);
@@ -215,10 +244,78 @@ try {
     populated.parameterDictionary,
   );
   assert.deepEqual(persisted.dictionary, populated.dictionary);
+  // Only the original configured checkbox is styled. Keep the form control's
+  // own focus, native state and draft-only change in the original project.
+  await page.setViewportSize({ width: 1363, height: 1023 });
+  await page.locator("#project-select").selectOption(project.id);
+  await page.waitForFunction(
+    (id) =>
+      document.querySelector(".dictionary-page")?.dataset.dictionaryProject ===
+      id,
+    project.id,
+  );
+  await custom.press("ArrowRight");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  assert(await focusIs(toggle));
+  assert.deepEqual((await readToggleStyle()).focus, ["solid", "2px"]);
+  await page.keyboard.press("Space");
+  assert(!(await toggle.isChecked()));
+  const off = await readToggleStyle();
+  assert.deepEqual(
+    [off.width, off.height, off.track, off.thumb],
+    [28, 16, "rgb(131, 121, 101)", "8px"],
+  );
+  assert.deepEqual(writes, []);
+  assert.equal(
+    (await app.store.get(project.id)).settings.builtinDictionary,
+    true,
+  );
+  await toggle.blur();
+  await capture("builtins-off-workbench-only");
+  await builtinPanel
+    .locator("label.dictionary-builtin-option")
+    .getByText("启用内置常用参数")
+    .click();
+  assert(await toggle.isChecked());
+
+  // Forced-color and dark mode retain original platform checkbox painting.
+  await page.emulateMedia({ forcedColors: "active" });
+  assert.equal((await readToggleStyle()).appearance, "auto");
+  await page.emulateMedia({ forcedColors: "none" });
+  await page.getByRole("button", { name: "切换主题" }).click();
+  assert.equal((await readToggleStyle()).appearance, "auto");
+  await page.getByRole("button", { name: "切换主题" }).click();
+  await page.setViewportSize({ width: 430, height: 760 });
+  await toggle.press("Space");
+  assert(!(await toggle.isChecked()));
+  assert.equal((await readToggleStyle()).width, 28);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(blocked, []);
+  assert.equal(
+    (await app.store.get(project.id)).settings.builtinDictionary,
+    true,
+  );
+  allowToggleSave = true;
+  await page.locator("#save-project").press("Enter");
+  await page
+    .locator("#saved-state")
+    .getByText("✓ 已保存", { exact: true })
+    .waitFor();
+  assert.deepEqual(writes, [false]);
+  await page.setViewportSize({ width: 1363, height: 1023 });
+  await page.reload();
+  await enter();
+  await custom.press("ArrowRight");
+  assert(!(await toggle.isChecked()));
+  assert.equal(
+    (await app.store.get(project.id)).settings.builtinDictionary,
+    false,
+  );
   assert.deepEqual(blocked, []);
   assert.deepEqual(errors, []);
   console.log(
-    "DICTIONARY_PAGE_PASS stored/empty/builtin/search/keyboard/narrow/no-writes",
+    "DICTIONARY_PAGE_PASS stored/empty/builtin/search/keyboard/narrow/toggle-explicit-save",
     metrics,
   );
 } finally {

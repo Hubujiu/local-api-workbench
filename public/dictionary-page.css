@@ -123,6 +123,34 @@ body:not(.dark) .sidebar:has(> .dictionary-side-nav) {
   height: 16px;
   margin: 0;
 }
+@media (forced-colors: none) {
+  body:not(.dark) .dictionary-page #builtin-dictionary {
+    --dictionary-track: #837965;
+    --dictionary-thumb-x: 8px;
+    appearance: none;
+    flex: 0 0 28px;
+    width: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: radial-gradient(
+        circle at var(--dictionary-thumb-x) 50%,
+        #fff 0 5.5px,
+        transparent 6.5px
+      )
+      var(--dictionary-track);
+    cursor: pointer;
+  }
+  body:not(.dark) .dictionary-page #builtin-dictionary:checked {
+    --dictionary-track: #896b3a;
+    --dictionary-thumb-x: 20px;
+  }
+  body:not(.dark) .dictionary-page #builtin-dictionary:focus-visible {
+    outline: 2px solid #896b3a;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+}
 .dictionary-page .dictionary-empty {
   justify-items: center;
   gap: 12px;
