@@ -480,3 +480,76 @@ body.dark #dialog:has(.environment-dialog) > form > footer .primary {
     min-width: 450px;
   }
 }
+
+.environment-parameter-content .environment-dialog-notice {
+  min-height: 49px;
+  box-sizing: border-box;
+  margin-bottom: 14px;
+}
+.environment-parameter-tabs {
+  display: flex;
+  max-width: 100%;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+}
+.environment-parameter-tabs > button {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 9px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+.environment-parameter-tabs > [aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+.environment-parameter-tabs > button:focus-visible {
+  outline-offset: -3px;
+}
+.environment-parameter-scope {
+  min-height: 44px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+}
+.environment-parameter-scope > button {
+  font-size: inherit;
+  padding-inline: 0;
+  text-align: start;
+}
+.environment-parameter-table th:first-child {
+  width: 42px;
+}
+.environment-parameter-table th:nth-child(2) {
+  width: 37%;
+}
+.environment-parameter-table th:nth-child(3) {
+  width: 35%;
+}
+.environment-parameter-table :is(input:not([type="checkbox"]), textarea) {
+  width: 100%;
+  min-width: 0;
+}
+[data-workspace-parameter-status] {
+  font-size: 12px;
+  color: var(--muted);
+  margin-inline-end: 5px;
+}
+.environment-parameter-table [data-workspace-parameter-edit] {
+  padding: 2px 6px;
+  font-size: 12px;
+}
+#environment-parameter-error {
+  color: var(--danger);
+}
+@media (max-width: 680px) {
+  .environment-parameter-content .environment-parameter-table {
+    min-width: 400px;
+  }
+}
