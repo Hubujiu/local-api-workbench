@@ -64,9 +64,9 @@ try {
   });
   if (evidence) await mkdir(evidence, { recursive: true });
   await page.goto(app.launchUrl);
-  await page.locator("#project-select").selectOption(nativeState.id);
+  const projectSelect = page.locator("#project-select");
+  const renderedOwner = projectSelect.locator("option[selected]");
   const tab = page.getByRole("button", { name: "接口用例", exact: true });
-  await tab.press("Enter");
   const caseArea = page.getByRole("region", { name: "接口用例", exact: true });
   const selectAll = caseArea.getByRole("checkbox", { name: "全选" });
   const nativeRow = caseArea
@@ -77,7 +77,54 @@ try {
     locator.evaluate(
       (element) => element.ownerDocument.activeElement === element,
     );
-  await nativeRow.getByText("新建用例", { exact: true }).waitFor();
+  const adoptProject = async (id) => {
+    // The DOM attribute is generated from the application owner on render.
+    // selectOption changes the control value before the asynchronous load adopts it.
+    if ((await renderedOwner.getAttribute("value")) === id) return;
+    await projectSelect.selectOption(id);
+    await page.waitForFunction(
+      (expected) =>
+        document
+          .querySelector("#project-select option[selected]")
+          ?.getAttribute("value") === expected,
+      id,
+    );
+  };
+  const confirmFixture = async (projectId, phase, verify) => {
+    try {
+      await adoptProject(projectId);
+      await verify();
+    } catch (error) {
+      const state = await page
+        .evaluate((expected) => {
+          const select = document.querySelector("#project-select");
+          return {
+            renderedOwnerMatches:
+              select
+                ?.querySelector("option[selected]")
+                ?.getAttribute("value") === expected,
+            selectedValueMatches: select?.value === expected,
+            caseModeActive:
+              document
+                .querySelector('[data-mode="cases"]')
+                ?.getAttribute("aria-pressed") === "true",
+            nativeCasePresent: Boolean(
+              document.querySelector('[data-select-case="native-case"]'),
+            ),
+            batchCasePresent: Boolean(
+              document.querySelector('[data-select-case="batch-first"]'),
+            ),
+          };
+        }, projectId)
+        .catch(() => null);
+      console.error("INTERFACE_CASE_FIXTURE_STATE", phase, state);
+      throw error;
+    }
+  };
+  await confirmFixture(nativeState.id, "native-list", async () => {
+    await tab.press("Enter");
+    await nativeRow.getByText("新建用例", { exact: true }).waitFor();
+  });
   const metrics = await caseArea.evaluate((panel) => {
     const bounds = (selector) => {
       const { x, y, width, height } = panel
@@ -131,8 +178,9 @@ try {
   assert(await focusIs(selectAll));
   assert(!(await selection("native-case").isChecked()));
 
-  await page.locator("#project-select").selectOption(batch.id);
-  await selection("batch-first").waitFor();
+  await confirmFixture(batch.id, "batch-list", () =>
+    selection("batch-first").waitFor(),
+  );
   assert(!(await selectAll.isChecked()));
   assert(await selection("batch-alternate").isHidden());
   await selection("batch-first").press("Space");
