@@ -1,3 +1,4 @@
+import { hasVisibleTrash, openEmptyTrash } from "./empty-trash.js";
 import { databaseConnectionHTML } from "./database-connection-view.js";
 import {
   databaseManagerHTML,
@@ -2553,6 +2554,14 @@ function bind() {
     render();
   });
   on("[data-page]", "click", (event, e) => {
+    if (
+      e.dataset.page === "trash" &&
+      project &&
+      !hasVisibleTrash(project, projects)
+    ) {
+      openEmptyTrash($("#empty-trash-dialog"), e);
+      return;
+    }
     const fromRailKeyboard =
       event.detail === 0 && e === document.activeElement && e.closest(".rail");
     collect();
@@ -6945,7 +6954,7 @@ async function send() {
   }
 }
 document.addEventListener("keydown", (e) => {
-  if ($("#dialog").open) {
+  if ($("#dialog").open || $("#empty-trash-dialog")?.open) {
     if ((e.ctrlKey || e.metaKey) && ["s", "Enter"].includes(e.key))
       e.preventDefault();
     return;

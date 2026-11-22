@@ -5666,3 +5666,54 @@ body.dark .sse-workbench-tab strong {
     white-space: normal;
   }
 }
+
+#empty-trash-dialog {
+  width: 800px;
+  height: 459px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  border: 0;
+  border-radius: 8px;
+}
+#empty-trash-dialog::backdrop {
+  background: rgb(0 0 0 / 44%);
+}
+.empty-trash-form {
+  display: grid;
+  grid-template-rows: 54px minmax(0, 1fr);
+  height: 100%;
+}
+#empty-trash-dialog header {
+  padding: 0 20px;
+  border: 0;
+}
+#empty-trash-heading {
+  margin: 0;
+  font-size: 16px;
+}
+#empty-trash-dialog header button {
+  width: 28px;
+  height: 28px;
+  margin-inline-end: -6px;
+  padding: 0;
+  background: transparent;
+  font-size: 20px;
+  font-weight: normal;
+}
+.empty-trash-content {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: 0 16px 28px;
+  overflow: auto;
+  text-align: center;
+  color: var(--muted);
+}
+.empty-trash-content svg {
+  width: 50px;
+  height: 50px;
+  stroke-width: 0.65;
+}
+.empty-trash-content p {
+  margin: 10px 0 0;
+}
