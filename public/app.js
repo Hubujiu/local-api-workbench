@@ -1,3 +1,4 @@
+import { selectedSSEWorkbench } from "./sse-workbench.js";
 import { renderWorkspaceTree } from "./api-sidebar-tree.js";
 import { bindPlanPickerTree } from "./plan-step-picker.js";
 import { unsentResponseData } from "./http-response-empty.js";
@@ -2253,6 +2254,20 @@ function renderPage() {
   if (page === "dictionary") {
     const draft = workspaceModelDrafts.get(project.id);
     return `<div class="page dictionary-page" data-dictionary-project="${esc(project.id)}">${dictionaryPanel(project, temporaryParameters.get(project.id) || [], { tab: modelDraftTab(draft), active: draft?.active, editor: draft?.active ? modelDraftPanel(project, draft) : "" })}<section class="dictionary-models" aria-labelledby="dictionary-models-heading"${draft?.active ? " hidden" : ""}><div class="page-head"><div><h2 id="dictionary-models-heading" tabindex="-1">数据模型</h2><span class="muted">统一管理可复用的字段定义与枚举</span></div><div class="toolbar"><button id="add-model-folder">＋ 新建目录</button><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div></div>${modelCards(project)}</section></div>`;
+  }
+  if (page === "protocols") {
+    const selected = project.protocols?.find(
+      (item) => item.id === selectedProtocolId,
+    );
+    const sse = selectedSSEWorkbench(selected, {
+      busy,
+      session: sessionState,
+      status: sessionLabel(),
+      events: activeSession?.events
+        ?.map((event) => `${event.at} ${event.direction} ${event.data}`)
+        .join("\n"),
+    });
+    if (sse) return sse;
   }
   if (page === "protocols")
     return `<div class="page"><h1>实时协议调试</h1><div class="row"><input id="protocol-name" placeholder="连接名称" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.name || "")}"><button id="save-protocol">保存连接定义</button><button id="delete-protocol" class="danger">删除连接定义</button></div><p class="muted">支持短时采集与交互会话。交互会话最长 15 分钟、8 MiB，保留最近 200 条消息。</p><div class="form-grid"><label>协议</label><select id="protocol-type">${[

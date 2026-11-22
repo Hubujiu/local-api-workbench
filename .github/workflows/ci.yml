@@ -66,6 +66,7 @@ jobs:
       - run: node tests/plan-step-picker-ui.mjs
       - run: node tests/api-sidebar-tree-ui.mjs
       - run: node tests/scoped-export-surface-ui.mjs
+      - run: node tests/sse-workbench-ui.mjs
       - run: node tests/local-project-import-ui.mjs
       - run: node tests/openapi-file-review-ui.mjs
       - run: node tests/openapi-file-selection-ui.mjs

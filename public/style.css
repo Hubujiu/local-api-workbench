@@ -5406,3 +5406,204 @@ body:not(.dark) .workspace-document-toolbar {
     padding: 4px;
   }
 }
+
+.selected-sse-workbench {
+  --sse-gutter: 16px;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.sse-workbench-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 var(--sse-gutter);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 13px;
+}
+.sse-workbench-tab strong {
+  color: #13809a;
+}
+body.dark .sse-workbench-tab strong {
+  color: #80d8ed;
+}
+.sse-workbench-tab span {
+  overflow-wrap: anywhere;
+}
+.sse-workbench-setup {
+  min-height: 501px;
+  padding: 0 var(--sse-gutter) 16px;
+}
+.sse-workbench-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+.sse-workbench-name h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.sse-workbench-name input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+}
+.sse-workbench-frame {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  margin-top: 12px;
+}
+.sse-workbench-frame > button {
+  min-height: 40px;
+}
+.sse-workbench-target {
+  display: flex;
+  min-width: 0;
+  min-height: 40px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+}
+.sse-workbench-target select {
+  width: min(110px, 34%);
+  font-weight: 600;
+  padding: 4px 7px;
+}
+.sse-workbench-target input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  background: transparent;
+}
+.sse-workbench-options,
+.sse-workbench-session-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sse-workbench-options {
+  margin-top: 12px;
+}
+.sse-workbench-options label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sse-workbench-options input {
+  width: 95px;
+  padding: 5px 6px;
+}
+.sse-workbench-options .sse-workbench-tcp {
+  display: none;
+}
+.selected-sse-workbench:has(#protocol-type option[value="tcp"]:checked)
+  .sse-workbench-tcp {
+  display: flex;
+}
+.sse-workbench-limit {
+  line-height: 1.5;
+}
+.sse-workbench-evidence {
+  padding: 0 var(--sse-gutter) 14px;
+  border-top: 1px solid var(--line);
+}
+.sse-workbench-evidence-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--line);
+}
+.sse-workbench-evidence-heading h2 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--accent);
+}
+.sse-workbench-evidence-heading #session-status {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+.sse-workbench-session-actions {
+  padding: 8px 0;
+}
+.sse-workbench-result:has(pre:empty),
+.sse-workbench-events pre:empty,
+.sse-workbench-events pre:not(:empty) + .sse-workbench-empty {
+  display: none;
+}
+.sse-workbench-events {
+  min-height: 140px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.sse-workbench-events pre,
+.sse-workbench-result pre {
+  overflow: auto;
+  max-height: 320px;
+}
+.sse-workbench-empty {
+  margin: 0;
+  padding: 12px;
+}
+.sse-workbench-message {
+  display: none;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.selected-sse-workbench:has(#protocol-type option:not([value="sse"]):checked)
+  .sse-workbench-message,
+.sse-workbench-message:has(#session-send:enabled) {
+  display: flex;
+}
+.selected-sse-workbench:has(#protocol-type option:not([value="sse"]):checked)
+  .sse-workbench-get-note {
+  display: none;
+}
+.sse-workbench-message label {
+  flex: 1;
+  min-width: min(100%, 195px);
+}
+.sse-workbench-message textarea {
+  display: block;
+  width: 100%;
+  min-height: 42px;
+}
+@media (min-width: 1240px) {
+  .shell:has(.selected-sse-workbench) > .sidebar {
+    width: 305px;
+  }
+}
+@media (max-width: 760px) {
+  .selected-sse-workbench {
+    --sse-gutter: 10px;
+  }
+  .sse-workbench-setup {
+    min-height: 0;
+  }
+  .sse-workbench-name,
+  .sse-workbench-evidence-heading {
+    padding-block: 5px;
+  }
+  .sse-workbench-frame {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sse-workbench-target {
+    grid-column: 1 / -1;
+  }
+  .sse-workbench-frame > button {
+    padding-inline: 5px;
+    white-space: normal;
+  }
+}
