@@ -223,6 +223,11 @@ import { createScriptDraft, applyScriptDraft } from "./script-draft.js";
 import { mockURL, mockDebugTarget } from "./mock-target.js";
 import { editResponseExample } from "./response-example.js";
 import { applySelectedFormFile } from "./form-file-selection.js";
+import {
+  binaryBodyHTML,
+  bindBinaryBodyEditor,
+  prepareBinaryBodyChange,
+} from "./binary-body-editor.js";
 import { variableRows } from "./variable-definitions.js";
 import {
   globalParameterWorkspaceIssue,
@@ -2053,7 +2058,7 @@ function editor(r) {
       "",
     )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button>${requestCurlAction(mode === "debug")}<button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : httpRequestActions({ debug: mode === "debug", busy, cancel: busy && mode !== "cases" && !caseCancellationOwner(), dirty })}</div>${
     mode === "debug"
-      ? `${requestParameterTabs(r, param)}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length)}<div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div></div>`
+      ? `${requestParameterTabs(r, param)}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" && r.bodyType !== "binary" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded", "binary"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length)}<div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div></div>`
       : modePanel(r)
   }</section>`;
 }
@@ -2177,23 +2182,26 @@ function paramPanel(r, param, design = false) {
     const debugRawJSON = !design && r.bodyType === "json";
     const multipart =
       !design && isDebugMultipart(page, mode, param, r.bodyType);
+    const binary = r.bodyType === "binary";
     const expandLabel = bodyExpanded ? "收起编辑器" : "展开编辑器";
     const tabbedHelper = helperOpen && debugRawJSON && useTabbedRawHelper();
-    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${!design && (r.bodyType === "none" || debugRawJSON || multipart) ? `<span class="body-type-caption" title="${type}">${type}</span>` : type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" || multipart ? "" : `<div class="body-actions${debugRawJSON ? " http-debug-raw-actions" : ""}"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost"${debugRawJSON ? ' aria-label="格式化 JSON"' : ""}>${debugRawJSON ? "美化" : "格式化 JSON"}</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${debugRawJSON ? `<span class="debug-raw-expand-icon">${lineIcon("editor-expand")}</span><span class="debug-raw-expand-label">${expandLabel}</span>` : expandLabel}</button>`}</div>`}${
-      multipart
-        ? debugMultipartEditor(r.form, esc)
-        : ["form-data", "urlencoded"].includes(r.bodyType)
-          ? pairs(r.form, "form", undefined, undefined, r.bodyType)
-          : r.bodyType === "none"
-            ? `<div class="body-none"><span class="body-none-icon">${lineIcon("body-empty")}</span><p>当前请求未包含 Body</p>${design ? "" : '<button id="generate-body" class="ghost">基于数据结构生成</button>'}</div>`
-            : `<div class="body-editor-shell"><div class="code-editor"><pre id="code-gutter" aria-hidden="true">${r.body
-                .split("\n")
-                .map((_, i) => i + 1)
-                .join(
-                  "\n",
-                )}</pre><pre id="code-highlight" aria-hidden="true"${debugRawJSON ? ' class="debug-raw-json-highlight"' : ""}>${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle${debugRawJSON ? " debug-raw-helper" : ""}" aria-label="参数助手" aria-expanded="${helperOpen}"${helperOpen ? ' aria-controls="body-parameter-helper"' : ""}><span class="helper-label" aria-hidden="true">${debugRawJSON ? `<span class="helper-rail-chevron">${lineIcon("helper-rail-left")}</span>` : ""}${tabbedHelper ? `<span class="helper-pane-chevron">${lineIcon("helper-pane-right")}</span>` : ""}<span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
-                helperOpen ? bodyParameterHelper(r, tabbedHelper) : ""
-              }</div>`
+    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${!design && (r.bodyType === "none" || debugRawJSON || multipart || binary) ? `<span class="body-type-caption" title="${type}">${type}</span>` : type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" || multipart || binary ? "" : `<div class="body-actions${debugRawJSON ? " http-debug-raw-actions" : ""}"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">请求体 · 保存在本地</span><button id="format-json" class="ghost"${debugRawJSON ? ' aria-label="格式化 JSON"' : ""}>${debugRawJSON ? "美化" : "格式化 JSON"}</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${debugRawJSON ? `<span class="debug-raw-expand-icon">${lineIcon("editor-expand")}</span><span class="debug-raw-expand-label">${expandLabel}</span>` : expandLabel}</button>`}</div>`}${
+      binary
+        ? binaryBodyHTML(r, { debug: !design, icon: lineIcon })
+        : multipart
+          ? debugMultipartEditor(r.form, esc)
+          : ["form-data", "urlencoded"].includes(r.bodyType)
+            ? pairs(r.form, "form", undefined, undefined, r.bodyType)
+            : r.bodyType === "none"
+              ? `<div class="body-none"><span class="body-none-icon">${lineIcon("body-empty")}</span><p>当前请求未包含 Body</p>${design ? "" : '<button id="generate-body" class="ghost">基于数据结构生成</button>'}</div>`
+              : `<div class="body-editor-shell"><div class="code-editor"><pre id="code-gutter" aria-hidden="true">${r.body
+                  .split("\n")
+                  .map((_, i) => i + 1)
+                  .join(
+                    "\n",
+                  )}</pre><pre id="code-highlight" aria-hidden="true"${debugRawJSON ? ' class="debug-raw-json-highlight"' : ""}>${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle${debugRawJSON ? " debug-raw-helper" : ""}" aria-label="参数助手" aria-expanded="${helperOpen}"${helperOpen ? ' aria-controls="body-parameter-helper"' : ""}><span class="helper-label" aria-hidden="true">${debugRawJSON ? `<span class="helper-rail-chevron">${lineIcon("helper-rail-left")}</span>` : ""}${tabbedHelper ? `<span class="helper-pane-chevron">${lineIcon("helper-pane-right")}</span>` : ""}<span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
+                  helperOpen ? bodyParameterHelper(r, tabbedHelper) : ""
+                }</div>`
     }`;
   }
   if (param === "auth")
@@ -2313,7 +2321,7 @@ function modePanel(r) {
     <section class="request-description-section" aria-label="详细说明"><h2><span>${lineIcon("▧")}</span>详细说明</h2><details id="design-description" ${descriptionOpen ? "open" : ""}><summary><span class="design-description-closed">＋ 添加详细说明</span><span class="design-description-open">收起</span></summary><div class="design-description-toolbar" role="group" aria-label="说明格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-design-markdown="${key}" aria-label="${label}" title="${label}">${esc(glyph)}</button>`).join("")}</div><div class="design-description-editor"><textarea id="description" aria-label="接口详细说明" spellcheck="false">${esc(r.description)}</textarea><div id="design-description-preview" class="markdown-content" role="region" aria-label="说明预览">${descriptionOpen ? renderMarkdown(r.description) : ""}</div></div><small id="design-description-count">字数: ${Array.from(r.description || "").length}　行数: ${(r.description || "").split("\n").length}</small></details></section>
     <section class="design-request-parameters" aria-label="设计请求参数"><h2><span>${lineIcon("☷")}</span>设计请求参数</h2>${designParameterPanel(r)}</section>
     <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2>${designResponsePanel(r.responses || [], designResponseSelections.get(designResponseKey(r)), r.openapiExampleBindingsVersion === 1, r.examples, collapsedDesignResponseRoots.get(r))}</section>
-    <section class="design-request-structure" aria-label="请求数据结构"><h2><span>${lineIcon("☷")}</span>请求数据结构</h2><div><button id="visual-schema" type="button">可视化编辑结构</button>${designParameter === "body" && r.bodyType !== "none" ? "" : '<button id="generate-body" type="button" class="ghost">基于数据结构生成</button>'}<textarea id="schema" aria-label="请求 JSON Schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div></section>
+    <section class="design-request-structure" aria-label="请求数据结构"><h2><span>${lineIcon("☷")}</span>请求数据结构</h2><div><button id="visual-schema" type="button">可视化编辑结构</button>${r.bodyType === "binary" || (designParameter === "body" && r.bodyType !== "none") ? "" : '<button id="generate-body" type="button" class="ghost">基于数据结构生成</button>'}<textarea id="schema" aria-label="请求 JSON Schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div></section>
     <section class="design-advanced" aria-label="请求选项"><h2><span>${lineIcon("⚙")}</span>请求选项</h2><div class="form-grid"><label>全局请求参数</label><label><input id="inherit-global-parameters" type="checkbox" ${r.inheritGlobalParameters !== false ? "checked" : ""}>继承项目及目录 Header / Query / Cookie / 表单参数</label><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>HTTPS代理 CA（PEM，与目标站点CA分开）</label><textarea data-tls="proxyCa">${esc(r.tls?.proxyCa || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}">${attributeFields(project.settings?.attributes || [], r.attributes)}</div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div></section></div>`;
   }
   if (mode === "mock")
@@ -4343,14 +4351,21 @@ function bind() {
     }
     if ($("#code-gutter")) $("#code-gutter").scrollTop = element.scrollTop;
   });
+  const binaryEditor = $(".binary-body-editor");
+  if (binaryEditor) {
+    const owner = project;
+    const target = request();
+    bindBinaryBodyEditor(binaryEditor, {
+      request: target,
+      owns: () => page === "apis" && project === owner && request() === target,
+      confirm,
+      mark,
+      toast,
+    });
+  }
   on('input[name="body-type"],#raw-format', "change", (_, e) => {
     const r = request();
-    if (
-      e.name === "body-type" &&
-      e.value === "urlencoded" &&
-      r.bodyType !== "urlencoded" &&
-      unsupportedURLencodedForm(r.form)
-    ) {
+    const restorePreviousRadio = (focus) => {
       const previous = ["raw", "json"].includes(r.bodyType)
         ? "raw"
         : r.bodyType;
@@ -4359,11 +4374,54 @@ function bind() {
       ].find((radio) => radio.value === previous);
       if (last) {
         last.checked = true;
-        if (e.matches(":focus-visible")) last.focus({ preventScroll: true });
+        if (focus) last.focus({ preventScroll: true });
       }
+    };
+    const keepRadioFocus = e.matches(":focus-visible");
+    const binaryBoundary =
+      e.name === "body-type" &&
+      (r.bodyType === "binary" || e.value === "binary");
+    const nextType = e.value === "raw" ? "json" : e.value;
+    if (
+      e.name === "body-type" &&
+      e.value === "urlencoded" &&
+      r.bodyType !== "urlencoded" &&
+      unsupportedURLencodedForm(r.form)
+    ) {
+      restorePreviousRadio(keepRadioFocus);
       throw Error(
         "URLencoded 不支持文件或 multipart 分项内容类型；请先处理对应表单字段。",
       );
+    }
+    if (binaryBoundary) {
+      let change;
+      try {
+        change = prepareBinaryBodyChange(r, nextType);
+      } catch (error) {
+        restorePreviousRadio(keepRadioFocus);
+        throw error;
+      }
+      if (!change) return;
+      if (
+        change.clear &&
+        !confirm(
+          "切换二进制正文格式会清除当前正文，避免在另一格式中使用。确定继续？",
+        )
+      ) {
+        restorePreviousRadio(keepRadioFocus);
+        return;
+      }
+      // Collect under the original format; never temporarily retype its bytes.
+      restorePreviousRadio(keepRadioFocus);
+      collect();
+      r.body = "";
+      r.bodyType = change.nextType;
+      bodyExpanded = false;
+      mark();
+      render();
+      if (keepRadioFocus)
+        $('input[name="body-type"]:checked')?.focus({ preventScroll: true });
+      return;
     }
     const restoreEmptyBodyRadio =
       mode === "debug" &&
@@ -4422,6 +4480,7 @@ function bind() {
     insertVariable(element.dataset.insertVariable);
   });
   on("[data-insert-dictionary]", "click", (_, element) => {
+    if (!element.isConnected || request()?.bodyType === "binary") return;
     collect();
     const entry = effectiveParameterDictionary(project).find(
       (item) => item.id === element.dataset.insertDictionary,
@@ -4433,6 +4492,7 @@ function bind() {
     render();
   });
   on("#generate-body", "click", async () => {
+    if (request()?.bodyType === "binary") return;
     collect();
     const targetProject = project,
       targetRequest = request(),
@@ -4465,6 +4525,7 @@ function bind() {
     render();
   });
   on("#format-json", "click", (event, button) => {
+    if (!button.isConnected || request()?.bodyType === "binary") return;
     const debugRawJSON = Boolean(button.closest(".http-debug-raw-actions"));
     const keepFocus =
       debugRawJSON && event.detail === 0 && button === document.activeElement;

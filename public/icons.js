@@ -7,6 +7,7 @@ const paths = {
   "helper-pane-right": '<path d="m9 5 7 7-7 7"/>',
   "helper-rail-left": '<path d="m12 4-7 8 7 8m7-16-7 8 7 8"/>',
   "editor-expand": '<path d="M14 4h6v6m0-6-6 6M10 20H4v-6m0 6 6-6"/>',
+  "upload-body": '<path d="M12 16V4m-4 4 4-4 4 4M4 15v5h16v-5"/>',
   "body-empty":
     '<path d="M7 9V3h10v6m-8-3h6m-6 2h6M4 9h16l2 5v7H2v-7zm-2 5h7l1 3h4l1-3h7"/>',
   appearance:
