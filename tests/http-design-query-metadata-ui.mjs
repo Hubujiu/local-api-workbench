@@ -106,12 +106,34 @@ try {
 
   await mode("design").press("Enter");
   await designTab("Query").press("Enter");
-  assert.equal(await panel.locator(".design-query-required").count(), 0);
-  assert.equal(await panel.locator(".design-query-type").count(), 0);
+  const provisionalType = panel.getByRole("button", {
+    name: "更改待命名 Query 参数的类型：string",
+    exact: true,
+  });
+  const provisionalRequired = panel.getByRole("button", {
+    name: "待命名 Query 参数必填",
+    exact: true,
+  });
+  assert.equal(await provisionalType.count(), 1);
+  assert.equal(await provisionalRequired.getAttribute("aria-pressed"), "false");
+  assert.equal(
+    await panel
+      .getByRole("checkbox", { name: "启用待命名 Query 参数", exact: true })
+      .isChecked(),
+    true,
+  );
+  assert.equal(await panel.locator("[data-design-query-required]").count(), 0);
+  assert.equal(await panel.locator("[data-design-query-type]").count(), 0);
+  assert.equal(await panel.locator('[data-pair^="query:"]').count(), 0);
   assert.equal(await rowEnabled.count(), 0);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(await app.store.get(owner.id), baseline);
   await panel
     .getByRole("textbox", { name: "新Query参数名", exact: true })
     .fill("ui_fixture");
+  assert.equal(await provisionalType.count(), 0);
+  assert.equal(await provisionalRequired.count(), 0);
+  assert.equal(await rowEnabled.count(), 1);
   const string = selectType("ui_fixture", "string");
   await string.press("ArrowDown");
   assert.equal(await focus(option("string")), true);

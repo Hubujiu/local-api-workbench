@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createProjectImportGuard } from "../public/project-import-guard.js";
+import {
+  changedProvisionalQuery,
+  createProvisionalQuery,
+} from "../public/design-query-provisional.js";
 import { createNativeRequestLifecycle } from "../public/native-request-lifecycle.js";
 import { adoptVariableWrites } from "../public/variable-write-receipt.js";
 const source = (
@@ -89,11 +93,14 @@ function harness(initial = fixture()) {
     "initial",
     "api",
     "projectImports",
+    "changedProvisionalQuery",
+    "provisionalQuery",
     "nativeRequestLifecycle",
     "adoptVariableWrites",
     "assert",
     `
  const debugAuthDrafts = new WeakMap();
+ const request=()=>project.requests.find((entry)=>entry.id===current);
  let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
  let openedDocuments=[],activeDocumentId=null;
@@ -116,7 +123,16 @@ function harness(initial = fixture()) {
  `,
   );
   return {
-    ...create(initial, api, guard, native, adoptVariableWrites, assert),
+    ...create(
+      initial,
+      api,
+      guard,
+      changedProvisionalQuery,
+      createProvisionalQuery(),
+      native,
+      adoptVariableWrites,
+      assert,
+    ),
     calls,
     guard,
     native,

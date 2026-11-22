@@ -129,6 +129,14 @@ import {
   prepareDesignQueryType,
 } from "./design-query-metadata.js";
 import {
+  changedProvisionalQuery,
+  createProvisionalQuery,
+  provisionalQueryDefaults,
+  provisionalQueryEnabled,
+  provisionalQueryNotice,
+  provisionalQueryRow,
+} from "./design-query-provisional.js";
+import {
   httpRequestActions,
   requestCurlAction,
 } from "./http-request-actions.js";
@@ -433,6 +441,7 @@ let designParameter = "headers";
 const designResponseSelections = new Map();
 const collapsedDesignResponseRoots = new WeakMap();
 const debugAuthDrafts = new WeakMap();
+const provisionalQuery = createProvisionalQuery();
 const graphqlDrafts = createGraphQLWorkspaceDrafts();
 const graphqlSchemaDirectory = createGraphQLSchemaDirectory();
 let debugParameterOwner = "";
@@ -1290,6 +1299,10 @@ async function save() {
   if (project) projectImports.assertCanSave(project.id);
   if (!project) return;
   if (saving) throw Error("保存尚未完成，请等待");
+  if (changedProvisionalQuery(provisionalQuery.read(project, request())))
+    throw Error(
+      "待命名 Query 参数选项未保存：请返回设计 Query 填写参数名，或重置待命名选项。",
+    );
   if (
     project.requests.some((r) => r.graphqlEditorVersion === 1) &&
     graphqlDrafts.hasProject(project)
@@ -1973,6 +1986,12 @@ function tree() {
 }
 
 function render(preserveEditingFocus = false) {
+  provisionalQuery.observe(
+    project,
+    page === "apis" && mode === "design" && !workspaceDocument()
+      ? request()
+      : null,
+  );
   releaseHTTPResponseLayout?.();
   releaseHTTPResponseLayout = undefined;
   releaseHTTPRequestOverflow?.();
@@ -2217,7 +2236,11 @@ function pairs(rows, key, designOptions, debugOptions, formBodyType) {
   const inlineQuery =
     queryMetadata &&
     rows.some((row) => typeof row.key === "string" && row.key.trim());
-  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}${compactEmpty ? " design-pairs-empty" : ""}${compactEmpty && queryMetadata ? " design-pairs-query-empty" : ""}${inlineQuery ? " design-query-metadata-table" : ""}">${compactEmpty ? '<colgroup class="design-empty-pair-columns"><col><col><col><col></colgroup>' : ""}<thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${rows
+  const queryDraft =
+    compactEmpty && queryMetadata
+      ? provisionalQuery.read(project, request())
+      : null;
+  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}${compactEmpty ? " design-pairs-empty" : ""}${compactEmpty && queryMetadata ? " design-pairs-query-empty" : ""}${inlineQuery ? " design-query-metadata-table" : ""}">${compactEmpty ? '<colgroup class="design-empty-pair-columns"><col><col><col><col></colgroup>' : ""}<thead><tr><th class="pair-enabled-heading" aria-label="启用">${queryDraft ? provisionalQueryEnabled(queryDraft, true) : ""}</th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${rows
     .map((p, i) => {
       const form = key === "form";
       const fileLike = form ? formFileRepresentation(p) : p.type === "file";
@@ -2238,7 +2261,7 @@ function pairs(rows, key, designOptions, debugOptions, formBodyType) {
     })
     .join(
       "",
-    )}${debugComposer ? debugPairComposer(key, false) : designComposer ? designPairComposer(key, compactEmpty) : ""}</tbody></table>${inlineQuery ? designQueryTypeMenuHTML() : ""}${designComposer || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
+    )}${debugComposer ? debugPairComposer(key, false) : designComposer ? designPairComposer(key, compactEmpty, queryDraft) : ""}</tbody></table>${inlineQuery || queryDraft ? designQueryTypeMenuHTML() : ""}${queryDraft ? provisionalQueryNotice(queryDraft) : ""}${designComposer || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
 }
 function bindBodyParameterHelper() {
   const panel = $("#body-parameter-helper");
@@ -5625,7 +5648,11 @@ function bind() {
   const commitDesignPair = (event, input) => {
     const kind = input.dataset.designPairName;
     if (event.isComposing || !ownsDesignPair(input, kind)) return;
-    const row = debugPairFromKey(input.value);
+    const draft = provisionalQuery.read(composerProject, composerRequest);
+    const row =
+      kind === "query" && draft
+        ? provisionalQueryRow(input.value, draft)
+        : debugPairFromKey(input.value);
     if (!row) return;
     collect();
     const canvas = $(".http-design-canvas");
@@ -5686,9 +5713,45 @@ function bind() {
       preventScroll: true,
     });
   };
+  const captureProvisional = (button) => {
+    const options = provisionalQuery.read(composerProject, composerRequest);
+    if (saving || !options || !ownsDesignPair(button, "query"))
+      throw Error("待命名 Query 参数已变化，请重新选择。");
+    return { button, options };
+  };
+  const updateProvisional = (token, next, focus) => {
+    if (
+      saving ||
+      !token?.options ||
+      !ownsDesignPair(token.button, "query") ||
+      !provisionalQuery.update(
+        composerProject,
+        composerRequest,
+        token.options,
+        next,
+      )
+    )
+      throw Error("待命名 Query 参数已变化，请重新选择。");
+    const scrollTop = $(".http-design-canvas")?.scrollTop;
+    render();
+    const canvas = $(".http-design-canvas");
+    if (canvas && scrollTop !== undefined) canvas.scrollTop = scrollTop;
+    $(focus)?.focus({ preventScroll: true });
+  };
   bindDesignQueryTypeMenu(queryPanel, {
-    capture: queryMetadataOwner,
-    update: (owner, type) =>
+    capture: (button) =>
+      button.hasAttribute("data-design-query-draft-type")
+        ? captureProvisional(button)
+        : queryMetadataOwner(button),
+    update: (owner, type) => {
+      if (owner?.options) {
+        updateProvisional(
+          owner,
+          { ...owner.options, type },
+          "[data-design-query-draft-type]",
+        );
+        return;
+      }
       updateQueryMetadata(
         owner,
         (row) => {
@@ -5699,8 +5762,36 @@ function bind() {
           return true;
         },
         "type",
-      ),
+      );
+    },
     notify: toast,
+  });
+  on("[data-design-query-draft-enabled]", "change", (_, checkbox) => {
+    const enabled = checkbox.checked;
+    checkbox.checked =
+      provisionalQuery.read(composerProject, composerRequest)?.enabled ?? true;
+    const token = captureProvisional(checkbox);
+    updateProvisional(
+      token,
+      { ...token.options, enabled },
+      `[data-design-query-draft-enabled="${checkbox.dataset.designQueryDraftEnabled}"]`,
+    );
+  });
+  on("[data-design-query-draft-required]", "click", (_, button) => {
+    const token = captureProvisional(button);
+    updateProvisional(
+      token,
+      { ...token.options, required: !token.options.required },
+      "[data-design-query-draft-required]",
+    );
+  });
+  on("[data-design-query-draft-reset]", "click", (_, button) => {
+    const token = captureProvisional(button);
+    updateProvisional(
+      token,
+      provisionalQueryDefaults,
+      '[data-design-pair-name="query"]',
+    );
   });
   on("[data-design-query-required]", "click", (_, button) =>
     updateQueryMetadata(

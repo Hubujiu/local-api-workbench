@@ -1,4 +1,5 @@
 const types = ["string", "number", "integer", "boolean"];
+export const isDesignQueryScalarType = (type) => types.includes(type);
 const annotations = new Set([
   "type",
   "title",
@@ -172,7 +173,9 @@ export function bindDesignQueryTypeMenu(root, { capture, update, notify }) {
       .find((cue) => cue.dataset.designQueryOption === selected)
       ?.focus({ preventScroll: true });
   };
-  for (const trigger of root.querySelectorAll("[data-design-query-type]")) {
+  for (const trigger of root.querySelectorAll(
+    "[data-design-query-type],[data-design-query-draft-type]",
+  )) {
     trigger.addEventListener("click", () => show(trigger));
     trigger.addEventListener("keydown", (event) => {
       if (!["ArrowUp", "ArrowDown"].includes(event.key)) return;
