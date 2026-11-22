@@ -130,13 +130,74 @@ function bindGraphQLDelete(rail, active, prepareDelete) {
   };
 }
 
+function bindGraphQLRename(active, prepareRename) {
+  let closePrevious;
+  return (trigger) => {
+    const id = trigger.dataset.graphqlQueryMenu;
+    const row = trigger.parentElement.querySelector("[data-graphql-query-row]");
+    const action = prepareRename(id);
+    if (!action || !row || !row.isConnected || !active()) return;
+    closePrevious?.();
+    const field = document.createElement("input");
+    field.type = "text";
+    field.className = "graphql-named-inline-rename";
+    field.setAttribute("aria-label", "查询名称");
+    field.setAttribute(
+      "aria-description",
+      "按 Enter 确认；按 Esc 或离开输入框取消。",
+    );
+    field.title = "Enter 确认 · Esc 取消";
+    field.autocomplete = "off";
+    field.spellcheck = false;
+    field.maxLength = 80;
+    field.value = action.name;
+    const finish = (restoreFocus) => {
+      if (closePrevious !== finish) return;
+      closePrevious = undefined;
+      row.hidden = false;
+      field.remove();
+      if (restoreFocus && trigger.isConnected && active())
+        trigger.focus({ preventScroll: true });
+    };
+    closePrevious = finish;
+    field.addEventListener("blur", () => finish(false));
+    field.addEventListener("keydown", (event) => {
+      if (event.isComposing) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        finish(true);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
+          return;
+        if (!active() || !field.isConnected || closePrevious !== finish) return;
+        const applied = action.apply(field.value);
+        if (applied === false) finish(true);
+      } else if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "s"
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    });
+    row.before(field);
+    row.hidden = true;
+    field.focus({ preventScroll: true });
+    field.select();
+  };
+}
+
 export function bindGraphQLNamedRail(
   rail,
-  { active, select, add, arrange, prepareDelete },
+  { active, select, add, prepareRename, prepareDelete },
 ) {
   const menu = rail.querySelector("#graphql-named-query-menu");
   const items = [...menu.querySelectorAll("[role=menuitem]")];
   const confirmDelete = bindGraphQLDelete(rail, active, prepareDelete);
+  const renameInline = bindGraphQLRename(active, prepareRename);
   let trigger;
   const open = () => menu.matches(":popover-open");
   const dismiss = (focus) => {
@@ -220,7 +281,7 @@ export function bindGraphQLNamedRail(
     const button = trigger;
     dismiss(true);
     if (item.dataset.graphqlQueryAction === "delete") confirmDelete(button);
-    else arrange(button.dataset.graphqlQueryMenu);
+    else renameInline(button);
   });
 }
 

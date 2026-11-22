@@ -4416,20 +4416,19 @@ function bind() {
       $(
         `[data-graphql-query-${menu ? "menu" : "row"}="${CSS.escape(id)}"]`,
       )?.focus({ preventScroll: true });
-    const namedState = (withinOwnedDialog = false) => {
+    const namedState = () => {
       if (!owns() || !graphqlEditor.isConnected)
         throw Error("GraphQL 查询或窗口已变化，请重新操作。");
       if (busy || saving)
         throw Error("请先结束请求或保存，再更改 GraphQL 查询。");
-      if (!withinOwnedDialog && $("#dialog").open)
-        throw Error("请先结束当前对话框。");
+      if ($("#dialog").open) throw Error("请先结束当前对话框。");
       if (graphqlDrafts.pending(target)) throw Error(unappliedGraphQL);
       const state = readGraphQLNamedQueries(target);
       if (!state) throw Error("当前正文无法编辑命名查询。");
       return state;
     };
-    const changeNamed = (action, focus, withinOwnedDialog = false) => {
-      const { activeId } = namedState(withinOwnedDialog);
+    const changeNamed = (action, focus) => {
+      const { activeId } = namedState();
       const next = prepareGraphQLNamedQueryChange(target, action);
       if (!next) return false;
       const selected = next.graphqlNamedQueries.activeId;
@@ -4463,31 +4462,19 @@ function bind() {
           target.graphqlNamedQueries === collection,
       };
     };
-    const arrangeNamed = (id) => {
+    const prepareNamedRename = (id) => {
       const owner = queryChangeOwner(id);
-      let dialogVersion;
-      modal(
-        "重命名查询",
-        `<label for="graphql-named-rename">查询名称</label><input id="graphql-named-rename" value="${esc(owner.item.name)}" maxlength="80" spellcheck="false">`,
-        () => {
-          if (
-            modalRevision !== dialogVersion ||
-            !$("#dialog").open ||
-            !owner.valid()
-          )
+      const revision = modalRevision;
+      return {
+        name: owner.item.name,
+        apply: (name) => {
+          if (modalRevision !== revision || !owner.valid())
             throw Error("GraphQL 查询或窗口已变化，请重新操作。");
-          changeNamed(
-            { type: "rename", id, name: $("#graphql-named-rename").value },
-            undefined,
-            true,
+          return changeNamed({ type: "rename", id, name }, () =>
+            focusNamed(id, true),
           );
         },
-        "确定",
-        () => {
-          if (owns()) focusNamed(id, true);
-        },
-      );
-      dialogVersion = modalRevision;
+      };
     };
     const prepareNamedDelete = (id) => {
       const owner = queryChangeOwner(id);
@@ -4524,7 +4511,7 @@ function bind() {
             { type: "select", id },
             keyboard ? (selected) => focusNamed(selected) : undefined,
           ),
-        arrange: arrangeNamed,
+        prepareRename: prepareNamedRename,
         prepareDelete: prepareNamedDelete,
       },
       owns,
