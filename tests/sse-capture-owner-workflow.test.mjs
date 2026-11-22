@@ -64,7 +64,7 @@ test(
       type: "sse",
       url,
       duration: 10000,
-      runId: attempt.runId,
+      runId: attempt.dispatch.runId,
     });
     await Promise.race([
       accepted,
@@ -73,7 +73,7 @@ test(
     assert.equal(requestMethod, "GET");
     assert.equal(requestPath, "/events");
     assert.equal(calls.cancel(attempt), true);
-    const ack = await api("/cancel", { id: attempt.runId });
+    const ack = await api("/cancel", { id: attempt.dispatch.runId });
     assert.deepEqual(ack, { status: 200, value: { ok: true } });
     assert.equal(attempt.phase, "stopping");
     const original = await pending;
