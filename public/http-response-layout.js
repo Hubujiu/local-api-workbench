@@ -24,6 +24,7 @@ export function bindHTTPResponseLayout({
   media,
   preferred,
   writePreference,
+  onLayoutChange,
   onError,
 }) {
   const win = editor.ownerDocument.defaultView;
@@ -94,6 +95,7 @@ export function bindHTTPResponseLayout({
     try {
       if (value !== preferred()) writePreference(value);
       update();
+      onLayoutChange?.();
     } catch (error) {
       onError?.(error);
     }

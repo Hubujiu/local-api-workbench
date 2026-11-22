@@ -2218,6 +2218,68 @@ function pairs(rows, key, designOptions, debugOptions, formBodyType) {
       "",
     )}${debugComposer ? debugPairComposer(key, false) : designComposer ? designPairComposer(key, compactEmpty) : ""}</tbody></table>${inlineQuery ? designQueryTypeMenuHTML() : ""}${designComposer || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
 }
+function bindBodyParameterHelper() {
+  const panel = $("#body-parameter-helper");
+  if (!panel) return;
+  const onHelper = (selector, event, fn) =>
+    on("#body-parameter-helper " + selector, event, fn);
+  if (panel.classList.contains("raw-helper-open"))
+    bindRawHelper(panel, bodyHelperState(request()));
+  onHelper("#raw-helper-reference-variable", "click", () =>
+    openRawHelperVariableChooser(),
+  );
+  onHelper("#raw-helper-insert-fixed", "click", openRawHelperFixedChooser);
+  onHelper("#raw-helper-insert-mock", "click", openRawHelperMockChooser);
+  onHelper("#new-body-dynamic", "click", () => editDynamicValue("body"));
+  onHelper("[data-edit-body-dynamic]", "click", (_, element) =>
+    editDynamicValue("body", element.dataset.editBodyDynamic),
+  );
+  onHelper("#insert-builtin-variable", "click", () => {
+    const name = $("#builtin-variable").value;
+    insertVariable(name);
+    if ($("#builtin-variable")) $("#builtin-variable").value = name;
+  });
+  onHelper("[data-insert-variable]", "click", (_, element) => {
+    insertVariable(element.dataset.insertVariable);
+  });
+  onHelper("[data-insert-dictionary]", "click", (_, element) => {
+    if (!element.isConnected || request()?.bodyType === "binary") return;
+    collect();
+    const entry = effectiveParameterDictionary(project).find(
+      (item) => item.id === element.dataset.insertDictionary,
+    );
+    if (!entry) throw Error("字典参数已不存在");
+    request().body = insertDictionaryField(request().body, entry);
+    request().bodyType = "json";
+    mark();
+    render();
+  });
+}
+
+function refreshHTTPLayoutRawHelper() {
+  const toggle = $("#toggle-parameter-helper.debug-raw-helper");
+  const panel = $("#body-parameter-helper");
+  if (!toggle || !panel) return;
+  const tabbed = Boolean(useTabbedRawHelper());
+  if (panel.classList.contains("raw-helper-open") === tabbed) return;
+
+  // This helper has two presentations. Keep its owner/filter/tab state and do
+  // not replace the request textarea, response, or live layout menu.
+  const restoreFocus = panel.contains(document.activeElement);
+  panel.outerHTML = bodyParameterHelper(request(), tabbed);
+  const marker = toggle.querySelector(".helper-pane-chevron");
+  if (tabbed && !marker)
+    toggle
+      .querySelector(".helper-rail-chevron")
+      .insertAdjacentHTML(
+        "afterend",
+        `<span class="helper-pane-chevron">${lineIcon("helper-pane-right")}</span>`,
+      );
+  else if (!tabbed) marker?.remove();
+  bindBodyParameterHelper();
+  if (restoreFocus) toggle.focus({ preventScroll: true });
+}
+
 function bodyParameterHelper(r, tabbed) {
   const reference = `<button type="button" class="raw-helper-action-card" id="raw-helper-reference-variable" aria-label="引用变量"><span class="raw-helper-variable-icon">${lineIcon("helper-variable")}</span><span><strong>引用变量</strong><small>引用已配置的环境、集合或全局变量</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
   const fixed = `<button type="button" class="raw-helper-action-card" id="raw-helper-insert-fixed" aria-label="固定值"><span class="raw-helper-fixed-icon">${lineIcon("helper-fixed")}</span><span><strong>固定值</strong><small>插入固定文本</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
@@ -2866,6 +2928,7 @@ function bind() {
         localStorage.setItem("response-layout", next);
         responseLayout = next;
       },
+      onLayoutChange: refreshHTTPLayoutRawHelper,
       onError: (error) => toast(error.message),
     });
   } else {
@@ -5235,8 +5298,6 @@ function bind() {
     render();
     $("#body-code")?.focus();
   });
-  if ($(".raw-helper-open"))
-    bindRawHelper($(".raw-helper-open"), bodyHelperState(request()));
   on("#toggle-parameter-helper", "click", (event, button) => {
     const keepFocus =
       button.classList.contains("debug-raw-helper") &&
@@ -5249,35 +5310,7 @@ function bind() {
     if (keepFocus)
       $("#toggle-parameter-helper")?.focus({ preventScroll: true });
   });
-  on("#raw-helper-reference-variable", "click", () =>
-    openRawHelperVariableChooser(),
-  );
-  on("#raw-helper-insert-fixed", "click", openRawHelperFixedChooser);
-  on("#raw-helper-insert-mock", "click", openRawHelperMockChooser);
-  on("#new-body-dynamic", "click", () => editDynamicValue("body"));
-  on("[data-edit-body-dynamic]", "click", (_, element) =>
-    editDynamicValue("body", element.dataset.editBodyDynamic),
-  );
-  on("#insert-builtin-variable", "click", () => {
-    const name = $("#builtin-variable").value;
-    insertVariable(name);
-    if ($("#builtin-variable")) $("#builtin-variable").value = name;
-  });
-  on("[data-insert-variable]", "click", (_, element) => {
-    insertVariable(element.dataset.insertVariable);
-  });
-  on("[data-insert-dictionary]", "click", (_, element) => {
-    if (!element.isConnected || request()?.bodyType === "binary") return;
-    collect();
-    const entry = effectiveParameterDictionary(project).find(
-      (item) => item.id === element.dataset.insertDictionary,
-    );
-    if (!entry) throw Error("字典参数已不存在");
-    request().body = insertDictionaryField(request().body, entry);
-    request().bodyType = "json";
-    mark();
-    render();
-  });
+  bindBodyParameterHelper();
   on("#generate-body", "click", async () => {
     if (
       request()?.bodyType === "binary" ||
