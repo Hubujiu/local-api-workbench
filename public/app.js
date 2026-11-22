@@ -129,6 +129,11 @@ import { mockURL, mockDebugTarget } from "./mock-target.js";
 import { editResponseExample } from "./response-example.js";
 import { applySelectedFormFile } from "./form-file-selection.js";
 import { variableRows } from "./variable-definitions.js";
+import {
+  globalParameterWorkspaceIssue,
+  mountWorkspaceGlobalParameters,
+  workspaceGlobalParametersHTML,
+} from "./workspace-global-parameters.js";
 import { mountVariableEditor } from "./variable-editor.js";
 import {
   mountWorkspaceGlobalVariables,
@@ -4913,6 +4918,66 @@ function bind() {
       }
     };
   }
+  function editWorkspaceParameters(workspace, initialTab) {
+    const owner = project;
+    const epoch = editVersion;
+    const source = structuredClone(owner.settings?.globalParameters);
+    const original = JSON.stringify(source);
+    const issue = globalParameterWorkspaceIssue(owner.settings);
+    let editor, revision;
+    const apply = () => {
+      if (!editor) return;
+      if (
+        owner !== project ||
+        epoch !== editVersion ||
+        revision !== modalRevision ||
+        !$("#dialog").open ||
+        original !== JSON.stringify(project.settings?.globalParameters) ||
+        globalParameterWorkspaceIssue(project.settings)
+      )
+        throw Error("项目或参数草稿已变化，请重新打开全局参数");
+      if (!editor.changed) return;
+      const next = editor.read();
+      if (JSON.stringify(source ?? {}) === JSON.stringify(next)) return;
+      (owner.settings ??= {}).globalParameters = next;
+      mark();
+      render();
+    };
+    modal(
+      "全局参数",
+      environmentDialogShell(owner, {
+        workspace: true,
+        section: "parameters",
+        content: workspaceGlobalParametersHTML(issue),
+        actions: issue
+          ? ""
+          : '<button type="button" id="environment-save-stay">保存</button>',
+      }),
+      apply,
+      issue ? "完成" : "保存并关闭",
+    );
+    revision = modalRevision;
+    if (!issue) {
+      editor = mountWorkspaceGlobalParameters(
+        $(".environment-parameter-content"),
+        source,
+        initialTab,
+      );
+      editor.focusTab();
+      $("#environment-save-stay").onclick = () => {
+        try {
+          apply();
+          editWorkspaceParameters(workspace, editor.kind);
+        } catch (error) {
+          toast(error.message);
+        }
+      };
+      on("#environment-parameter-advanced", "click", () =>
+        leaveEnvironmentDraft(editor, openGlobalParameterSettings),
+      );
+    } else $('[data-env-section="parameters"]')?.focus();
+    bindEnvironmentNavigation(workspace, editor);
+  }
   function leaveEnvironmentDraft(editor, action) {
     if (editor?.changed && !confirm("放弃尚未保存的环境修改？")) return;
     return action();
@@ -4923,10 +4988,16 @@ function bind() {
       return workspace
         ? editWorkspaceGlobals(workspace)
         : editVariableDefinitions();
+    return workspace
+      ? editWorkspaceParameters(workspace)
+      : openGlobalParameterSettings();
+  }
+  function openGlobalParameterSettings() {
     $("#dialog").close();
     page = "settings";
     settingsSection = "settings-global-parameters";
     render();
+    $("#parameter-scope")?.focus();
   }
   function bindEnvironmentNavigation(workspace, editor) {
     const navigate = (action) => leaveEnvironmentDraft(editor, action);
