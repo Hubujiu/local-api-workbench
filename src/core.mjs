@@ -147,6 +147,7 @@ import {
 } from "./openapi-query-arrays.mjs";
 import { openAPIAuthDefinition } from "./openapi-auth-definition.mjs";
 import { importPostmanResponseExamples } from "./postman-response-examples.mjs";
+import { assertActiveFormFileEncoding } from "./form-wire-guard.mjs";
 import {
   validateMultipartPartMedia,
   assertMultipartMediaExportable,
@@ -2724,6 +2725,7 @@ export function prepareLiteralHTTPExport(
   const r = normalizeRequest(
     postmanRawExportDefinition(sdkCurlDefinition(input)),
   );
+  assertActiveFormFileEncoding(r);
   // Match ordinary JSON execution without parsing or rewriting literal text.
   // This normalized export copy must not change the saved request definition.
   if (r.bodyType === "json" && r.body === "") r.body = "{}";
