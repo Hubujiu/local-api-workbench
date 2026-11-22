@@ -69,6 +69,7 @@ import {
   bindDatabaseManager,
 } from "./database-manager.js";
 import { selectedSSEWorkbench } from "./sse-workbench.js";
+import { createSSECaptureOwner, sseCaptureView } from "./sse-capture-owner.js";
 import { protocolDefinitionEdit } from "./protocol-definition-edit.js";
 import { renderWorkspaceTree } from "./api-sidebar-tree.js";
 import { bindApiRowMenu } from "./api-row-menu.js";
@@ -79,6 +80,11 @@ import {
   readResponseTabsPosition,
   restoreResponseTabsPosition,
 } from "./http-response-tabs.js";
+import {
+  bindHTTPSuccessResponse,
+  httpSuccessResponseHTML,
+  isPopulatedHTTPResponse,
+} from "./http-success-response.js";
 import {
   namedFormRows,
   requestParameterTabs,
@@ -396,9 +402,11 @@ const graphqlSchemaDirectory = createGraphQLSchemaDirectory();
 let debugParameterOwner = "";
 const designResponseKey = (r) => JSON.stringify([project?.id, r.id]);
 const caseResults = createCaseResultStore();
+const sseCaptures = createSSECaptureOwner();
 const caseSelections = new Map();
 let caseBatch = null;
 let singleCaseRun = null;
+let genericProtocolCapture = null;
 function caseCancellationOwner() {
   return caseBatch?.running ? caseBatch : singleCaseRun;
 }
@@ -1150,7 +1158,7 @@ async function api(
   path,
   method = "GET",
   data,
-  { signal, expectedStatus } = {},
+  { signal, expectedStatus, protocolReceiptRunId } = {},
 ) {
   const r = await fetch("/api" + path, {
     method,
@@ -1160,6 +1168,7 @@ async function api(
   });
   const b = await r.json();
   if (!r.ok) {
+    if (protocolReceiptRunId && b?.runId === protocolReceiptRunId) return b;
     const error = Error(b.error || r.statusText);
     error.projectCommitOutcome = {
       project_id: b.project_id,
@@ -2123,7 +2132,7 @@ function editor(r) {
       "",
     )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button>${requestCurlAction(mode === "debug")}<button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法"${r.graphqlEditorVersion === 1 ? " disabled" : ""}>${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : httpRequestActions({ debug: mode === "debug", busy, cancel: busy && mode !== "cases" && !caseCancellationOwner(), dirty })}</div>${
     mode === "debug"
-      ? `${requestParameterTabs(r, param)}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" && r.bodyType !== "binary" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded", "binary"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length)}<div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div></div>`
+      ? `${requestParameterTabs(r, param)}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" && r.bodyType !== "binary" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded", "binary"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response${responseTab === "body" && isPopulatedHTTPResponse(response) ? " http-success-response-active" : ""}"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length)}<div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div></div>`
       : modePanel(r)
   }</section>`;
 }
@@ -2147,7 +2156,7 @@ function pairs(rows, key, designOptions, debugOptions, formBodyType) {
     return `<table class="pairs-table request-pairs-table debug-pairs-table debug-pairs-empty"><colgroup><col span="3"></colgroup><thead><tr><th scope="col" class="debug-pair-name-heading">参数名</th><th scope="col">${valueHeading}</th><th scope="col">描述</th></tr></thead><tbody>${debugPairComposer(key, true)}</tbody></table>`;
   const designComposer = design && isDesignPairKind(key);
   const compactEmpty = designComposer && !rows.length;
-  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}"><thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${rows
+  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}${compactEmpty ? " design-pairs-empty" : ""}">${compactEmpty ? '<colgroup class="design-empty-pair-columns"><col><col><col><col></colgroup>' : ""}<thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${rows
     .map((p, i) => {
       const form = key === "form";
       const fileLike = form ? formFileRepresentation(p) : p.type === "file";
@@ -2344,6 +2353,12 @@ function responseContent() {
       `<div class="empty http-response-empty"><div class="empty-symbol">${lineIcon("rocket")}</div><p>输入 URL 后点击发送获取响应结果</p><small>Ctrl + Enter 发送请求 · Ctrl + S 保存接口</small></div>`
     );
   }
+  if (
+    mode === "debug" &&
+    responseTab === "body" &&
+    isPopulatedHTTPResponse(response)
+  )
+    return httpSuccessResponseHTML();
   if (responseTab === "scriptResponse") {
     if (!response.scriptResponse)
       return '<div class="notice">后置脚本可用 pm.response.setBody(value) / setCode(code) 创建处理视图；不改写原始网络证据。</div>';
@@ -2427,6 +2442,30 @@ function modePanel(r) {
     busy,
   );
 }
+function selectedSSEOwner(
+  item = project?.protocols?.find((entry) => entry.id === selectedProtocolId),
+) {
+  if (page !== "protocols" || !project || item?.type !== "sse") return null;
+  return {
+    projectId: project.id,
+    definitionId: item.id,
+    definitionUrl: item.url,
+  };
+}
+function paintSSECapture() {
+  const owner = selectedSSEOwner();
+  const status = $("#sse-capture-status");
+  if (!owner || !status) return;
+  const view = sseCaptureView(sseCaptures.current(owner));
+  status.textContent = view.notice;
+  $("#protocol-result").textContent = view.result;
+  $("#cancel").disabled = !view.canCancel;
+  $("#protocol-run").disabled = busy || view.blocksStart;
+  for (const selector of ["#sse-capture-check", "#sse-capture-abandon"]) {
+    $(selector).hidden = !view.needsCheck;
+    $(selector).disabled = !view.canCheck;
+  }
+}
 function renderPage() {
   if (page === "socketio")
     return `<div class="page"><button id="socketio-project-reload" ${busy || saving ? "disabled" : ""}>重新加载项目核对（不重发）</button><p class="muted">刷新页面不重连。内存会话可能仍在运行；请显式读取列表核对。定义和消息正文可进入项目历史，临时认证/TLS不保存。</p>${renderSocketIO(socketioWorkbenchState, project.settings?.socketioDefinitions || [])}</div>`;
@@ -2485,6 +2524,7 @@ function renderPage() {
     );
     const sse = selectedSSEWorkbench(selected, {
       busy,
+      capture: sseCaptures.current(selectedSSEOwner(selected)),
       session: sessionState,
       status: sessionLabel(),
       events: activeSession?.events
@@ -2716,6 +2756,19 @@ function showMCPClientConfiguration(configuration) {
     };
 }
 function bind() {
+  const successBody = $(".http-success-response");
+  if (successBody) {
+    const ownedResponse = response;
+    bindHTTPSuccessResponse(
+      successBody,
+      ownedResponse,
+      () =>
+        response === ownedResponse &&
+        page === "apis" &&
+        mode === "debug" &&
+        responseTab === "body",
+    );
+  }
   bindSocketIOWorkbench();
   on("#socketio-project-reload", "click", () => openProject(project.id));
   bindGrpcWorkbench();
@@ -5315,8 +5368,59 @@ function bind() {
   on("#send", "click", send);
   const cancelForegroundRun = () =>
     runId ? api("/cancel", "POST", { id: runId }) : undefined;
-  on("#cancel", "click", () => {
+  on("#cancel", "click", async (_, button) => {
+    if (button.closest(".selected-sse-workbench")) {
+      const attempt = sseCaptures.current(selectedSSEOwner());
+      if (!sseCaptures.cancel(attempt)) {
+        if (genericProtocolCapture?.cancel === button)
+          return cancelForegroundRun();
+        return;
+      }
+      paintSSECapture();
+      try {
+        await api("/cancel", "POST", { id: attempt.runId });
+      } catch {
+        // The acknowledgement is not proof of stop either way. Only the
+        // original run response or the matching terminal record can settle it.
+      }
+      return;
+    }
     if (!caseCancellationOwner()) return cancelForegroundRun();
+  });
+  on("#sse-capture-check", "click", async (_, button) => {
+    const attempt = sseCaptures.current(selectedSSEOwner());
+    if (attempt?.phase !== "unknown" || attempt.checking) return;
+    attempt.checking = true;
+    paintSSECapture();
+    let found = false;
+    try {
+      const records = await api(
+        "/projects/" + attempt.owner.projectId + "/protocol-runs?type=sse",
+      );
+      found = sseCaptures.check(attempt, records);
+    } catch {
+      // The current local service could not return this history read.
+    } finally {
+      attempt.checking = false;
+      attempt.reconciliationMissed = !found;
+      paintSSECapture();
+    }
+    if (sseCaptures.current(selectedSSEOwner()) !== attempt) return;
+    if (
+      button.isConnected &&
+      (document.activeElement === button ||
+        document.activeElement === document.body)
+    )
+      (found ? $("#protocol-run") : button).focus();
+  });
+  on("#sse-capture-abandon", "click", () => {
+    const attempt = sseCaptures.current(selectedSSEOwner());
+    if (attempt?.phase !== "unknown" || attempt.checking) return;
+    if (!confirm("结束这一次核对？这不会取消、重发或证明远端未执行。")) return;
+    if (sseCaptures.abandon(attempt)) {
+      paintSSECapture();
+      $("#protocol-run").focus();
+    }
   });
   on("#cancel-case-run", "click", () => {
     if (!canCancelCurrentCase()) return;
@@ -5590,30 +5694,63 @@ function bind() {
     if (!sessionController.status().intentId) throw Error("没有会话或恢复证据");
     download("protocol-session.json", sessionController.evidence());
   });
-  on("#protocol-run", "click", async () => {
+  on("#protocol-run", "click", async (_, button) => {
     assertExecutionReady();
-    runId = uid();
+    const type = $("#protocol-type").value;
+    const url = $("#protocol-url").value;
+    const id = uid();
+    const input = {
+      type,
+      url,
+      host: url,
+      port: Number($("#protocol-port").value),
+      duration: Number($("#protocol-duration").value),
+      message: $("#protocol-message").value,
+      runId: id,
+    };
+    const path = "/projects/" + project.id + "/protocol";
+    const owner = selectedSSEOwner();
+    if (type === "sse" && owner) {
+      const attempt = sseCaptures.start(owner, { runId: id, url });
+      if (!attempt) throw Error("请先核对之前的采集结果，不要重复采集");
+      runId = "";
+      busy = true;
+      paintSSECapture();
+      let receipt;
+      try {
+        receipt = await api(path, "POST", input, { protocolReceiptRunId: id });
+      } catch {
+        // A transport/API exception cannot prove that the original run never
+        // reached the local service or that its remote effects did not occur.
+      } finally {
+        sseCaptures.settle(attempt, receipt);
+        busy = false;
+        if (selectedSSEOwner()) paintSSECapture();
+        else if ($("#protocol-run")) $("#protocol-run").disabled = false;
+      }
+      return;
+    }
+    const resultNode = $("#protocol-result");
+    const cancel = $("#cancel");
+    genericProtocolCapture = { cancel };
+    runId = id;
     busy = true;
-    $("#protocol-run").disabled = true;
+    button.disabled = true;
+    cancel.disabled = false;
     try {
-      const type = $("#protocol-type").value;
-      const result = await api(
-        "/projects/" + project.id + "/protocol",
-        "POST",
-        {
-          type,
-          url: $("#protocol-url").value,
-          host: $("#protocol-url").value,
-          port: Number($("#protocol-port").value),
-          duration: Number($("#protocol-duration").value),
-          message: $("#protocol-message").value,
-          runId,
-        },
-      );
-      $("#protocol-result").textContent = JSON.stringify(result, null, 2);
+      const result = await api(path, "POST", input);
+      if (resultNode.isConnected)
+        resultNode.textContent = JSON.stringify(result, null, 2);
     } finally {
+      genericProtocolCapture = null;
+      runId = "";
       busy = false;
-      if ($("#protocol-run")) $("#protocol-run").disabled = false;
+      if (selectedSSEOwner()) {
+        if (resultNode.isConnected && type !== "sse") {
+          button.disabled = false;
+          cancel.disabled = true;
+        } else paintSSECapture();
+      } else if ($("#protocol-run")) $("#protocol-run").disabled = false;
     }
   });
   on("#db-register", "click", () => {
