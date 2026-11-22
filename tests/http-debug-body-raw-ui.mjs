@@ -666,7 +666,6 @@ try {
   assert(await fixedPreview.evaluate((el) => el.readOnly));
   assert(await fixedConfirm.isEnabled());
   assert.equal(await body.inputValue(), "");
-  await capture("open-fixed-filled");
   await fixedValue.press("Enter");
   assert(await fixedDialog.isVisible());
   await fixedValue.press("Escape");
@@ -699,6 +698,7 @@ try {
   await fixedCard.press("Enter");
   await fixedValue.fill(fixedText);
   const fixedToken = await fixedExpression.inputValue();
+  await capture("open-fixed-filled");
   await fixedConfirm.press("Enter");
   await waitFixedClosed();
   assert.equal(await body.inputValue(), fixedToken);
