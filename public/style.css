@@ -3236,82 +3236,139 @@ input[data-select-case] {
   max-width: none;
   counter-reset: mcp-step;
 }
-.settings-mcp-page .mcp-settings > .notice {
-  padding: 9px 12px;
+.settings-mcp-page .mcp-local-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 12px;
   margin: 0 0 20px;
   border: 1px solid var(--line);
   border-radius: 4px;
   line-height: 1.5;
 }
-.settings-mcp-page .mcp-service-card,
-.settings-mcp-page .mcp-grants,
-.settings-mcp-page .mcp-access-card {
+body:not(.dark) .settings-mcp-page .mcp-local-notice {
+  background: #f5f3ee;
+  border-color: #d8cbb3;
+}
+.settings-mcp-page .mcp-local-marker {
+  display: grid;
+  place-items: center;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border-radius: 50%;
+  color: white;
+  font: 600 10px/1 sans-serif;
+}
+.settings-mcp-page :is(.mcp-service-card, .mcp-grants, .mcp-client-card) {
   position: relative;
   padding: 24px 20px 24px 68px;
   margin: 0 0 20px;
   border-radius: 8px;
 }
 .settings-mcp-page .mcp-service-card {
-  min-height: 182px;
+  min-height: 183px;
   border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
 }
-.settings-mcp-page .mcp-service-card::before,
-.settings-mcp-page .mcp-grants::before,
-.settings-mcp-page .mcp-access-card::before {
+.settings-mcp-page .mcp-grants {
+  min-height: 198px;
+}
+body:not(.dark) .settings-mcp-page .mcp-service-card {
+  background: #f2ead7;
+}
+body:not(.dark) .settings-mcp-page :is(.mcp-grants, .mcp-client-card) {
+  background: #f9f5ea;
+}
+.settings-mcp-page
+  :is(.mcp-service-card, .mcp-grants, .mcp-client-card)::before {
   counter-increment: mcp-step;
   content: counter(mcp-step);
   position: absolute;
   left: 20px;
-  top: 19px;
+  top: 18px;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--accent);
   border-radius: 50%;
   color: var(--accent);
   background: var(--panel);
 }
-.settings-mcp-page .mcp-service-card strong,
-.settings-mcp-page .mcp-grants h3,
-.settings-mcp-page .mcp-access-card h2 {
-  font-size: 22px;
+.settings-mcp-page :is(.mcp-service-card, .mcp-grants, .mcp-client-card) h2 {
+  font-size: 20px;
   margin: 0;
-  line-height: 30px;
+  line-height: 28px;
 }
-.settings-mcp-page .mcp-service-card .row {
+.settings-mcp-page .mcp-service-head {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-}
-.settings-mcp-page .mcp-service-card .row > .muted {
-  order: 4;
-  flex-basis: 100%;
-  font-size: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
 }
 .settings-mcp-page .mcp-state-label {
-  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
   font-size: 12px;
-  padding: 2px 7px;
+  padding: 3px 8px;
+  background: var(--panel);
 }
-.settings-mcp-page .mcp-service-card > p {
-  margin-top: 24px;
+.settings-mcp-page .mcp-service-explanation {
+  margin: 26px 0 12px;
+  line-height: 1.7;
+}
+.settings-mcp-page .mcp-service-activity {
+  margin: 0;
+  font-size: 12px;
   line-height: 1.7;
 }
 .settings-mcp-page .mcp-grants dl {
-  margin-top: 24px;
+  margin: 18px 0 14px;
+}
+.settings-mcp-page .mcp-grants dt {
+  margin: 0 0 5px;
+}
+.settings-mcp-page .mcp-grants h4 {
+  margin: 0 0 4px;
+}
+.settings-mcp-page .mcp-grants ul {
+  margin: 0;
+}
+.settings-mcp-page .mcp-client-section {
+  border-top: 0;
+  margin-top: 12px;
+  padding-top: 0;
+}
+.settings-mcp-page #mcp-database-panel {
+  border: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+@media (min-width: 1240px) {
+  .settings-mcp-page {
+    padding-inline: 27px 34px;
+  }
+  .settings-mcp-page > .page-head {
+    margin-bottom: 25px;
+  }
+  .settings-mcp-page .mcp-grants {
+    padding-bottom: 22px;
+  }
 }
 @media (max-width: 650px) {
   .settings-basic-page,
   .settings-mcp-page {
     padding: 18px 14px;
   }
-  .settings-mcp-page .mcp-service-card,
-  .settings-mcp-page .mcp-grants,
-  .settings-mcp-page .mcp-access-card {
+  .settings-mcp-page :is(.mcp-service-card, .mcp-grants, .mcp-client-card) {
     padding-left: 56px;
   }
-  .settings-mcp-page .mcp-service-card::before,
-  .settings-mcp-page .mcp-grants::before,
-  .settings-mcp-page .mcp-access-card::before {
+  .settings-mcp-page
+    :is(.mcp-service-card, .mcp-grants, .mcp-client-card)::before {
     left: 12px;
   }
 }
