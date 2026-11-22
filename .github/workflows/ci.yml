@@ -69,6 +69,7 @@ jobs:
       - run: node tests/sse-workbench-ui.mjs
       - run: node tests/database-manager-ui.mjs
       - run: node tests/empty-trash-ui.mjs
+      - run: node tests/request-trash-confirmation-ui.mjs
       - run: node tests/database-connection-card-ui.mjs
       - run: node tests/sse-definition-save-ui.mjs
       - run: node tests/local-project-import-ui.mjs

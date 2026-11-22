@@ -4431,17 +4431,60 @@ function bind() {
     mark();
     render();
   });
-  on("#delete", "click", async () => {
+  on("#delete", "click", async (_, opener) => {
     if (project.settings?.nativeInheritance) {
       await changeNativeRequestLifecycle(request().id, false);
       return;
     }
-    if (!confirm("将此接口移到回收站？")) return;
-    request().deletedAt = new Date().toISOString();
-    current = project.requests.find((r) => !r.deletedAt)?.id;
-    response = responses.get(project.id + ":" + current) || null;
-    mark();
-    render();
+    const owner = project,
+      target = request(),
+      name = target?.name,
+      version = editVersion;
+    const ownsTarget = () =>
+      project === owner &&
+      page === "apis" &&
+      !workspaceDocument() &&
+      current === target?.id &&
+      request() === target &&
+      !target?.deletedAt;
+    if (!target || !ownsTarget() || busy || saving)
+      throw Error("接口已变化或操作正在进行，请稍后再试");
+    let moved = false,
+      dialogRevision;
+    modal(
+      "确定将 " + name + " 移到回收站？",
+      '<div class="request-trash-confirmation" aria-hidden="true"></div>',
+      () => {
+        if (
+          !ownsTarget() ||
+          target.name !== name ||
+          modalRevision !== dialogRevision ||
+          !$("#dialog").open ||
+          editVersion !== version ||
+          busy ||
+          saving
+        )
+          throw Error("接口或草稿已变化，未移到回收站；请重新打开确认");
+        target.deletedAt = new Date().toISOString();
+        current = owner.requests.find((r) => !r.deletedAt)?.id;
+        response = responses.get(owner.id + ":" + current) || null;
+        mark();
+        moved = true;
+        render();
+      },
+      "确定",
+      () => {
+        if (project !== owner || page !== "apis") return;
+        if (!moved && ownsTarget() && opener?.isConnected)
+          opener.focus({ preventScroll: true });
+        else if (moved)
+          ($("#request-name") || $("#welcome-add"))?.focus({
+            preventScroll: true,
+          });
+      },
+    );
+    dialogRevision = modalRevision;
+    $('#dialog footer button[value="cancel"]').focus();
   });
   on("[data-restore]", "click", async (_, e) => {
     if (project.settings?.nativeInheritance) {
