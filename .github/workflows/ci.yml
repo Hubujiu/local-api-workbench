@@ -69,6 +69,8 @@ jobs:
       - run: node tests/debug-pair-composer-ui.mjs
       - run: node tests/http-debug-body-empty-ui.mjs
       - run: node tests/http-success-response-ui.mjs
+        env:
+          HTTP_SUCCESS_RESPONSE_EVIDENCE: /tmp/local-api-http-success-response
       - run: node tests/debug-multipart-editor-ui.mjs
       - run: node tests/debug-urlencoded-editor-ui.mjs
       - run: node tests/form-file-privacy-ui.mjs
@@ -147,6 +149,7 @@ jobs:
           name: ui-evidence
           path: |
             /tmp/local-api-*.png
+            /tmp/local-api-http-success-response/response-*-workbench.png
             /tmp/local-api-design-pair-composer/design-pair-*.png
             /tmp/local-api-http-design-description-scroll/design-description-*.png
             /tmp/local-api-graphql-named-workspace/named-workbench-*.png
