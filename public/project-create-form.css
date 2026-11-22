@@ -76,3 +76,14 @@ body:not(.dark) #dialog:has(.project-create-form) #dialog-save {
     translate: 100px 0;
   }
 }
+
+.project-create-settlement:not(:has(> :not([hidden]))) {
+  display: none;
+}
+.project-create-settlement {
+  padding-top: 12px;
+}
+#project-create-status {
+  margin: 0 0 7px;
+  overflow-wrap: anywhere;
+}

@@ -9,5 +9,10 @@ export function projectCreateForm() {
     <small id="new-directory-hint" hidden>使用默认目录，或选择本机目录。手动填写时请使用绝对路径。</small>
     <label for="new-description">项目描述</label>
     <textarea id="new-description" maxlength="2000" placeholder="请输入项目描述"></textarea>
+    <div class="project-create-settlement">
+      <p id="project-create-status" tabindex="-1" role="status" hidden></p>
+      <button id="project-create-review" type="button" hidden>重新读取项目列表</button>
+      <button id="project-create-reset" type="button" hidden>已核对，开始新的创建</button>
+    </div>
   </section>`;
 }
