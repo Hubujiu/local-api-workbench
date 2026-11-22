@@ -42,6 +42,11 @@ export function bindWorkspaceDocumentScroll(
     );
   }
   return {
+    restore({ editorTop, previewTop }) {
+      if (!active()) return;
+      move(editor, editorTop);
+      move(preview, previewTop);
+    },
     top() {
       if (!active()) return;
       for (const pane of [editor, preview]) {

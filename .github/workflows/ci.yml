@@ -60,6 +60,9 @@ jobs:
       - run: node tests/workspace-global-variables-ui.mjs
       - run: node tests/workspace-global-parameters-ui.mjs
       - run: node tests/http-design-pane-ui.mjs
+      - run: node tests/http-design-description-scroll-ui.mjs
+        env:
+          DESIGN_DESCRIPTION_SCROLL_EVIDENCE: /tmp/local-api-http-design-description-scroll
       - run: node tests/debug-pair-composer-ui.mjs
       - run: node tests/http-debug-body-empty-ui.mjs
       - run: node tests/debug-multipart-editor-ui.mjs
@@ -139,6 +142,7 @@ jobs:
           name: ui-evidence
           path: |
             /tmp/local-api-*.png
+            /tmp/local-api-http-design-description-scroll/design-description-*.png
             /tmp/local-api-graphql-named-workspace/named-workbench-*.png
             /tmp/local-api-http-workbench.json
             /tmp/local-api-trace.zip

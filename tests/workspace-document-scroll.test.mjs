@@ -115,3 +115,20 @@ test("return-to-top cancels a keyboard transition scheduled before the first scr
   assert.equal(editor.scrollTop, 0);
   assert.equal(preview.scrollTop, 0);
 });
+
+test("restoring an owned viewport never mirrors the recovered positions back", () => {
+  const editor = new Pane(500);
+  const preview = new Pane(700);
+  let active = true;
+  const controls = bindWorkspaceDocumentScroll(editor, preview, {
+    active: () => active,
+    enabled: () => true,
+  });
+  controls.restore({ editorTop: 72, previewTop: 145 });
+  editor.scroll();
+  preview.scroll();
+  assert.deepEqual([editor.scrollTop, preview.scrollTop], [72, 145]);
+  active = false;
+  controls.restore({ editorTop: 1, previewTop: 2 });
+  assert.deepEqual([editor.scrollTop, preview.scrollTop], [72, 145]);
+});
