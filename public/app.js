@@ -225,6 +225,10 @@ import { createPlanHistoryRefresh } from "./plan-history-refresh.js";
 const refreshPlanHistory = createPlanHistoryRefresh();
 import { resources, settingsSidebar } from "./resource-view.js";
 import { highlightJSON } from "./code-format.js";
+import {
+  bindModelRawEditor,
+  modelRawEditorMarkup,
+} from "./model-raw-editor.js";
 import { snapshotInterfaceForPlan } from "./plan-snapshots.js";
 import {
   exportDocumentation,
@@ -6480,7 +6484,7 @@ function bindWorkspaceModel() {
     draft.tree.assertResolved();
     modal(
       "Raw",
-      `<div class="model-workspace-raw"><textarea id="model-workspace-json" aria-label="模型 Schema JSON" spellcheck="false" autofocus>${esc(JSON.stringify(draft.schema, null, 2))}</textarea></div>`,
+      modelRawEditorMarkup(),
       () => {
         if (!current()) throw Error("模型草稿已变化，请重新打开 Raw 编辑");
         draft.replaceSchema(JSON.parse($("#model-workspace-json").value));
@@ -6490,6 +6494,10 @@ function bindWorkspaceModel() {
       () => {
         if (current()) reveal("#model-workspace-raw");
       },
+    );
+    bindModelRawEditor(
+      $(".model-workspace-raw"),
+      JSON.stringify(draft.schema, null, 2),
     );
   });
 }
