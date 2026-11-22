@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { normalizeRequest } from "../src/core.mjs";
+import { preparePostmanCollection } from "../src/postman-collection-scopes.mjs";
 import { createApp } from "../src/server.mjs";
 
 const require = createRequire(import.meta.url);
@@ -51,11 +52,65 @@ try {
     bodyType: "json",
     body: original,
   });
-  dictionaryProject.requests.push(dictionaryRequest);
+  const owningCollection = preparePostmanCollection(
+    {
+      info: { name: "Owning fixture collection" },
+      item: [],
+      variable: [
+        {
+          key: "collectionOnlyName",
+          value: "synthetic-collection-only-secret",
+        },
+        {
+          key: "collectionShadowsGlobal",
+          value: "synthetic-collection-winner-secret",
+        },
+        { key: "duplicatedName", value: "synthetic-collection-loser-secret" },
+        { key: "definitionOnlyName", value: "synthetic-definition-secret" },
+      ],
+    },
+    () => "helper-owning-collection",
+  );
+  delete owningCollection.variables.definitionOnlyName;
+  const unrelatedCollection = preparePostmanCollection(
+    {
+      info: { name: "Other fixture collection" },
+      item: [],
+      variable: [
+        {
+          key: "unrelatedCollectionName",
+          value: "synthetic-unrelated-collection-secret",
+        },
+      ],
+    },
+    () => "helper-other-collection",
+  );
+  dictionaryProject.postmanCollections = {
+    version: 1,
+    items: [unrelatedCollection, owningCollection],
+  };
+  dictionaryRequest.postmanCollectionId = owningCollection.id;
+  dictionaryProject.requests.push(
+    dictionaryRequest,
+    normalizeRequest({
+      id: "unbound-helper-draft",
+      name: "Unbound helper draft",
+      url: dictionaryRequest.url,
+      bodyType: "json",
+    }),
+    normalizeRequest({
+      id: "other-helper-draft",
+      name: "Other collection helper draft",
+      url: dictionaryRequest.url,
+      bodyType: "json",
+      postmanCollectionId: unrelatedCollection.id,
+    }),
+  );
   dictionaryProject.settings.builtinDictionary = false;
   dictionaryProject.globalVariables = {
     fixtureGlobalName: "synthetic-global-secret-value",
     duplicatedName: "synthetic-duplicate-global-secret",
+    collectionShadowsGlobal: "synthetic-global-loser-secret",
   };
   Object.assign(dictionaryProject.environments[0].variables, {
     fixtureEnvironmentName: "synthetic-environment-secret-value",
@@ -539,9 +594,14 @@ try {
   assert(await confirmSelection.isDisabled());
   assert.match(await chooser.textContent(), /fixtureGlobalName/);
   assert.match(await chooser.textContent(), /fixtureEnvironmentName/);
+  for (const name of ["collectionOnlyName", "collectionShadowsGlobal"]) {
+    const row = chooser.locator(`[data-raw-variable-name="${name}"]`);
+    assert.equal(await row.count(), 1);
+    assert.match(await row.textContent(), /集合变量/);
+  }
   assert.doesNotMatch(
     await chooser.textContent(),
-    /synthetic-.*secret|unrelatedEnvironmentName|\$telephone/,
+    /synthetic-.*secret|unrelatedEnvironmentName|unrelatedCollectionName|definitionOnlyName|\$telephone/,
   );
   const duplicate = chooser.locator(
     '[data-raw-variable-name="duplicatedName"]',
@@ -734,6 +794,38 @@ try {
     .click();
   await legacyDynamic.waitFor({ state: "hidden" });
   assert.equal(await body.inputValue(), fixedToken);
+
+  for (const [requestId, absentNames, winner, scope] of [
+    [
+      "unbound-helper-draft",
+      /collectionOnlyName|unrelatedCollectionName/,
+      "collectionShadowsGlobal",
+      "全局变量",
+    ],
+    [
+      "other-helper-draft",
+      /collectionOnlyName/,
+      "unrelatedCollectionName",
+      "集合变量",
+    ],
+  ]) {
+    await page.locator(`[data-request="${requestId}"]`).click();
+    await bodyTab.click();
+    if ((await helperToggle.getAttribute("aria-expanded")) === "false")
+      await helperToggle.press("Enter");
+    await helperPanel.getByRole("tab", { name: "动态值" }).click();
+    await reference.press("Enter");
+    assert.doesNotMatch(await chooser.textContent(), absentNames);
+    assert.match(
+      await chooser
+        .locator(`[data-raw-variable-name="${winner}"]`)
+        .textContent(),
+      new RegExp(scope),
+    );
+    assert.doesNotMatch(await chooser.textContent(), /synthetic-.*secret/);
+    await page.keyboard.press("Escape");
+    await waitChooserClosed();
+  }
 
   assert.deepEqual(blocked, []);
   assert.deepEqual(errors, []);

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveDynamicRequest } from "../src/dynamic-values.mjs";
 import { interpolate } from "../src/core.mjs";
+import { debugEnvironment } from "../src/environments.mjs";
+import { effectiveScopes, projectScopes } from "../src/variable-scopes.mjs";
 import { effectiveParameterDictionary } from "../public/dictionary-view.js";
 import {
   matchesRawHelperEntry,
@@ -139,4 +141,142 @@ test("fixed chooser rejects missing and oversized serialized values before inser
   assert(rawHelperFixedValue("x".repeat(65534)));
   assert.equal(rawHelperFixedValue("x".repeat(65535)), null);
   assert.equal(rawHelperFixedValue("中".repeat(22000)), null);
+});
+
+test("variable names are read only from the current owned request and its live collection", () => {
+  const neverRead = () => {
+    throw Error("unrelated or secret value accessor invoked");
+  };
+  const request = { postmanCollectionId: "own" };
+  const picked = {
+    id: "own",
+    variables: {
+      collectionWinner: "value",
+      envWinner: "loses",
+      onlyCollection: "value",
+    },
+  };
+  Object.defineProperty(picked, "definitions", {
+    enumerable: true,
+    get: neverRead,
+  });
+  Object.defineProperty(picked.variables, "noValueRead", {
+    enumerable: true,
+    get: neverRead,
+  });
+  const unrelated = { id: "other" };
+  Object.defineProperty(unrelated, "variables", {
+    enumerable: true,
+    get: neverRead,
+  });
+  const project = {
+    requests: [request],
+    postmanCollections: { items: [unrelated, picked] },
+    globalVariables: {
+      onlyGlobal: "value",
+      collectionWinner: "loses",
+      envWinner: "loses",
+    },
+    environments: [
+      { id: "active", variables: { envWinner: "value", onlyEnv: "value" } },
+    ],
+  };
+  const labels = Object.fromEntries(
+    rawHelperVariableNames(project, "active", request).map(
+      ({ name, scope }) => [name, scope],
+    ),
+  );
+  assert.deepEqual(labels, {
+    onlyGlobal: "全局变量",
+    collectionWinner: "集合变量",
+    envWinner: "环境变量",
+    onlyCollection: "集合变量",
+    noValueRead: "集合变量",
+    onlyEnv: "环境变量",
+  });
+  assert.throws(
+    () => rawHelperVariableNames(project, "active", { ...request }),
+    /不属于此项目/,
+  );
+  project.postmanCollections.items = [unrelated];
+  assert.throws(
+    () => rawHelperVariableNames(project, "active", request),
+    /集合不可用/,
+  );
+});
+
+test("chooser winners match the real Debug environment and scope precedence without dispatch", () => {
+  const request = { postmanCollectionId: "own" };
+  const collectionVariables = {
+    collectionWinner: "collection",
+    envWinner: "collection",
+    onlyCollection: "collection",
+  };
+  const project = {
+    id: "owned-helper-fixture",
+    requests: [request],
+    globalVariables: {
+      onlyGlobal: "global",
+      collectionWinner: "global",
+      envWinner: "global",
+    },
+    environments: [
+      {
+        id: "active",
+        variables: { envWinner: "environment", onlyEnv: "environment" },
+      },
+    ],
+    postmanCollections: {
+      items: [
+        {
+          id: "own",
+          variables: collectionVariables,
+          definitions: Object.fromEntries(
+            Object.keys(collectionVariables).map((key) => [
+              key,
+              { type: "string" },
+            ]),
+          ),
+        },
+      ],
+    },
+  };
+  const debug = debugEnvironment(
+    project,
+    "active",
+    new Map(),
+    request.postmanCollectionId,
+  );
+  const scopes = effectiveScopes(
+    projectScopes(
+      project,
+      debug.environment.id,
+      debug.variables,
+      request.postmanCollectionId,
+    ),
+  );
+  const scopeLabels = {
+    global: "全局变量",
+    collection: "集合变量",
+    environment: "环境变量",
+  };
+  const expected = Object.fromEntries(
+    Object.entries(scopes).map(([name, value]) => [name, scopeLabels[value]]),
+  );
+  assert.deepEqual(
+    { ...scopes },
+    {
+      onlyGlobal: "global",
+      collectionWinner: "collection",
+      envWinner: "environment",
+      onlyCollection: "collection",
+      onlyEnv: "environment",
+    },
+  );
+  const actual = Object.fromEntries(
+    rawHelperVariableNames(project, "active", request).map(
+      ({ name, scope }) => [name, scope],
+    ),
+  );
+  assert.deepEqual(actual, expected);
 });

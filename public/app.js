@@ -1719,7 +1719,7 @@ function pairs(rows, key, designOptions, debugOptions) {
     )}${debugComposer ? debugPairComposer(key, false) : ""}</tbody></table>${compactEmpty || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
 }
 function bodyParameterHelper(r, tabbed) {
-  const reference = `<button type="button" class="raw-helper-action-card" id="raw-helper-reference-variable" aria-label="引用变量"><span class="raw-helper-variable-icon">${lineIcon("helper-variable")}</span><span><strong>引用变量</strong><small>引用环境变量、全局变量</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
+  const reference = `<button type="button" class="raw-helper-action-card" id="raw-helper-reference-variable" aria-label="引用变量"><span class="raw-helper-variable-icon">${lineIcon("helper-variable")}</span><span><strong>引用变量</strong><small>引用已配置的环境、集合或全局变量</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
   const fixed = `<button type="button" class="raw-helper-action-card" id="raw-helper-insert-fixed" aria-label="固定值"><span class="raw-helper-fixed-icon">${lineIcon("helper-fixed")}</span><span><strong>固定值</strong><small>插入固定文本</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
   const dynamic = `${tabbed ? reference + fixed : ""}<h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
     r.bodyDynamic || {},
@@ -7264,6 +7264,7 @@ function rawHelperBodyOwner() {
   if (!editor || !owner) return null;
   const ownerProject = project,
     ownerEnvironment = env(),
+    ownerCollectionId = owner.postmanCollectionId,
     ownerOpening = projectOpenSequence,
     ownerEdit = editVersion,
     ownerText = editor.value;
@@ -7282,6 +7283,7 @@ function rawHelperBodyOwner() {
       project === ownerProject &&
       request() === owner &&
       owner.bodyType === "json" &&
+      owner.postmanCollectionId === ownerCollectionId &&
       env() === ownerEnvironment &&
       projectOpenSequence === ownerOpening &&
       editVersion === ownerEdit &&
@@ -7356,7 +7358,9 @@ function openRawHelperFixedChooser() {
 function openRawHelperVariableChooser() {
   const owner = rawHelperBodyOwner();
   if (!owner) return;
-  const entries = rawHelperVariableNames(owner.project, owner.environment);
+  const scopeNames = () =>
+    rawHelperVariableNames(owner.project, owner.environment, owner.request);
+  const entries = scopeNames();
   let selectedName,
     inserted = false;
   modal(
@@ -7365,8 +7369,14 @@ function openRawHelperVariableChooser() {
     () => {
       const name = selectedName?.();
       if (!owner.current()) throw Error("接口、环境或草稿已变化，未插入变量");
-      if (!entries.some((entry) => entry.name === name))
-        throw Error("请选择当前项目的变量");
+      const selected = entries.find((entry) => entry.name === name);
+      if (
+        !selected ||
+        !scopeNames().some(
+          (entry) => entry.name === name && entry.scope === selected.scope,
+        )
+      )
+        throw Error("当前变量作用域已变化，请重新选择");
       insertVariable(name, owner.selection);
       inserted = true;
     },
