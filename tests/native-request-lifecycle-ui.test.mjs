@@ -387,11 +387,15 @@ async function openHarness(
     `
     let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
+ let openedDocuments=[],activeDocumentId=null;
+ const documentModes=new Map();
  let project=initial, dirty=false, editVersion=0, busy=false, saving=false,
       projectOpenSequence=0,current,opened,response,lastRun,loadResult,planId,selectedProtocolId;
     const confirm=()=>true,sessionStorage={setItem(){}},render=()=>{};
     ${source}
     return {open:openProject,getState:()=>({project,dirty,editVersion,busy,saving}),
+      seedDocuments(){openedDocuments=["doc"];activeDocumentId="doc";documentModes.set("doc","edit");},
+      documents(){return {opened:[...openedDocuments],active:activeDocumentId,modes:[...documentModes]};},
       edit(){project.requests[0].name="new draft";dirty=true;editVersion++;},
       replace(p){project=p;},flag(key){if(key==="busy")busy=true;else saving=true;}};
   `,
@@ -450,6 +454,22 @@ test("actual openProject only newest GET applies, across opposite response order
     await Promise.all([first, second]);
     assert.equal(h.getState().project.id, "second");
   }
+});
+test("only the winning project load clears local document tabs and modes", async () => {
+  const h = await openHarness();
+  h.seedDocuments();
+  const superseded = h.open("first");
+  const winning = h.open("second");
+  h.gets[0].resolve({ ...fixture(), id: "first" });
+  await superseded;
+  assert.deepEqual(h.documents(), {
+    opened: ["doc"],
+    active: "doc",
+    modes: [["doc", "edit"]],
+  });
+  h.gets[1].resolve({ ...fixture(), id: "second" });
+  await winning;
+  assert.deepEqual(h.documents(), { opened: [], active: null, modes: [] });
 });
 test("actual openProject rejects replacement identity and new busy/save work", async () => {
   for (const changed of ["identity", "busy", "saving"]) {

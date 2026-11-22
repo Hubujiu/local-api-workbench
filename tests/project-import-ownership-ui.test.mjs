@@ -62,6 +62,8 @@ function harness({
     `
     let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
+ let openedDocuments=[],activeDocumentId=null;
+ const documentModes=new Map();
  let project=initial,dirty=false,editVersion=0,busy=false,saving=false,modalRevision=1,projectOpenSequence=0,
       current="r",response=null,opened=[],page="apis",mode="design",projects=[{id:initial.id}],lastRun,loadResult,planId,selectedProtocolId;
     const els={"#import-mode":{value:importMode},"#import-file":{files:[]},"#import-text":{value:"{}"},"#import-directory":{files:[]},"#dialog":{open:true}};

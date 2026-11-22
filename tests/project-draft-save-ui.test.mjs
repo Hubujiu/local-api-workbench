@@ -60,6 +60,8 @@ function harness(initial = fixture(), transport) {
  const debugAuthDrafts = new WeakMap();
  let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
+ let openedDocuments=[],activeDocumentId=null;
+ const documentModes=new Map();
  let project=initial,projects=[{id:initial.id}],editVersion=0,dirty=true,saving=false,busy=false,projectOpenSequence=0,current='r',opened=[],response,lastRun,loadResult,planId,selectedProtocolId;
  const nativeRequestLifecycle={assertCanSave(){},reloadCheckpoint(){return 0},assertReloadCurrent(){},acknowledgeReload(){}};
  let modalCallback, rendered;
