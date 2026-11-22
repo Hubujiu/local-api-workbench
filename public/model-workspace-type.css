@@ -5,7 +5,7 @@
   border: 0;
   background: var(--panel);
   color: var(--accent);
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
   line-height: 1;
   padding: 4px 8px;
 }
@@ -46,7 +46,7 @@ body:not(.dark) .model-schema-field [data-model-type-current="integer"] {
   padding: 0 5px 0 17px;
   background: transparent;
   text-align: left;
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
 }
 .model-field-type-menu > button:is(:hover, :focus-visible) {
   background: var(--hover);

@@ -15,7 +15,7 @@
   padding: 8px;
   border-bottom: 2px solid var(--accent);
   color: var(--accent);
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
   font-weight: 500;
 }
 .load-workspace .load-setup-content {

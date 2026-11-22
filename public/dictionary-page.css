@@ -25,7 +25,7 @@ body:not(.dark) .sidebar:has(> .dictionary-side-nav) {
   padding: 0 14px;
   border-radius: 5px 5px 0 0;
   background: var(--bg);
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
 }
 .dictionary-title-strip svg,
 .dictionary-side-nav svg {
@@ -77,7 +77,7 @@ body:not(.dark) .sidebar:has(> .dictionary-side-nav) {
   border-bottom: 2px solid transparent;
   border-radius: 0;
   background: transparent;
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
 }
 .dictionary-page .dictionary-tabs button[aria-selected="true"] {
   border-bottom-color: var(--accent);
@@ -109,7 +109,7 @@ body:not(.dark) .sidebar:has(> .dictionary-side-nav) {
   position: absolute;
   top: 6px;
   left: 10px;
-  font-size: 17px;
+  font-size: calc(17 * var(--app-type-unit));
   line-height: 18px;
   pointer-events: none;
 }
@@ -155,7 +155,7 @@ body:not(.dark) .sidebar:has(> .dictionary-side-nav) {
   justify-items: center;
   gap: 12px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
 }
 .dictionary-page .dictionary-empty:not([hidden]) {
   display: grid;
@@ -176,7 +176,7 @@ body:not(.dark) .sidebar:has(> .dictionary-side-nav) {
 .dictionary-page .dictionary-table th {
   height: 35px;
   background: var(--bg);
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
 }
 .dictionary-page .dictionary-table td {
   height: 42px;
@@ -203,7 +203,7 @@ body:not(.dark) .sidebar:has(> .dictionary-side-nav) {
   border-radius: 3px;
   background: var(--panel);
   color: var(--accent);
-  font-size: 11px;
+  font-size: calc(11 * var(--app-type-unit));
 }
 .dictionary-page .dictionary-row-actions {
   display: flex;
@@ -218,7 +218,7 @@ body:not(.dark) .sidebar:has(> .dictionary-side-nav) {
 }
 .dictionary-page .dictionary-models h2 {
   margin: 0 0 7px;
-  font-size: 23px;
+  font-size: calc(23 * var(--app-type-unit));
   font-weight: 600;
 }
 
@@ -264,10 +264,10 @@ body.compact-ui .dictionary-page .dictionary-model-shortcut {
 }
 #dialog:has(.dictionary-entry-editor) > form > header {
   padding-block: 16px 6px;
-  font-size: 16px;
+  font-size: calc(16 * var(--app-type-unit));
 }
 #dialog:has(.dictionary-entry-editor) > form > header button {
-  font-size: 20px;
+  font-size: calc(20 * var(--app-type-unit));
 }
 #dialog:has(.dictionary-entry-editor) > form > footer {
   gap: 8px;
@@ -295,7 +295,7 @@ body.compact-ui .dictionary-page .dictionary-model-shortcut {
 #dialog-content .dictionary-entry-editor label {
   margin: 0 0 6px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
   line-height: 16px;
 }
 #dialog-content .dictionary-entry-editor :is(input, select) {
@@ -378,7 +378,7 @@ body.compact-ui .dictionary-page .dictionary-model-shortcut {
   min-width: 0;
   border-color: transparent;
   padding: 4px 2px;
-  font-size: 16px;
+  font-size: calc(16 * var(--app-type-unit));
 }
 .workspace-model-draft .model-draft-header input:focus {
   border-color: var(--accent);
@@ -413,7 +413,7 @@ body.compact-ui .dictionary-page .dictionary-model-shortcut {
   padding: 0 12px;
 }
 .model-draft-schema h2 {
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
   font-weight: 500;
   margin: 0;
 }
@@ -606,7 +606,7 @@ body.dark .model-draft-schema .model-field-plus {
   border: 1px solid var(--line);
   border-radius: 4px;
   color: var(--muted);
-  font-size: 17px;
+  font-size: calc(17 * var(--app-type-unit));
   line-height: 1;
 }
 .model-schema-field .model-required-toggle[aria-pressed="true"] {

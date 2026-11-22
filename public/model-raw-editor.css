@@ -14,7 +14,7 @@
   min-height: 0;
   min-width: 0;
   font:
-    12px/16px Consolas,
+    calc(12 * var(--app-type-unit)) / calc(16 * var(--app-type-unit)) Consolas,
     monospace;
   font-variant-ligatures: none;
   tab-size: 4;

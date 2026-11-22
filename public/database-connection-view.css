@@ -21,7 +21,7 @@
 }
 .database-connection-config .database-connection-heading h1 {
   margin: 0;
-  font-size: 17px;
+  font-size: calc(17 * var(--app-type-unit));
 }
 .database-connection-page
   :is(
@@ -64,14 +64,14 @@
   border-bottom: 1px solid var(--line);
   padding: 9px 0;
   margin: 0 0 10px;
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
 }
 .database-query-section {
   margin-top: 14px;
 }
 .database-query-heading h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: calc(15 * var(--app-type-unit));
 }
 .database-query-heading {
   margin-bottom: 12px;
