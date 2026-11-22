@@ -39,6 +39,7 @@ import {
   workspaceDocumentById,
   workspaceDocumentHTML,
 } from "./workspace-document.js";
+import { bindWorkspaceDocumentScroll } from "./workspace-document-scroll.js";
 import { markdownEdit, markdownTools } from "./design-markdown.js";
 import { emptyCasePanel } from "./case-empty-view.js";
 import {
@@ -1566,7 +1567,7 @@ function render(preserveEditingFocus = false) {
             })
             .join(
               "",
-            )}${documentWorkspaceTabs(project, openedDocuments, doc?.id)}<button id="tab-add" class="ghost" aria-label="新建接口标签页">＋</button></div><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button id="open-environment-settings" type="button" class="ghost" title="环境设置" aria-label="环境设置" aria-haspopup="dialog">☷</button></div></div>${doc ? workspaceDocumentHTML(doc, { editing: documentModes.get(doc.id) === "edit", saving, status: (project.settings?.statuses || []).find((item) => item.id === doc.statusId)?.name }) : r ? editor(r) : '<div class="empty"><span class="empty-symbol">↗</span><p>从一个请求开始</p><small>创建或导入接口，所有数据只留在本机。</small><button id="welcome-add" class="primary">＋ 新建接口</button></div>'}`
+            )}${documentWorkspaceTabs(project, openedDocuments, doc?.id)}<button id="tab-add" class="ghost" aria-label="新建接口标签页">＋</button></div><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button id="open-environment-settings" type="button" class="ghost" title="环境设置" aria-label="环境设置" aria-haspopup="dialog">☷</button></div></div>${doc ? workspaceDocumentHTML(doc, { editing: documentModes.get(doc.id)?.view === "edit", saving, synchronized: documentModes.get(doc.id)?.synchronized !== false, status: (project.settings?.statuses || []).find((item) => item.id === doc.statusId)?.name }) : r ? editor(r) : '<div class="empty"><span class="empty-symbol">↗</span><p>从一个请求开始</p><small>创建或导入接口，所有数据只留在本机。</small><button id="welcome-add" class="primary">＋ 新建接口</button></div>'}`
         : renderPage()
     }</main></div><footer class="statusbar"><span>◈ 本地工作空间 &nbsp; / &nbsp; ${esc(project?.name || "")} &nbsp; <span id="saved-state">${dirty ? "● 未保存" : "✓ 已保存"}</span></span><span class="status-actions"><button id="compact-ui" aria-pressed="${compactUI}" title="隐藏项目树，保留导航和工作区">${compactUI ? "完整模式" : "精简模式"}</button><button id="response-layout" ${page !== "apis" || doc || mode !== "debug" ? "disabled" : ""} aria-pressed="${responseLayout === "split"}">${responseLayout === "split" ? "上下布局" : "左右布局"}</button><span>Local API 0.1.0</span></span></footer>`;
   bind();
@@ -6624,8 +6625,9 @@ function bindWorkspaceDocument() {
   prepareWorkspaceDocumentLinks(preview);
   on("#workspace-document-toggle", "click", () => {
     if (!active()) return;
-    const editing = documentModes.get(doc.id) !== "edit";
-    documentModes.set(doc.id, editing ? "edit" : "preview");
+    const prefs = documentModes.get(doc.id);
+    const editing = prefs?.view !== "edit";
+    documentModes.set(doc.id, { ...prefs, view: editing ? "edit" : "preview" });
     render();
     $(
       editing ? "#workspace-document-text" : "#workspace-document-toggle",
@@ -6648,6 +6650,21 @@ function bindWorkspaceDocument() {
     bindTree();
   });
   const input = $("#workspace-document-text");
+  const linked = $("#workspace-document-sync");
+  const scroll =
+    input &&
+    bindWorkspaceDocumentScroll(input, preview, {
+      active: () => active() && input.isConnected,
+      enabled: () => linked.checked,
+    });
+  on("#workspace-document-sync", "change", (_, checkbox) => {
+    if (!active() || !checkbox.isConnected) return;
+    documentModes.set(doc.id, {
+      ...documentModes.get(doc.id),
+      synchronized: checkbox.checked,
+    });
+  });
+  on("#workspace-document-top", "click", () => scroll?.top());
   let previewTimer;
   on("#workspace-document-text", "input", () => {
     if (!active() || !input.isConnected || doc.content === input.value) return;
@@ -6659,6 +6676,7 @@ function bindWorkspaceDocument() {
       if (active() && input.isConnected) {
         preview.innerHTML = renderMarkdown(doc.content);
         prepareWorkspaceDocumentLinks(preview);
+        scroll.refreshPreview();
       }
     }, 120);
   });
