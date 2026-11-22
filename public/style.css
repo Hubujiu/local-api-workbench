@@ -3774,11 +3774,28 @@ body:not(.dark) .plans-heading {
 .design-response-tools button {
   margin-inline-start: auto;
 }
-.design-response-tree,
+.design-response-schema-pane,
 .design-response-json {
   padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 4px;
+}
+.design-response-schema-pane {
+  padding: 0;
+}
+.design-response-schema-pane > .design-response-tools {
+  margin: 0;
+  padding: 2px 8px;
+  min-height: 41px;
+  border-bottom: 1px solid var(--line);
+}
+.design-response-schema-pane
+  :is(.design-response-tools > label, #design-response-media) {
+  min-width: 0;
+  max-width: 100%;
+}
+.design-response-tree {
+  padding: 0 8px 8px;
 }
 .design-response-json {
   margin-top: 10px;
@@ -3791,6 +3808,65 @@ body:not(.dark) .plans-heading {
   min-height: 41px;
   border-bottom: 1px solid var(--line);
   overflow-wrap: anywhere;
+}
+.design-response-root {
+  grid-template-columns: minmax(0, 28%) minmax(0, 44%) minmax(0, 1fr);
+}
+.design-response-root :is(button, .design-response-root-label) {
+  min-width: 0;
+  padding: 3px 6px;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.design-response-root #design-response-root-toggle {
+  justify-self: start;
+  color: var(--accent);
+}
+#design-response-root-toggle > span {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-end: 6px;
+  border-inline-end: 1px solid currentColor;
+  border-block-end: 1px solid currentColor;
+  transform: translateY(-2px) rotate(-45deg);
+}
+#design-response-root-toggle[aria-expanded="true"] > span {
+  transform: translateY(-2px) rotate(45deg);
+}
+.design-response-root-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.design-response-root .design-response-root-type {
+  min-height: 24px;
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--accent);
+}
+.design-response-root .design-response-root-add {
+  min-height: 26px;
+  color: var(--accent);
+}
+.design-response-root-description {
+  white-space: pre-wrap;
+}
+#design-response-root-form:not([hidden]) {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+#design-response-root-form > textarea {
+  min-height: 44px;
+  margin: 0;
+}
+.design-response-root-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .design-response-kind {
   color: var(--accent);

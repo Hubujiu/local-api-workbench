@@ -613,7 +613,7 @@ try {
   await page.locator("#dialog-save").click();
   await responseTab(/未找到.*404/).waitFor();
   assert.equal(await media.inputValue(), "text/plain");
-  const retained = JSON.parse(await rawResponses.inputValue())[1];
+  let retained = JSON.parse(await rawResponses.inputValue())[1];
   assert.equal(retained.content["text/plain"].example, "retain-me");
   assert.equal(retained.headers["X-Trace"].schema.type, "string");
   assert.deepEqual(retained.headers["X-Reason"], {
@@ -629,6 +629,147 @@ try {
     "object",
   );
   assert.deepEqual(put, []);
+
+  const rootDescription = responseRegion.getByRole("button", {
+    name: "编辑根节点描述",
+  });
+  const descriptionInput = responseRegion.getByRole("textbox", {
+    name: "根节点描述",
+  });
+  const quickType = responseRegion.getByRole("button", {
+    name: /^编辑根节点类型/,
+  });
+  const addRootField = responseRegion.getByRole("button", {
+    name: "添加根字段",
+  });
+  const rootToggle = responseRegion.getByRole("button", {
+    name: "根节点",
+    exact: true,
+  });
+  const applyRoot = responseRegion.getByRole("button", {
+    name: "应用到草稿",
+    exact: true,
+  });
+  const focused = async (locator) =>
+    locator.evaluate((element) => document.activeElement === element);
+  const definitionsBeforeRoot = await rawResponses.inputValue();
+  const narrow = { width: 360, height: 760 };
+  await page.setViewportSize(narrow);
+  assert.equal(
+    await quickType.count(),
+    0,
+    "text example makes quick type unsafe",
+  );
+  await rootDescription.press("Enter");
+  assert(await focused(descriptionInput));
+  await descriptionInput.fill("discard-on-media-switch");
+  await media.selectOption("application/json");
+  assert.equal(await descriptionInput.count(), 0);
+  assert.equal(await rawResponses.inputValue(), definitionsBeforeRoot);
+  assert.equal(
+    await quickType.count(),
+    0,
+    "managed JSON example also blocks quick type",
+  );
+  await media.selectOption("text/plain");
+  await rootDescription.press("Enter");
+  assert.equal(await descriptionInput.inputValue(), "");
+  await descriptionInput.fill("discard-on-escape");
+  await descriptionInput.press("Escape");
+  assert(await focused(rootDescription));
+  await rootDescription.press("Enter");
+  await descriptionInput.fill("仅 text/plain\n<svg>文本</svg>");
+  await applyRoot.click();
+  assert(await focused(rootDescription));
+  assert.equal(await rootDescription.locator("svg").count(), 0);
+  assert.deepEqual(JSON.parse(await rawResponses.inputValue())[1], {
+    ...retained,
+    content: {
+      ...retained.content,
+      "text/plain": {
+        ...retained.content["text/plain"],
+        schema: {
+          type: "string",
+          description: "仅 text/plain\n<svg>文本</svg>",
+        },
+      },
+    },
+  });
+  retained = JSON.parse(await rawResponses.inputValue())[1];
+
+  await responseTab(/200/).click();
+  assert.equal(await rootDescription.innerText(), "描述");
+  const saveRootModal = page.locator("#dialog-save");
+  const schemaTypes = page.getByRole("combobox", { name: "根类型" });
+  const fieldInput = page.getByRole("textbox", { name: "根字段名称" });
+  await quickType.press("Enter");
+  assert(await focused(schemaTypes));
+  assert.equal(
+    await schemaTypes
+      .locator("option")
+      .filter({ hasText: /^(array|null)$/ })
+      .count(),
+    0,
+  );
+  await schemaTypes.selectOption("number");
+  await schemaTypes.press("Escape");
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.waitForFunction(
+    () => document.activeElement?.id === "design-response-root-type",
+  );
+  assert.equal(await quickType.innerText(), "object");
+  await quickType.press("Enter");
+  await schemaTypes.selectOption("number");
+  await saveRootModal.click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  assert.deepEqual(
+    JSON.parse(await rawResponses.inputValue())[0].content["application/json"]
+      .schema,
+    {
+      type: "number",
+      properties: {},
+    },
+  );
+  await quickType.press("Enter");
+  await schemaTypes.selectOption("object");
+  await saveRootModal.click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await addRootField.press("Enter");
+  assert(await focused(fieldInput));
+  await fieldInput.fill("fixture-field");
+  await saveRootModal.click();
+  await page.locator("#dialog").waitFor({ state: "hidden" });
+  await page.waitForFunction(
+    () => document.activeElement?.id === "design-response-root-add",
+  );
+  const child = responseRegion.getByText("fixture-field", { exact: true });
+  await child.waitFor();
+  assert.equal(await rootToggle.getAttribute("aria-expanded"), "true");
+  await rootToggle.press("Enter");
+  await child.waitFor({ state: "hidden" });
+  assert.equal(await rootToggle.getAttribute("aria-expanded"), "false");
+  await responseTab(/404/).click();
+  assert.equal(
+    await rootToggle.count(),
+    0,
+    "disclosure belongs to the active media and status",
+  );
+  await responseTab(/200/).click();
+  assert.equal(await rootToggle.getAttribute("aria-expanded"), "false");
+  await rootToggle.press("Enter");
+  await child.waitFor();
+  assert.equal(
+    await quickType.count(),
+    0,
+    "adding a field fences quick type conversion",
+  );
+  assert.deepEqual(JSON.parse(await rawResponses.inputValue())[1], retained);
+  assert.equal(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+    narrow.width,
+  );
+  assert.deepEqual(put, []);
+  await page.setViewportSize({ width: 1363, height: 1023 });
 
   await page.locator("#save").click();
   await page
@@ -686,6 +827,10 @@ try {
     .waitFor();
   const reloadedResponses = JSON.parse(await rawResponses.inputValue());
   assert.deepEqual(reloadedResponses[1], retained);
+  assert.deepEqual(reloadedResponses[0].content["application/json"].schema, {
+    type: "object",
+    properties: { "fixture-field": { type: "string" } },
+  });
   assert.deepEqual(forbidden, []);
   assert.deepEqual(errors, []);
   const openProfile = async () => {
