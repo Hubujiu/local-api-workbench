@@ -92,6 +92,11 @@ import {
   ownsDebugPairComposer,
 } from "./debug-pair-composer.js";
 import {
+  canComposeDesignPair,
+  designPairComposer,
+  isDesignPairKind,
+} from "./design-pair-composer.js";
+import {
   httpRequestActions,
   requestCurlAction,
 } from "./http-request-actions.js";
@@ -182,6 +187,10 @@ import {
   scopedExportRequest,
   assertScopedExportResult,
 } from "./scoped-export-view.js";
+import {
+  bindGraphQLExportNotice,
+  graphqlExportNoticeHTML,
+} from "./graphql-export-notice.js";
 import { createProtocolSessionController } from "./protocol-session-controller.js";
 import {
   planStructureEditor,
@@ -2136,9 +2145,9 @@ function pairs(rows, key, designOptions, debugOptions, formBodyType) {
       : queryEquality + "参数值";
   if (debugComposer && !rows.length)
     return `<table class="pairs-table request-pairs-table debug-pairs-table debug-pairs-empty"><colgroup><col span="3"></colgroup><thead><tr><th scope="col" class="debug-pair-name-heading">参数名</th><th scope="col">${valueHeading}</th><th scope="col">描述</th></tr></thead><tbody>${debugPairComposer(key, true)}</tbody></table>`;
-  const compactEmpty =
-    design && (key === "headers" || key === "query") && !rows.length;
-  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}"><thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${compactEmpty ? `<tr><td colspan="4"><button type="button" class="ghost design-empty-pair" data-add-pair="${key}">＋ 添加参数</button></td></tr>` : ""}${rows
+  const designComposer = design && isDesignPairKind(key);
+  const compactEmpty = designComposer && !rows.length;
+  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}"><thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${rows
     .map((p, i) => {
       const form = key === "form";
       const fileLike = form ? formFileRepresentation(p) : p.type === "file";
@@ -2157,7 +2166,7 @@ function pairs(rows, key, designOptions, debugOptions, formBodyType) {
     })
     .join(
       "",
-    )}${debugComposer ? debugPairComposer(key, false) : ""}</tbody></table>${compactEmpty || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
+    )}${debugComposer ? debugPairComposer(key, false) : designComposer ? designPairComposer(key, compactEmpty) : ""}</tbody></table>${designComposer || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
 }
 function bodyParameterHelper(r, tabbed) {
   const reference = `<button type="button" class="raw-helper-action-card" id="raw-helper-reference-variable" aria-label="引用变量"><span class="raw-helper-variable-icon">${lineIcon("helper-variable")}</span><span><strong>引用变量</strong><small>引用已配置的环境、集合或全局变量</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
@@ -4984,10 +4993,44 @@ function bind() {
   };
   on("[data-debug-pair-name]", "input", commitDebugPair);
   on("[data-debug-pair-name]", "compositionend", commitDebugPair);
+  const ownsDesignPair = (input, kind) =>
+    input.isConnected &&
+    input.closest(".design-parameter-panel") &&
+    project === composerProject &&
+    request() === composerRequest &&
+    !workspaceDocument() &&
+    canComposeDesignPair(kind, page, mode, designParameter);
+  const commitDesignPair = (event, input) => {
+    const kind = input.dataset.designPairName;
+    if (event.isComposing || !ownsDesignPair(input, kind)) return;
+    const row = debugPairFromKey(input.value);
+    if (!row) return;
+    collect();
+    const canvas = $(".http-design-canvas");
+    const top = canvas?.scrollTop ?? 0;
+    const { selectionStart, selectionEnd, selectionDirection } = input;
+    const rows = composerRequest[kind];
+    const index = rows.length;
+    rows.push(row);
+    mark();
+    render();
+    if ($(".http-design-canvas")) $(".http-design-canvas").scrollTop = top;
+    const next = $(`[data-pair="${kind}:${index}:key"]`);
+    next?.focus({ preventScroll: true });
+    if (selectionStart !== null && selectionEnd !== null)
+      next?.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+  };
+  on("[data-design-pair-name]", "input", commitDesignPair);
+  on("[data-design-pair-name]", "compositionend", commitDesignPair);
   on("[data-add-pair]", "click", (_, e) => {
     if (staleDebugFormControl(e)) return;
-    if (mode === "design") collect();
     const key = e.dataset.addPair;
+    if (e.closest(".design-pair-composer")) {
+      if (ownsDesignPair(e, key))
+        $(`[data-design-pair-name="${key}"]`)?.focus({ preventScroll: true });
+      return;
+    }
+    if (mode === "design") collect();
     if (key === "form" && e.closest(".debug-urlencoded-editor")) {
       $("#debug-urlencoded-new-key")?.focus();
       return;
@@ -5445,7 +5488,8 @@ function bind() {
   on("#export", "click", () => {
     modal(
       "导出项目",
-      '<button id="scoped-export-open">选择资源导出定义（预览范围和依赖）</button><hr><p>以下为整项目导出；本地项目 JSON 是完整备份，包含环境及历史。</p><label>整项目格式</label><select id="export-format"><option value="native">本地项目 JSON（包含环境和历史）</option><option value="openapi">OpenAPI 3 JSON（接口定义）</option></select><p class="notice">导出内容可能包含密钥、请求凭据和响应数据，请检查后再分享。</p>',
+      '<button id="scoped-export-open">选择资源导出定义（预览范围和依赖）</button><hr><p>以下为整项目导出；本地项目 JSON 是完整备份，包含环境及历史。</p><label>整项目格式</label><select id="export-format"><option value="native">本地项目 JSON（包含环境和历史）</option><option value="openapi">OpenAPI 3 JSON（接口定义）</option></select><p class="notice">导出内容可能包含密钥、请求凭据和响应数据，请检查后再分享。</p>' +
+        graphqlExportNoticeHTML(project),
       async () => {
         await save();
         const format = $("#export-format").value;
@@ -5456,6 +5500,7 @@ function bind() {
       },
       "导出",
     );
+    bindGraphQLExportNotice($("#dialog-content"));
     $("#scoped-export-open").onclick = () => {
       try {
         openScopedDefinitionExport();
