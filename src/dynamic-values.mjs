@@ -1,3 +1,4 @@
+import { activeGraphQLRequest } from "../public/graphql-named-queries.js";
 import {
   renderGraphQLVariableTemplate,
   validateGraphQLVariableTemplate,
@@ -402,6 +403,7 @@ export async function resolveDynamicRequest(
   interpolate,
   finalBody,
 ) {
+  request = activeGraphQLRequest(request);
   validateQueryArrayRequest(request);
   validateHeaderObjectRequest(request);
   validateCookieObjectRequest(request);

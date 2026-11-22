@@ -31,6 +31,14 @@ import { apiCreateMenu, bindApiCreateMenu } from "./api-create-menu.js";
 import { createGraphQLSchemaDirectory } from "./graphql-schema-directory.js";
 import { newGraphQLEditorRequest } from "./graphql-editor.js";
 import {
+  prepareGraphQLNamedQueryChange,
+  readGraphQLNamedQueries,
+} from "./graphql-named-queries.js";
+import {
+  createGraphQLResponseFence,
+  defaultNamedQuery,
+} from "./graphql-named-workspace.js";
+import {
   bindGraphQLWorkspace,
   createGraphQLWorkspaceDrafts,
   graphqlWorkspaceHTML,
@@ -359,6 +367,7 @@ const $ = (s) => document.querySelector(s),
     );
 const uid = () => crypto.randomUUID();
 const responses = new Map();
+const graphqlResponseFence = createGraphQLResponseFence();
 const openDesignDescriptions = new WeakMap();
 const designParameterTabs = [
   ["headers", "Header"],
@@ -4393,17 +4402,110 @@ function bind() {
   if (graphqlEditor) {
     const owner = project;
     const target = request();
+    const owns = () =>
+      project === owner &&
+      request() === target &&
+      page === "apis" &&
+      mode === "debug" &&
+      param === "graphql" &&
+      !workspaceDocument();
+    const focusNamed = (id, menu = false) =>
+      id &&
+      $(
+        `[data-graphql-query-${menu ? "menu" : "row"}="${CSS.escape(id)}"]`,
+      )?.focus({ preventScroll: true });
+    const namedState = (withinOwnedDialog = false) => {
+      if (!owns() || !graphqlEditor.isConnected)
+        throw Error("GraphQL 查询或窗口已变化，请重新操作。");
+      if (busy || saving)
+        throw Error("请先结束请求或保存，再更改 GraphQL 查询。");
+      if (!withinOwnedDialog && $("#dialog").open)
+        throw Error("请先结束当前对话框。");
+      if (graphqlDrafts.pending(target)) throw Error(unappliedGraphQL);
+      const state = readGraphQLNamedQueries(target);
+      if (!state) throw Error("当前正文无法编辑命名查询。");
+      return state;
+    };
+    const changeNamed = (action, focus, withinOwnedDialog = false) => {
+      const { activeId } = namedState(withinOwnedDialog);
+      const next = prepareGraphQLNamedQueryChange(target, action);
+      if (!next) return false;
+      const selected = next.graphqlNamedQueries.activeId;
+      Object.assign(target, next);
+      if (activeId !== selected) {
+        const key = owner.id + ":" + target.id;
+        graphqlResponseFence.clear(key);
+        responses.delete(key);
+        response = null;
+        responseTab = "body";
+      }
+      mark();
+      render();
+      focus?.(selected);
+      return true;
+    };
+    const arrangeNamed = (type, id) => {
+      const item = namedState().items.find((value) => value.id === id);
+      if (!item || $("#dialog").open) return;
+      const version = editVersion;
+      const body = target.body;
+      const collection = target.graphqlNamedQueries;
+      const rename = type === "rename";
+      let dialogVersion,
+        changed = false;
+      modal(
+        rename ? "重命名查询" : "删除查询",
+        rename
+          ? `<label for="graphql-named-rename">查询名称</label><input id="graphql-named-rename" value="${esc(item.name)}" maxlength="80" spellcheck="false">`
+          : `<p>确认删除查询「${esc(item.name)}」？改动只更新当前接口草稿，保存项目后生效。</p>`,
+        () => {
+          if (
+            modalRevision !== dialogVersion ||
+            !$("#dialog").open ||
+            editVersion !== version ||
+            target.body !== body ||
+            target.graphqlNamedQueries !== collection
+          )
+            throw Error("GraphQL 查询或窗口已变化，请重新操作。");
+          const action = rename
+            ? { type, id, name: $("#graphql-named-rename").value }
+            : { type, id };
+          changed = changeNamed(action, undefined, true);
+        },
+        rename ? "确定" : "删除",
+        () => {
+          if (!owns()) return;
+          if (rename || !changed) focusNamed(id, true);
+          else focusNamed(readGraphQLNamedQueries(target)?.activeId);
+        },
+      );
+      dialogVersion = modalRevision;
+      if (!rename) $('#dialog footer button[value="cancel"]')?.focus();
+    };
     bindGraphQLWorkspace(graphqlEditor, {
       request: target,
       drafts: graphqlDrafts,
       directory: graphqlSchemaDirectory,
-      owns: () =>
-        project === owner &&
-        request() === target &&
-        page === "apis" &&
-        mode === "debug" &&
-        param === "graphql" &&
-        !workspaceDocument(),
+      named: {
+        add: (keyboard) =>
+          changeNamed(
+            {
+              type: "add",
+              id: uid(),
+              name: defaultNamedQuery(namedState().items),
+            },
+            keyboard
+              ? () => $("#graphql-query")?.focus({ preventScroll: true })
+              : undefined,
+          ),
+        select: (id, keyboard) =>
+          changeNamed(
+            { type: "select", id },
+            keyboard ? (selected) => focusNamed(selected) : undefined,
+          ),
+        arrange: arrangeNamed,
+      },
+      owns,
       revised: () => editVersion++,
       changed: mark,
       redraw: () => {
@@ -4411,6 +4513,8 @@ function bind() {
         $("#graphql-query")?.focus({ preventScroll: true });
       },
       detach: () => {
+        if (target.graphqlNamedQueries)
+          throw Error("请将所需查询复制到独立 HTTP 接口。");
         collect();
         delete target.graphqlEditorVersion;
         graphqlSchemaDirectory.clear(target);
@@ -7762,6 +7866,10 @@ async function send() {
     projectId = project.id,
     revision = project.revision;
   const snapshot = structuredClone(request());
+  const responseKey = projectId + ":" + targetId;
+  const namedGraphQL = snapshot.graphqlEditorVersion === 1;
+  const graphqlEpoch =
+    namedGraphQL && graphqlResponseFence.capture(responseKey);
   const environmentId = env();
   const reveal = manualResponseView.capture(
     readAfterSendResponse(localStorage),
@@ -7794,8 +7902,10 @@ async function send() {
   } catch (error) {
     result = { error: error.message };
   } finally {
-    responses.set(projectId + ":" + targetId, result);
-    if (project.id === projectId && current === targetId) {
+    const stillNamesGraphQL =
+      !namedGraphQL || graphqlResponseFence.current(responseKey, graphqlEpoch);
+    if (stillNamesGraphQL) responses.set(responseKey, result);
+    if (stillNamesGraphQL && project.id === projectId && current === targetId) {
       response = result;
       if (
         manualResponseView.shouldReveal(
