@@ -271,7 +271,12 @@ try {
   await applyRaw.press("Enter");
   await dialog.waitFor({ state: "hidden" });
   await children.getByText("integer", { exact: true }).waitFor();
-  assert(await children.getByText("必填", { exact: true }).isVisible());
+  assert.equal(
+    await children
+      .getByRole("button", { name: "identifier 必需", exact: true })
+      .getAttribute("aria-pressed"),
+    "true",
+  );
   assert(
     await children.getByText("Synthetic value", { exact: true }).isVisible(),
   );

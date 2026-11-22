@@ -596,3 +596,29 @@ body.dark .model-draft-schema .model-field-plus {
     padding-inline: 12px;
   }
 }
+
+.model-schema-field .model-required-toggle {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1;
+}
+.model-schema-field .model-required-toggle[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--hover);
+  border-color: var(--accent);
+}
+body.dark .model-schema-field .model-required-toggle[aria-pressed="true"] {
+  color: var(--text);
+}
+@media (min-width: 1240px) {
+  .model-schema-field .model-required-toggle {
+    margin-inline-start: 14px;
+  }
+}

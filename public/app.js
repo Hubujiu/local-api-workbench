@@ -158,6 +158,7 @@ import {
   removeEmptyModelFolder,
 } from "./model-folder-actions.js";
 import { saveModel } from "./model-edit.js";
+import { setWorkspaceModelFieldRequired } from "./model-workspace-required.js";
 import {
   bindModelFieldTypeMenu,
   changeWorkspaceModelFieldType,
@@ -6432,6 +6433,20 @@ function bindWorkspaceModel() {
       render();
       reveal("#model-type-trigger-" + index);
     },
+  });
+  on("[data-model-required]", "click", (_, control) => {
+    if (!current() || !control.isConnected) return;
+    const index = Number(control.dataset.modelRequired);
+    const required = control.getAttribute("aria-pressed") !== "true";
+    const schema = setWorkspaceModelFieldRequired(
+      draft.schema,
+      index,
+      required,
+    );
+    if (schema === draft.schema) return;
+    draft.replaceSchema(schema);
+    render();
+    reveal("#model-required-" + index);
   });
   const fieldInput = (id) => "#model-field-name-" + id;
   const startField = (after) => {

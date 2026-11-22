@@ -1,4 +1,5 @@
 import { addSchemaProperty, schemaRows } from "./schema-editor.js";
+import { isModelRequiredProperty } from "./model-workspace-required.js";
 import {
   isModelTypeProperty,
   modelFieldTypeMenuHTML,
@@ -108,7 +109,12 @@ function fieldRow(row, index) {
   const typeCell = isModelTypeProperty(row)
     ? `<button id="model-type-trigger-${index}" class="ghost model-draft-type" type="button" data-model-type-trigger="${index}" data-model-type-current="${type}" aria-haspopup="menu" aria-expanded="false" aria-controls="model-field-type-menu" aria-label="${esc(row.name)} 的字段类型：${type}">${type}</button>`
     : `<span class="model-draft-type">${type}</span>`;
-  return `<li class="model-tree-row model-schema-field" data-model-field-depth="${depth}"><span class="model-field-name">${esc(row.name)}</span><span class="model-field-type">${typeCell}</span><span class="model-field-required">${row.required ? "必填" : ""}</span><span class="model-field-description muted">${esc(describe(row.schema))}</span></li>`;
+  const requiredControl = isModelRequiredProperty(row)
+    ? `<button id="model-required-${index}" class="ghost model-required-toggle" type="button" data-model-required="${index}" aria-label="${esc(row.name)} 必需" title="必需" aria-pressed="${row.required}"><span aria-hidden="true">∗</span></button>`
+    : row.required
+      ? "必填"
+      : "";
+  return `<li class="model-tree-row model-schema-field" data-model-field-depth="${depth}"><span class="model-field-name">${esc(row.name)}</span><span class="model-field-type">${typeCell}</span><span class="model-field-required">${requiredControl}</span><span class="model-field-description muted">${esc(describe(row.schema))}</span></li>`;
 }
 
 function pendingRow(row) {
