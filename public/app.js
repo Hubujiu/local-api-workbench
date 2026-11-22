@@ -2456,8 +2456,11 @@ function paintSSECapture() {
   const owner = selectedSSEOwner();
   const status = $("#sse-capture-status");
   if (!owner || !status) return;
-  const view = sseCaptureView(sseCaptures.current(owner));
+  const view = sseCaptureView(sseCaptures.current(owner), owner.definitionUrl);
   status.textContent = view.notice;
+  const targetNote = $("#sse-capture-target-note");
+  targetNote.textContent = view.targetNote;
+  targetNote.hidden = !view.targetNote;
   $("#protocol-result").textContent = view.result;
   $("#cancel").disabled = !view.canCancel;
   $("#protocol-run").disabled = busy || view.blocksStart;
@@ -5378,7 +5381,7 @@ function bind() {
       }
       paintSSECapture();
       try {
-        await api("/cancel", "POST", { id: attempt.runId });
+        await api("/cancel", "POST", { id: attempt.dispatch.runId });
       } catch {
         // The acknowledgement is not proof of stop either way. Only the
         // original run response or the matching terminal record can settle it.

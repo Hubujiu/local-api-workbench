@@ -14,7 +14,7 @@ export function selectedSSEWorkbench(
   { busy, session, status, events, capture },
 ) {
   if (item?.type !== "sse") return "";
-  const captureView = sseCaptureView(capture);
+  const captureView = sseCaptureView(capture, item.url);
   return `<section class="selected-sse-workbench" aria-label="SSE 调试">
     <header class="sse-workbench-tab"><strong>SSE</strong><span>${esc(item.name)}</span></header>
     <section class="sse-workbench-setup" aria-label="连接配置">
@@ -43,7 +43,7 @@ export function selectedSSEWorkbench(
         <button id="session-refresh">核对会话</button>
         <button id="session-export">导出消息</button>
       </div>
-      <section class="sse-workbench-result" aria-label="单次采集结果"><h3>单次采集结果</h3><p id="sse-capture-status" role="status">${esc(captureView.notice)}</p><button id="sse-capture-check" ${captureView.needsCheck ? "" : "hidden"} ${captureView.canCheck ? "" : "disabled"}>只读核对采集记录</button> <button id="sse-capture-abandon" ${captureView.needsCheck ? "" : "hidden"} ${captureView.canCheck ? "" : "disabled"}>结束本次核对</button><pre id="protocol-result">${esc(captureView.result)}</pre></section>
+      <section class="sse-workbench-result" aria-label="单次采集结果"><h3>单次采集结果</h3><p id="sse-capture-status" role="status">${esc(captureView.notice)}</p><p id="sse-capture-target-note" ${captureView.targetNote ? "" : "hidden"}>${esc(captureView.targetNote)}</p><button id="sse-capture-check" ${captureView.needsCheck ? "" : "hidden"} ${captureView.canCheck ? "" : "disabled"}>只读核对采集记录</button> <button id="sse-capture-abandon" ${captureView.needsCheck ? "" : "hidden"} ${captureView.canCheck ? "" : "disabled"}>结束本次核对</button><pre id="protocol-result">${esc(captureView.result)}</pre></section>
       <section class="sse-workbench-events" aria-label="会话事件"><pre id="session-events">${esc(events)}</pre><p class="sse-workbench-empty muted">尚无会话事件</p></section>
       <div class="sse-workbench-message">
         <label>发送消息（仅适用可发送的会话）<textarea id="protocol-message"></textarea></label>
