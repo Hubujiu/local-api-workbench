@@ -53,11 +53,10 @@ try {
   await page.route("**/*", (route) => {
     const req = route.request();
     const url = new URL(req.url());
-    if (
-      url.origin === origin &&
-      req.method() === "GET" &&
-      !/database|execute/.test(url.pathname)
-    )
+    // Block actual API calls, not static modules such as /database-manager.js.
+    const prohibitedAPI =
+      url.pathname.startsWith("/api/") && /database|execute/.test(url.pathname);
+    if (url.origin === origin && req.method() === "GET" && !prohibitedAPI)
       return route.continue();
     blocked.push(req.method());
     return route.abort();
@@ -77,9 +76,7 @@ try {
   const menu = page.getByRole("menu", { name: "添加操作项", exact: true });
   const item = (label) =>
     menu.getByRole("menuitem", { name: label, exact: true });
-  const disclosure = panel
-    .locator("summary")
-    .filter({ hasText: "脚本与高级设置" });
+  const disclosure = panel.locator("#http-post-advanced > summary");
   const postCode = panel.getByRole("textbox", {
     name: "接口脚本",
     exact: true,
