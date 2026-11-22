@@ -5,6 +5,12 @@ import {
   formTextExample,
 } from "./form-field-types.js";
 import {
+  compactHTTPBodySelector,
+  httpBodyFamily,
+  httpBodyModesHTML,
+  httpBodyRadios,
+} from "./http-body-modes.js";
+import {
   debugMultipartEditor,
   isDebugMultipart,
   newMultipartTextRow,
@@ -2367,7 +2373,16 @@ function paramPanel(r, param, design = false) {
     const binary = r.bodyType === "binary";
     const expandLabel = bodyExpanded ? "收起编辑器" : "展开编辑器";
     const tabbedHelper = helperOpen && debugRawJSON && useTabbedRawHelper();
-    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${!design && (r.bodyType === "none" || debugRawJSON || multipart || urlencoded || binary) ? `<span class="body-type-caption" title="${type}">${type}</span>` : type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div>${r.bodyType === "none" || multipart || urlencoded || binary ? "" : `<div class="body-actions${debugRawJSON ? " http-debug-raw-actions" : ""}"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">请求体 · 保存在本地</span><button id="format-json" class="ghost"${debugRawJSON ? ' aria-label="格式化 JSON"' : ""}>${debugRawJSON ? "美化" : "格式化 JSON"}</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${debugRawJSON ? `<span class="debug-raw-expand-icon">${lineIcon("editor-expand")}</span><span class="debug-raw-expand-label">${expandLabel}</span>` : expandLabel}</button>`}</div>`}${
+    return `${httpBodyModesHTML(r.bodyType, {
+      polish:
+        !design &&
+        (r.bodyType === "none" ||
+          debugRawJSON ||
+          multipart ||
+          urlencoded ||
+          binary),
+      compact: !design && mode === "debug" && r.graphqlEditorVersion !== 1,
+    })}${r.bodyType === "none" || multipart || urlencoded || binary ? "" : `<div class="body-actions${debugRawJSON ? " http-debug-raw-actions" : ""}"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">请求体 · 保存在本地</span><button id="format-json" class="ghost"${debugRawJSON ? ' aria-label="格式化 JSON"' : ""}>${debugRawJSON ? "美化" : "格式化 JSON"}</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${debugRawJSON ? `<span class="debug-raw-expand-icon">${lineIcon("editor-expand")}</span><span class="debug-raw-expand-label">${expandLabel}</span>` : expandLabel}</button>`}</div>`}${
       binary
         ? binaryBodyHTML(r, { debug: !design, icon: lineIcon })
         : multipart
@@ -5209,89 +5224,113 @@ function bind() {
       toast,
     });
   }
-  on('input[name="body-type"],#raw-format', "change", (_, e) => {
-    const r = request();
-    const restorePreviousRadio = (focus) => {
-      const previous = ["raw", "json"].includes(r.bodyType)
-        ? "raw"
-        : r.bodyType;
-      const last = [
-        ...document.querySelectorAll('input[name="body-type"]'),
-      ].find((radio) => radio.value === previous);
-      if (last) {
-        last.checked = true;
-        if (focus) last.focus({ preventScroll: true });
-      }
-    };
-    const keepRadioFocus = e.matches(":focus-visible");
-    const binaryBoundary =
-      e.name === "body-type" &&
-      (r.bodyType === "binary" || e.value === "binary");
-    const nextType = e.value === "raw" ? "json" : e.value;
-    if (
-      e.name === "body-type" &&
-      e.value === "urlencoded" &&
-      r.bodyType !== "urlencoded" &&
-      unsupportedURLencodedForm(r.form)
-    ) {
-      restorePreviousRadio(keepRadioFocus);
-      throw Error(
-        "URLencoded 不支持文件或 multipart 分项内容类型；请先处理对应表单字段。",
-      );
-    }
-    if (binaryBoundary) {
-      let change;
-      try {
-        change = prepareBinaryBodyChange(r, nextType);
-      } catch (error) {
-        restorePreviousRadio(keepRadioFocus);
-        throw error;
-      }
-      if (!change) return;
+  const bodyModeOwner = project;
+  const bodyModeRequest = request();
+  on(
+    httpBodyRadios + ",#raw-format," + compactHTTPBodySelector,
+    "change",
+    (_, control) => {
+      const r = request();
       if (
-        change.clear &&
-        !confirm(
-          "切换二进制正文格式会清除当前正文，避免在另一格式中使用。确定继续？",
-        )
+        !control.isConnected ||
+        project !== bodyModeOwner ||
+        r !== bodyModeRequest
+      )
+        return;
+      const compact = control.matches(compactHTTPBodySelector);
+      if (
+        compact &&
+        (control.disabled ||
+          !control.closest(".editor[data-http-response-layout].split-layout"))
+      )
+        return;
+      const familyChange = compact || control.matches(httpBodyRadios);
+      const value = control.value;
+      const previousFamily = httpBodyFamily(r.bodyType);
+      const radios = [...document.querySelectorAll(httpBodyRadios)];
+      const chosen = radios.find((radio) => radio.value === value);
+      if (familyChange && (!chosen || value === previousFamily)) return;
+      const keepFocus = compact || control.matches(":focus-visible");
+      const focusSelector = compact
+        ? compactHTTPBodySelector
+        : httpBodyRadios + ":checked";
+      const restoreFamily = () => {
+        for (const radio of radios)
+          radio.checked = radio.value === previousFamily;
+        if (compact) control.value = previousFamily;
+        if (keepFocus) $(focusSelector)?.focus({ preventScroll: true });
+      };
+      const nextType = value === "raw" ? "json" : value;
+      if (
+        familyChange &&
+        value === "urlencoded" &&
+        unsupportedURLencodedForm(r.form)
       ) {
-        restorePreviousRadio(keepRadioFocus);
+        restoreFamily();
+        throw Error(
+          "URLencoded 不支持文件或 multipart 分项内容类型；请先处理对应表单字段。",
+        );
+      }
+      if (familyChange && (r.bodyType === "binary" || value === "binary")) {
+        let change;
+        try {
+          change = prepareBinaryBodyChange(r, nextType);
+        } catch (error) {
+          restoreFamily();
+          throw error;
+        }
+        if (!change) return;
+        if (
+          change.clear &&
+          !confirm(
+            "切换二进制正文格式会清除当前正文，避免在另一格式中使用。确定继续？",
+          )
+        ) {
+          restoreFamily();
+          return;
+        }
+        // Collect under the original format; never temporarily retype its bytes.
+        restoreFamily();
+        collect();
+        r.body = "";
+        r.bodyType = change.nextType;
+        bodyExpanded = false;
+        mark();
+        render();
+        if (keepFocus) $(focusSelector)?.focus({ preventScroll: true });
         return;
       }
-      // Collect under the original format; never temporarily retype its bytes.
-      restorePreviousRadio(keepRadioFocus);
-      collect();
-      r.body = "";
-      r.bodyType = change.nextType;
-      bodyExpanded = false;
+      const restoreDebugBodyFocus =
+        mode === "debug" &&
+        familyChange &&
+        keepFocus &&
+        (compact ||
+          value === "none" ||
+          value === "form-data" ||
+          (value === "urlencoded" &&
+            isDebugURLencoded(page, mode, param, { ...r, bodyType: value })) ||
+          control
+            .closest(".request-panel")
+            ?.querySelector(
+              ":scope > :is(.body-none, .debug-multipart-editor, .debug-urlencoded-editor)",
+            ));
+      if (compact) chosen.checked = true;
+      try {
+        collect();
+      } catch (error) {
+        if (familyChange) restoreFamily();
+        throw error;
+      }
+      if (["none", "form-data", "urlencoded"].includes(value))
+        bodyExpanded = false;
+      if (familyChange && value === "raw" && !$("#raw-format"))
+        r.bodyType = "json";
       mark();
       render();
-      if (keepRadioFocus)
-        $('input[name="body-type"]:checked')?.focus({ preventScroll: true });
-      return;
-    }
-    const restoreDebugBodyRadio =
-      mode === "debug" &&
-      e.name === "body-type" &&
-      keepRadioFocus &&
-      (e.value === "none" ||
-        e.value === "form-data" ||
-        (e.value === "urlencoded" &&
-          isDebugURLencoded(page, mode, param, { ...r, bodyType: e.value })) ||
-        e
-          .closest(".request-panel")
-          ?.querySelector(
-            ":scope > :is(.body-none, .debug-multipart-editor, .debug-urlencoded-editor)",
-          ));
-    collect();
-    if (["none", "form-data", "urlencoded"].includes(e.value))
-      bodyExpanded = false;
-    if (e.name === "body-type" && e.value === "raw" && !$("#raw-format"))
-      request().bodyType = "json";
-    mark();
-    render();
-    if (restoreDebugBodyRadio)
-      $('input[name="body-type"]:checked')?.focus({ preventScroll: true });
-  });
+      if (restoreDebugBodyFocus)
+        $(focusSelector)?.focus({ preventScroll: true });
+    },
+  );
   on("#expand-body", "click", () => {
     collect();
     bodyExpanded = !bodyExpanded;

@@ -6434,3 +6434,40 @@ body.dark .design-parameter-panel [data-query-type-color="boolean"] {
     column-gap: 0;
   }
 }
+
+#http-split-body-family {
+  display: none;
+}
+.editor[data-http-response-layout].split-layout > .request-panel > .body-types {
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding-inline-start: 4px;
+}
+.editor[data-http-response-layout].split-layout
+  > .request-panel
+  > .body-types
+  > label:has(> input[name="body-type"]) {
+  display: none;
+}
+.editor[data-http-response-layout].split-layout #http-split-body-family {
+  display: block;
+  width: max-content;
+  min-width: 60px;
+  max-width: 100%;
+  height: 30px;
+  padding-inline: 8px 4px;
+  border-color: var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--bg);
+}
+.editor[data-http-response-layout].split-layout
+  #http-split-body-family:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.editor[data-http-response-layout].split-layout
+  #http-split-body-family:has(option[value="none"]:checked) {
+  width: 60px;
+}
