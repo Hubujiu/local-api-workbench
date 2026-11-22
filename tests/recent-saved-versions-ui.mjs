@@ -113,6 +113,11 @@ try {
     await panel.getByText("起始版本（首次记录）", { exact: true }).isVisible(),
   );
   assert.equal(await panel.locator("[data-history]").count(), 0);
+  assert.equal(
+    await panel.getByRole("checkbox").count(),
+    0,
+    "dirty owner cannot select saved snapshots",
+  );
   const bounds = () =>
     panel.evaluate((node) => {
       const rect = (selector) =>
