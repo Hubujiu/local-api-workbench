@@ -103,6 +103,28 @@ try {
   const menu = rail.getByRole("menu", { name: "查询操作", exact: true });
   const rename = menu.getByRole("menuitem", { name: "重命名", exact: true });
   const remove = menu.getByRole("menuitem", { name: "删除", exact: true });
+  const deletion = pane.getByRole("alertdialog", { name: "删除", exact: true });
+  const cancelDelete = deletion.getByRole("button", {
+    name: "取消",
+    exact: true,
+  });
+  const applyDelete = deletion.getByRole("button", {
+    name: "确定",
+    exact: true,
+  });
+  const openDelete = async (name) => {
+    await more(name).press("ArrowUp");
+    assert.equal(await focus(remove), true);
+    await remove.press("Enter");
+    await deletion.waitFor();
+    assert.equal(await focus(cancelDelete), true);
+    const description = await deletion.evaluate(
+      (node) =>
+        node.ownerDocument.getElementById(node.getAttribute("aria-describedby"))
+          .textContent,
+    );
+    assert(description.includes(name));
+  };
   const escape = () => page.keyboard.press("Escape");
   const capture = async (label, narrow = false) => {
     const dir = process.env.GRAPHQL_NAMED_WORKSPACE_EVIDENCE;
@@ -194,21 +216,52 @@ try {
   assert.equal(Math.round(bounds.x), 371);
   assert.equal(Math.round(bounds.width), 188);
 
+  await openDelete("Second Fixture");
+  const desktopDelete = await deletion.boundingBox();
+  console.log("GRAPHQL_NAMED_DELETE_GEOMETRY", JSON.stringify(desktopDelete));
+  await capture("delete");
+  assert(Math.abs(desktopDelete.x - 496) <= 3);
+  assert(Math.abs(desktopDelete.y - 243) <= 6);
+  assert.deepEqual(
+    [desktopDelete.width, desktopDelete.height].map(Math.round),
+    [128, 96],
+  );
+  await cancelDelete.press("Tab");
+  assert.equal(await focus(applyDelete), true);
+  await applyDelete.press("Shift+Tab");
+  assert.equal(await focus(cancelDelete), true);
+  await cancelDelete.press("Control+s");
+  await cancelDelete.press("Control+Enter");
+  assert.equal(await deletion.isVisible(), true);
+  await escape();
+  await deletion.waitFor({ state: "hidden" });
+  assert.equal(await focus(more("Second Fixture")), true);
+  assert.equal(await activeName(), "Second Fixture");
+
+  await openDelete("Second Fixture");
+  await query.click({ position: { x: 260, y: 20 } });
+  await deletion.waitFor({ state: "hidden" });
+  assert.equal(await focus(query), true);
+  assert.equal(await activeName(), "Second Fixture");
+
+  await openDelete("Second Fixture");
+  const staleButton = await applyDelete.elementHandle();
+  await page.locator('[data-request="plain"]').evaluate((node) => node.click());
+  await staleButton.evaluate((node) => node.click());
+  await page.locator('[data-request="g"]').click();
+  assert.deepEqual(await names(), ["自定义查询", "Second Fixture"]);
+  assert.equal(await activeName(), "Second Fixture");
+
   await plus.press("Enter");
   assert.equal(await activeName(), "自定义查询 3");
-  await more("自定义查询 3").press("ArrowUp");
-  assert.equal(await focus(remove), true);
-  await remove.press("Enter");
-  assert.match(await modal.textContent(), /自定义查询 3/);
-  await capture("delete");
-  await escape();
-  await modal.waitFor({ state: "hidden" });
+  await openDelete("自定义查询 3");
+  await cancelDelete.press("Enter");
+  await deletion.waitFor({ state: "hidden" });
   assert.equal(await activeName(), "自定义查询 3");
   assert.equal(await focus(more("自定义查询 3")), true);
-  await more("自定义查询 3").press("ArrowUp");
-  await remove.press("Enter");
-  await modal.getByRole("button", { name: "删除", exact: true }).press("Enter");
-  await modal.waitFor({ state: "hidden" });
+  await openDelete("自定义查询 3");
+  await applyDelete.press("Enter");
+  await deletion.waitFor({ state: "hidden" });
   assert.deepEqual(await names(), ["自定义查询", "Second Fixture"]);
   assert.equal(await activeName(), "Second Fixture");
   assert.equal(await focus(row("Second Fixture")), true);
@@ -254,6 +307,13 @@ try {
   assert.equal(await activeName(), "Second Fixture");
   assert.equal(await query.inputValue(), second);
   await page.setViewportSize({ width: 430, height: 830 });
+  await openDelete("Second Fixture");
+  const narrowDelete = await deletion.boundingBox();
+  assert(narrowDelete.x >= 8 && narrowDelete.x + narrowDelete.width <= 422);
+  assert(narrowDelete.y >= 8 && narrowDelete.y + narrowDelete.height <= 822);
+  await capture("delete-narrow", true);
+  await escape();
+  assert.equal(await focus(more("Second Fixture")), true);
   assert.equal(
     await page.evaluate(() => document.documentElement.scrollWidth),
     430,

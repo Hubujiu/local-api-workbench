@@ -20,12 +20,123 @@ export function graphqlNamedRailHTML(request, esc) {
       <button type="button" role="menuitem" tabindex="-1" data-graphql-query-action="rename">重命名</button>
       ${data.items.length > 1 ? '<button type="button" role="menuitem" tabindex="-1" data-graphql-query-action="delete">删除</button>' : ""}
     </div>
+    <div id="graphql-named-delete-confirm" role="alertdialog" aria-labelledby="graphql-named-delete-title" aria-describedby="graphql-named-delete-target" popover>
+      <strong id="graphql-named-delete-title"><span aria-hidden="true">!</span>删除</strong>
+      <p>删除此条查询？</p><span id="graphql-named-delete-target" hidden></span>
+      <footer><button type="button" id="graphql-named-delete-cancel">取消</button><button type="button" class="primary" id="graphql-named-delete-apply">确定</button></footer>
+    </div>
   </nav>`;
 }
 
-export function bindGraphQLNamedRail(rail, { active, select, add, arrange }) {
+export function placeGraphQLDelete(
+  anchor,
+  width,
+  height,
+  viewportWidth,
+  viewportHeight,
+) {
+  return {
+    x: Math.max(8, Math.min(anchor.right - 54, viewportWidth - width - 8)),
+    y: Math.max(8, Math.min(anchor.top - 34, viewportHeight - height - 8)),
+  };
+}
+
+function bindGraphQLDelete(rail, active, prepareDelete) {
+  const popup = rail.querySelector("#graphql-named-delete-confirm");
+  const cancel = popup.querySelector("#graphql-named-delete-cancel");
+  const apply = popup.querySelector("#graphql-named-delete-apply");
+  const targetName = popup.querySelector("#graphql-named-delete-target");
+  const visible = () => popup.matches(":popover-open");
+  let pending;
+  const restore = (button) => {
+    if (active() && button?.isConnected) button.focus({ preventScroll: true });
+  };
+  const dismiss = (restoreFocus) => {
+    const saved = pending;
+    pending = undefined;
+    if (visible()) popup.hidePopover();
+    if (restoreFocus) restore(saved?.button);
+  };
+  let resize;
+  const position = () => {
+    if (!pending || !visible() || !pending.button.isConnected) return;
+    const { x, y } = placeGraphQLDelete(
+      pending.button.getBoundingClientRect(),
+      popup.offsetWidth,
+      popup.offsetHeight,
+      innerWidth,
+      innerHeight,
+    );
+    popup.style.setProperty("--graphql-delete-x", x + "px");
+    popup.style.setProperty("--graphql-delete-y", y + "px");
+  };
+  cancel.addEventListener("click", () => dismiss(true));
+  apply.addEventListener("click", () => {
+    if (!active() || !visible() || !pending?.button?.isConnected) return;
+    const action = pending.action;
+    dismiss(true);
+    action.apply();
+  });
+  popup.addEventListener("beforetoggle", (event) => {
+    if (event.newState !== "closed") return;
+    const saved = pending;
+    pending = undefined;
+    resize?.abort();
+    if (saved)
+      queueMicrotask(() => {
+        const focused = document.activeElement;
+        if (
+          !visible() &&
+          (popup.contains(focused) || focused === document.body)
+        )
+          restore(saved.button);
+      });
+  });
+  popup.addEventListener("keydown", (event) => {
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      ["s", "Enter"].includes(event.key)
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      dismiss(true);
+    } else if (event.key === "Tab") {
+      event.preventDefault();
+      (event.target === cancel ? apply : cancel).focus();
+    }
+  });
+  // Position synchronously after opening and keep it on-screen if the viewport changes.
+  return (button) => {
+    const action = prepareDelete(button.dataset.graphqlQueryMenu);
+    if (!action || !button.isConnected || !active()) return;
+    dismiss(false);
+    pending = { button, action };
+    targetName.textContent = "查询：" + action.name + "。需显式保存项目。";
+    popup.showPopover();
+    position();
+    resize = new AbortController();
+    window.addEventListener(
+      "resize",
+      () => {
+        if (rail.isConnected) position();
+        else resize.abort();
+      },
+      { signal: resize.signal },
+    );
+    cancel.focus({ preventScroll: true });
+  };
+}
+
+export function bindGraphQLNamedRail(
+  rail,
+  { active, select, add, arrange, prepareDelete },
+) {
   const menu = rail.querySelector("#graphql-named-query-menu");
   const items = [...menu.querySelectorAll("[role=menuitem]")];
+  const confirmDelete = bindGraphQLDelete(rail, active, prepareDelete);
   let trigger;
   const open = () => menu.matches(":popover-open");
   const dismiss = (focus) => {
@@ -106,9 +217,10 @@ export function bindGraphQLNamedRail(rail, { active, select, add, arrange }) {
   menu.addEventListener("click", (event) => {
     const item = event.target.closest("[data-graphql-query-action]");
     if (!item || !active() || !trigger?.isConnected || !open()) return;
-    const id = trigger.dataset.graphqlQueryMenu;
+    const button = trigger;
     dismiss(true);
-    arrange(item.dataset.graphqlQueryAction, id);
+    if (item.dataset.graphqlQueryAction === "delete") confirmDelete(button);
+    else arrange(button.dataset.graphqlQueryMenu);
   });
 }
 

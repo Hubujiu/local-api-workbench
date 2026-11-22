@@ -1903,6 +1903,8 @@ function tree() {
 }
 
 function render(preserveEditingFocus = false) {
+  const namedDelete = $("#graphql-named-delete-confirm");
+  if (namedDelete?.matches(":popover-open")) namedDelete.hidePopover();
   manualResponseView.observe(
     page === "apis" && mode === "debug" && !workspaceDocument()
       ? project
@@ -4444,43 +4446,62 @@ function bind() {
       focus?.(selected);
       return true;
     };
-    const arrangeNamed = (type, id) => {
-      const item = namedState().items.find((value) => value.id === id);
-      if (!item || $("#dialog").open) return;
+    const queryChangeOwner = (id) => {
+      const state = namedState();
+      const item = state.items.find((value) => value.id === id);
+      if (!item) throw Error("GraphQL 查询已不存在。");
       const version = editVersion;
       const body = target.body;
       const collection = target.graphqlNamedQueries;
-      const rename = type === "rename";
-      let dialogVersion,
-        changed = false;
+      return {
+        item,
+        valid: () =>
+          owns() &&
+          graphqlEditor.isConnected &&
+          editVersion === version &&
+          target.body === body &&
+          target.graphqlNamedQueries === collection,
+      };
+    };
+    const arrangeNamed = (id) => {
+      const owner = queryChangeOwner(id);
+      let dialogVersion;
       modal(
-        rename ? "重命名查询" : "删除查询",
-        rename
-          ? `<label for="graphql-named-rename">查询名称</label><input id="graphql-named-rename" value="${esc(item.name)}" maxlength="80" spellcheck="false">`
-          : `<p>确认删除查询「${esc(item.name)}」？改动只更新当前接口草稿，保存项目后生效。</p>`,
+        "重命名查询",
+        `<label for="graphql-named-rename">查询名称</label><input id="graphql-named-rename" value="${esc(owner.item.name)}" maxlength="80" spellcheck="false">`,
         () => {
           if (
             modalRevision !== dialogVersion ||
             !$("#dialog").open ||
-            editVersion !== version ||
-            target.body !== body ||
-            target.graphqlNamedQueries !== collection
+            !owner.valid()
           )
             throw Error("GraphQL 查询或窗口已变化，请重新操作。");
-          const action = rename
-            ? { type, id, name: $("#graphql-named-rename").value }
-            : { type, id };
-          changed = changeNamed(action, undefined, true);
+          changeNamed(
+            { type: "rename", id, name: $("#graphql-named-rename").value },
+            undefined,
+            true,
+          );
         },
-        rename ? "确定" : "删除",
+        "确定",
         () => {
-          if (!owns()) return;
-          if (rename || !changed) focusNamed(id, true);
-          else focusNamed(readGraphQLNamedQueries(target)?.activeId);
+          if (owns()) focusNamed(id, true);
         },
       );
       dialogVersion = modalRevision;
-      if (!rename) $('#dialog footer button[value="cancel"]')?.focus();
+    };
+    const prepareNamedDelete = (id) => {
+      const owner = queryChangeOwner(id);
+      const revision = modalRevision;
+      return {
+        name: owner.item.name,
+        apply: () => {
+          if (modalRevision !== revision || !owner.valid())
+            throw Error("GraphQL 查询或窗口已变化，请重新操作。");
+          changeNamed({ type: "delete", id }, (selected) =>
+            focusNamed(selected),
+          );
+        },
+      };
     };
     bindGraphQLWorkspace(graphqlEditor, {
       request: target,
@@ -4504,6 +4525,7 @@ function bind() {
             keyboard ? (selected) => focusNamed(selected) : undefined,
           ),
         arrange: arrangeNamed,
+        prepareDelete: prepareNamedDelete,
       },
       owns,
       revised: () => editVersion++,
@@ -7925,7 +7947,8 @@ document.addEventListener("keydown", (e) => {
     $("#dialog").open ||
     $("#empty-trash-dialog")?.open ||
     $("#appearance-dialog")?.open ||
-    $("#project-switch-confirmation")?.open
+    $("#project-switch-confirmation")?.open ||
+    $("#graphql-named-delete-confirm")?.matches?.(":popover-open")
   ) {
     if ((e.ctrlKey || e.metaKey) && ["s", "Enter"].includes(e.key))
       e.preventDefault();
