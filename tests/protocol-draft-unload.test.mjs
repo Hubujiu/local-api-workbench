@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { newGraphQLEditorRequest } from "../public/graphql-editor.js";
+import { createGraphQLWorkspaceDrafts } from "../public/graphql-workspace.js";
 import {
   createGrpcUnaryState,
   selectGrpcUnary,
@@ -24,6 +26,7 @@ function unload({
   grpc = null,
   socket = null,
   project = { id: "p" },
+  graphqlDrafts = createGraphQLWorkspaceDrafts(),
 } = {}) {
   let listener;
   new Function(
@@ -34,6 +37,7 @@ function unload({
     "grpcWorkbenchState",
     "socketioWorkbenchProject",
     "socketioWorkbenchState",
+    "graphqlDrafts",
     block,
   )(
     {
@@ -48,6 +52,7 @@ function unload({
     grpc,
     socketProject,
     socket,
+    graphqlDrafts,
   );
   const e = {
     prevented: false,
@@ -112,4 +117,32 @@ test("saved definition selection removes protection only after drafts are discar
   assert.equal(unload({ grpc, socket }).prevented, true);
   selectSocketIO(socket, savedSocket);
   assert.equal(unload({ grpc, socket }).prevented, false);
+});
+
+test("unapplied GraphQL editor drafts protect only their owning request and clear after discard", () => {
+  const request = { ...newGraphQLEditorRequest(), id: "gql" };
+  const project = { id: "p", requests: [request] };
+  const graphqlDrafts = createGraphQLWorkspaceDrafts();
+  const before = JSON.stringify(project);
+  assert.equal(unload({ project, graphqlDrafts }).prevented, false);
+  graphqlDrafts.edit(request, "query", "query Fixture { viewer { id } }");
+  const event = unload({ project, graphqlDrafts });
+  assert.equal(event.prevented, true);
+  assert.equal(event.returnValue, "");
+  assert.equal(JSON.stringify(project), before);
+  assert.equal(
+    unload({ project: structuredClone(project), graphqlDrafts }).prevented,
+    false,
+  );
+  assert.equal(
+    unload({
+      project: { id: "other", requests: [{ ...request }] },
+      graphqlDrafts,
+    }).prevented,
+    false,
+  );
+  assert.equal(unload({ project: null, graphqlDrafts }).prevented, false);
+  assert.equal(graphqlDrafts.discard(request), true);
+  assert.equal(unload({ project, graphqlDrafts }).prevented, false);
+  assert.equal(JSON.stringify(project), before);
 });

@@ -2,6 +2,11 @@ import test from "node:test";
 import { createProjectImportGuard } from "../public/project-import-guard.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { newGraphQLEditorRequest } from "../public/graphql-editor.js";
+import {
+  createGraphQLWorkspaceDrafts,
+  unappliedGraphQL,
+} from "../public/graphql-workspace.js";
 import {
   createNativeRequestLifecycle,
   nativeRequestLifecycleOperation,
@@ -321,6 +326,8 @@ test("actual application wiring awaits native controller and guards ordinary sav
     "render",
     "save",
     "responses",
+    "graphqlDrafts",
+    "unappliedGraphQL",
     `let current="r1",activeDocumentId=null,response, editVersion=0, modalRevision=0, page="apis", busy=false, saving=false;
       const handlers={};const on=(s,e,f)=>handlers[s]=f;
       const workspaceDocument=()=>null, $=()=>({ open:true, focus(){} });
@@ -336,6 +343,7 @@ test("actual application wiring awaits native controller and guards ordinary sav
   );
   const calls = [];
   const p = fixture();
+  const graphqlDrafts = createGraphQLWorkspaceDrafts();
   let marks = 0;
   const native = execute(
     p,
@@ -345,7 +353,15 @@ test("actual application wiring awaits native controller and guards ordinary sav
     () => {},
     async () => {},
     new Map(),
+    graphqlDrafts,
+    unappliedGraphQL,
   );
+  Object.assign(p.requests[0], newGraphQLEditorRequest());
+  graphqlDrafts.edit(p.requests[0], "query", "query Fixture { viewer { id } }");
+  await assert.rejects(native["#delete"](), { message: unappliedGraphQL });
+  assert.deepEqual(calls, []);
+  assert.equal(p.requests[0].deletedAt, undefined);
+  assert.equal(graphqlDrafts.discard(p.requests[0]), true);
   await native["#delete"]();
   await native["[data-restore]"](null, { dataset: { restore: "r1" } });
   assert.deepEqual(calls, [
@@ -368,6 +384,8 @@ test("actual application wiring awaits native controller and guards ordinary sav
     () => {},
     async () => saved++,
     new Map(),
+    graphqlDrafts,
+    unappliedGraphQL,
   );
   await old["#delete"]();
   assert.match(old.title, /移到回收站/);
@@ -402,6 +420,7 @@ test("actual application wiring awaits native controller and guards ordinary sav
 async function openHarness(
   initial = fixture(),
   controller = createNativeRequestLifecycle(),
+  graphqlDrafts = createGraphQLWorkspaceDrafts(),
 ) {
   const app = await readFile(
     new URL("../public/app.js", import.meta.url),
@@ -421,6 +440,8 @@ async function openHarness(
     "nativeRequestLifecycle",
     "projectImports",
     "api",
+    "graphqlDrafts",
+    "unappliedGraphQL",
     `
     let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
@@ -438,11 +459,38 @@ async function openHarness(
   `,
   );
   return {
-    ...create(initial, controller, createProjectImportGuard(), api),
+    ...create(
+      initial,
+      controller,
+      createProjectImportGuard(),
+      api,
+      graphqlDrafts,
+      unappliedGraphQL,
+    ),
     gets,
     controller,
   };
 }
+test("actual project reload does not read or replace an owner with an unapplied GraphQL draft", async () => {
+  const owner = fixture();
+  const graphqlRequest = Object.assign(
+    owner.requests[0],
+    newGraphQLEditorRequest(),
+  );
+  const drafts = createGraphQLWorkspaceDrafts();
+  drafts.edit(graphqlRequest, "query", "query Fixture { viewer { id } }");
+  const h = await openHarness(owner, undefined, drafts);
+  await assert.rejects(h.open(owner.id), { message: unappliedGraphQL });
+  assert.deepEqual(h.gets, []);
+  assert.equal(h.getState().project, owner);
+  assert.equal(graphqlRequest.body, '{"query":""}');
+  assert.equal(drafts.discard(graphqlRequest), true);
+  const reload = h.open(owner.id);
+  assert.equal(h.gets.length, 1);
+  h.gets[0].resolve(structuredClone(owner));
+  assert.equal(await reload, true);
+});
+
 test("aborted picker GET forwards its signal and cannot adopt a delivered late response", async () => {
   const h = await openHarness();
   const original = h.getState().project;

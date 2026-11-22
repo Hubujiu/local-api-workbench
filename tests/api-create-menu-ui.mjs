@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../src/server.mjs";
 import { normalizeRequest } from "../src/core.mjs";
+import { assertGraphQLBadge } from "./helpers/graphql-badge-ui.mjs";
 
 const { chromium } = createRequire(import.meta.url)(
   process.env.PLAYWRIGHT_PACKAGE || "playwright",
@@ -118,6 +119,7 @@ try {
   );
   assert.equal(Math.round(desktop.folder.width), 420);
   assert.equal(await tile("GraphQL 请求").count(), 1);
+  assert.match(await tile("GraphQL 请求").innerText(), /GraphQL 请求/);
   await tile("HTTP 接口").press("Tab");
   assert(await focused(tile("Event Stream · SSE")));
   await close();
@@ -194,10 +196,7 @@ try {
   assert.equal(await page.locator("#method").inputValue(), "POST");
   assert.equal(await page.locator("#method").isDisabled(), true);
   assert.equal(await page.locator("#url").inputValue(), "");
-  assert.match(
-    await page.locator(".tab.selected .method").textContent(),
-    /GraphQL/,
-  );
+  await assertGraphQLBadge(page.locator(".tab.selected .tab-switch"));
   const after = await app.store.get(project.id);
   assert.equal(after.configRevision, project.configRevision);
   assert.deepEqual(after.requests, project.requests);
