@@ -192,7 +192,13 @@ try {
     .nth(2)
     .getByRole("button", { name: "删除参数", exact: true })
     .click();
-  await radios("urlencoded").check();
+  await radios("urlencoded").click();
+  await page
+    .locator("#toast")
+    .getByText(/URLencoded 不支持文件/)
+    .waitFor();
+  assert.equal(await radios("form-data").isChecked(), true);
+  await radios("raw").check();
   assert.equal(await table.count(), 0);
   await radios("form-data").check();
   assert.equal(await firstKey.inputValue(), "profile");
