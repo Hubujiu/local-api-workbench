@@ -81,6 +81,12 @@ import {
   restoreResponseTabsPosition,
 } from "./http-response-tabs.js";
 import {
+  bindHTTPResponseLayout,
+  effectiveResponseLayout,
+  httpResponseLayoutHTML,
+  responseLayoutMedia,
+} from "./http-response-layout.js";
+import {
   bindHTTPSuccessResponse,
   httpSuccessResponseHTML,
   isPopulatedHTTPResponse,
@@ -505,6 +511,13 @@ let opened = [],
   responseLayout = "stacked",
   compactUI = false,
   settingsSection = "settings-basic";
+const httpResponseLayoutMedia = globalThis.matchMedia?.(responseLayoutMedia);
+let releaseHTTPResponseLayout;
+const activeHTTPResponseLayout = () =>
+  effectiveResponseLayout(
+    responseLayout,
+    httpResponseLayoutMedia?.matches ?? true,
+  );
 const rawHelperMedia = globalThis.matchMedia?.(
   "(min-width: 1000px) and (min-height: 720px)",
 );
@@ -514,7 +527,7 @@ let rawHelperOwner = null;
 let rawHelperState = { tab: "dictionary", query: "" };
 const useTabbedRawHelper = () =>
   rawHelperMedia?.matches &&
-  responseLayout !== "split" &&
+  activeHTTPResponseLayout() !== "split" &&
   !bodyExpanded &&
   !document.body.classList.contains("dark");
 function bodyHelperState(owner) {
@@ -1942,6 +1955,8 @@ function tree() {
 }
 
 function render(preserveEditingFocus = false) {
+  releaseHTTPResponseLayout?.();
+  releaseHTTPResponseLayout = undefined;
   rememberDesignDescriptionScroll?.();
   rememberDesignDescriptionScroll = undefined;
   const namedDelete = $("#graphql-named-delete-confirm");
@@ -2136,7 +2151,8 @@ function render(preserveEditingFocus = false) {
   }
 }
 function editor(r) {
-  return `<section data-editor-mode="${esc(mode)}" class="editor ${mode === "debug" && responseLayout === "split" ? "split-layout" : ""}"><div class="subnav"><div class="request-modes" role="group" aria-label="接口工作模式">${[
+  const httpLayout = mode === "debug" && r.graphqlEditorVersion !== 1;
+  return `<section data-editor-mode="${esc(mode)}"${httpLayout ? " data-http-response-layout" : ""} class="editor ${mode === "debug" && (httpLayout ? activeHTTPResponseLayout() : responseLayout) === "split" ? "split-layout" : ""}"><div class="subnav"><div class="request-modes" role="group" aria-label="接口工作模式">${[
     ["design", "设计"],
     ["debug", "调试"],
     ["cases", "接口用例"],
@@ -2151,7 +2167,7 @@ function editor(r) {
       "",
     )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button>${requestCurlAction(mode === "debug")}<button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法"${r.graphqlEditorVersion === 1 ? " disabled" : ""}>${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : httpRequestActions({ debug: mode === "debug", busy, cancel: busy && mode !== "cases" && !caseCancellationOwner(), dirty })}</div>${
     mode === "debug"
-      ? `${requestParameterTabs(r, param)}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" && r.bodyType !== "binary" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded", "binary"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response${responseTab === "body" && isPopulatedHTTPResponse(response) ? " http-success-response-active" : ""}"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length)}<div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div></div>`
+      ? `${requestParameterTabs(r, param)}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" && r.bodyType !== "binary" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded", "binary"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response${responseTab === "body" && isPopulatedHTTPResponse(response) ? " http-success-response-active" : ""}"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length)}<div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div>${httpLayout ? httpResponseLayoutHTML(!busy && !response && responseTab === "body") : ""}</div>`
       : modePanel(r)
   }</section>`;
 }
@@ -2839,12 +2855,27 @@ function bind() {
     localStorage.setItem("compact-ui", String(compactUI));
     render();
   });
-  on("#response-layout", "click", () => {
-    collect();
-    responseLayout = responseLayout === "split" ? "stacked" : "split";
-    localStorage.setItem("response-layout", responseLayout);
-    render();
-  });
+  const layoutEditor = $("[data-http-response-layout]");
+  if (layoutEditor) {
+    releaseHTTPResponseLayout = bindHTTPResponseLayout({
+      editor: layoutEditor,
+      fallback: $("#response-layout"),
+      media: httpResponseLayoutMedia,
+      preferred: () => responseLayout,
+      writePreference(next) {
+        localStorage.setItem("response-layout", next);
+        responseLayout = next;
+      },
+      onError: (error) => toast(error.message),
+    });
+  } else {
+    on("#response-layout", "click", () => {
+      collect();
+      responseLayout = responseLayout === "split" ? "stacked" : "split";
+      localStorage.setItem("response-layout", responseLayout);
+      render();
+    });
+  }
   on("[data-page]", "click", (event, e) => {
     if (
       e.dataset.page === "trash" &&

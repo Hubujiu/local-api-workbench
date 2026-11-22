@@ -6349,3 +6349,88 @@ body.dark .design-parameter-panel [data-query-type-color="boolean"] {
     flex: 1 1 100%;
   }
 }
+
+/* HTTP Debug response layout: only park the control over actual whitespace. */
+.editor[data-http-response-layout] > .response {
+  position: relative;
+}
+.http-response-layout-control {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  padding: 4px 10px;
+}
+.http-response-layout-control button {
+  color: var(--text);
+}
+#http-response-layout-toggle {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+}
+#http-response-layout-toggle:hover,
+#http-response-layout-toggle[aria-expanded="true"] {
+  background: var(--hover);
+}
+.http-response-layout-control svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+#http-response-layout-menu {
+  position: fixed;
+  inset: auto;
+  box-sizing: border-box;
+  width: 100px;
+  max-width: calc(100vw - 16px);
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--bg);
+  box-shadow: 0 3px 10px rgb(0 0 0 / 12%);
+}
+#http-response-layout-menu > button {
+  display: flex;
+  width: 100%;
+  min-height: 39px;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 5px;
+  border-radius: 3px;
+}
+#http-response-layout-menu > button[aria-checked="true"] {
+  background: var(--hover);
+  color: var(--accent);
+}
+.http-response-layout-control button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+@media (min-width: 1000px) and (min-height: 830px) {
+  .http-response-layout-control.http-response-layout-parked {
+    position: absolute;
+    inset-inline-end: 26px;
+    inset-block-end: 41px;
+    padding: 0;
+  }
+  .editor[data-http-response-layout].split-layout
+    .http-response-layout-control.http-response-layout-parked {
+    inset-inline-end: 10px;
+  }
+}
+@media (min-width: 1240px) {
+  .shell:has(.editor[data-http-response-layout].split-layout) > .sidebar {
+    width: 305px;
+  }
+  .editor[data-http-response-layout].split-layout {
+    column-gap: 0;
+  }
+}

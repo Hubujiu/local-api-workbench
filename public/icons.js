@@ -1,5 +1,9 @@
 // Original line icons. No external image, font, or icon CDN dependency.
 const paths = {
+  "workspace-stack":
+    '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 11h18"/>',
+  "workspace-split":
+    '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>',
   "helper-mock": '<path d="M4 4h16v16H4zM8 9h2m4 6h2m-4-3h1"/>',
   "helper-fixed": '<path d="M4 4h16v16H4zm4 5h8m-4 0v7"/>',
   "helper-variable":
