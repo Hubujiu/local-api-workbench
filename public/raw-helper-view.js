@@ -96,3 +96,78 @@ export function bindRawHelper(panel, state) {
         : "当前项目暂无字典参数";
   });
 }
+
+export function rawHelperVariableNames(project, environmentId) {
+  const environment = project.environments?.find(
+    (item) => item.id === environmentId,
+  );
+  const names = new Map(
+    Object.keys(project.globalVariables || {}).map((name) => [
+      name,
+      "全局变量",
+    ]),
+  );
+  for (const name of Object.keys(environment?.variables || {}))
+    names.set(name, "环境变量");
+  return Array.from(names, ([name, scope]) => ({ name, scope }));
+}
+
+export function rawHelperVariableChooser(entries) {
+  return `<div class="raw-helper-variable-chooser">
+    <label for="raw-helper-variable-search">变量名</label>
+    <input id="raw-helper-variable-search" type="search" placeholder="请输入或选择变量名" autocomplete="off">
+    <div class="raw-helper-variable-options" role="group" aria-label="可引用的变量">
+      ${entries.map(({ name, scope }) => `<button type="button" data-raw-variable-name="${esc(name)}" aria-pressed="false"><span>${esc(name)}</span><small>${esc(scope)}</small></button>`).join("")}
+      <p role="status"${entries.length ? " hidden" : ""}>当前项目没有可引用的变量</p>
+    </div>
+  </div>`;
+}
+
+export function bindRawHelperVariableChooser(chooser, confirm, cancel) {
+  const search = chooser.querySelector("input");
+  const rows = Array.from(chooser.querySelectorAll("[data-raw-variable-name]"));
+  const status = chooser.querySelector('[role="status"]');
+  const visible = () => rows.filter((row) => !row.hidden);
+  let selected = null;
+  const select = (row) => {
+    selected = row;
+    confirm.disabled = !row;
+    for (const item of rows)
+      item.setAttribute("aria-pressed", String(item === row));
+  };
+  select(null);
+  search.addEventListener("input", () => {
+    const query = search.value.trim().toLowerCase();
+    for (const row of rows)
+      row.hidden = !row.dataset.rawVariableName.toLowerCase().includes(query);
+    if (selected?.hidden) select(null);
+    status.hidden = visible().length !== 0;
+    if (rows.length) status.textContent = "没有匹配的变量";
+  });
+  search.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      // A search input can consume Escape to clear itself instead of closing.
+      event.preventDefault();
+      event.stopPropagation();
+      cancel.click();
+      return;
+    }
+    if (event.key === "Enter") event.preventDefault();
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      visible()[0]?.focus();
+    }
+  });
+  for (const row of rows) {
+    row.addEventListener("click", () => select(row));
+    row.addEventListener("keydown", (event) => {
+      const items = visible();
+      const index = items.indexOf(row);
+      if (!["ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+      if (event.key === "ArrowUp" && index === 0) search.focus();
+      else items[index + (event.key === "ArrowUp" ? -1 : 1)]?.focus();
+    });
+  }
+  return () => selected?.dataset.rawVariableName;
+}

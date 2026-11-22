@@ -200,7 +200,13 @@ import {
 } from "./dictionary-view.js";
 import { clientConfiguration, mcpClients } from "./mcp-client-config.js";
 import { renderPlans, renderRuns } from "./plan-view.js";
-import { bindRawHelper, rawHelperTabs } from "./raw-helper-view.js";
+import {
+  bindRawHelper,
+  bindRawHelperVariableChooser,
+  rawHelperTabs,
+  rawHelperVariableChooser,
+  rawHelperVariableNames,
+} from "./raw-helper-view.js";
 import { createPlanHistoryRefresh } from "./plan-history-refresh.js";
 const refreshPlanHistory = createPlanHistoryRefresh();
 import { resources, settingsSidebar } from "./resource-view.js";
@@ -1710,23 +1716,29 @@ function pairs(rows, key, designOptions, debugOptions) {
     )}${debugComposer ? debugPairComposer(key, false) : ""}</tbody></table>${compactEmpty || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
 }
 function bodyParameterHelper(r, tabbed) {
-  const dynamic = `<h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
+  const reference = `<button type="button" id="raw-helper-reference-variable" aria-label="引用变量"><span class="raw-helper-variable-icon">${lineIcon("helper-variable")}</span><span><strong>引用变量</strong><small>引用环境变量、全局变量</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
+  const dynamic = `${tabbed ? reference : ""}<h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
     r.bodyDynamic || {},
   )
     .map(
       (id) =>
         `<button data-edit-body-dynamic="${esc(id)}">编辑 ${esc(id.slice(0, 8))}</button>`,
     )
-    .join("")}<h4>插入环境变量</h4>${
-    Object.keys({
-      ...project.globalVariables,
-      ...project.environments.find((item) => item.id === env())?.variables,
-    })
-      .map(
-        (key) =>
-          `<button data-insert-variable="${esc(key)}">{{${esc(key)}}}</button>`,
-      )
-      .join("") || "<p>暂无变量</p>"
+    .join("")}${
+    tabbed
+      ? ""
+      : `<h4>插入环境变量</h4>${
+          Object.keys({
+            ...project.globalVariables,
+            ...project.environments.find((item) => item.id === env())
+              ?.variables,
+          })
+            .map(
+              (key) =>
+                `<button data-insert-variable="${esc(key)}">{{${esc(key)}}}</button>`,
+            )
+            .join("") || "<p>暂无变量</p>"
+        }`
   }<h4>内置动态变量</h4><select id="builtin-variable" aria-label="内置动态变量">${builtinVariableNames.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join("")}</select><button id="insert-builtin-variable">插入占位符</button><small>每次发送生成；JSON字符串值须加引号。</small>`;
   const more = `<h4>共享函数</h4><p class="muted">供前后置脚本调用</p>${(project.settings?.functions || []).map((fn) => `<code>utils.${esc(fn.name)}(...)</code>`).join("<br>")}<h4>请求结构</h4><pre>${esc(JSON.stringify(r.schema, null, 2))}</pre>`;
   const contents = tabbed
@@ -3715,6 +3727,9 @@ function bind() {
     if (keepFocus)
       $("#toggle-parameter-helper")?.focus({ preventScroll: true });
   });
+  on("#raw-helper-reference-variable", "click", () =>
+    openRawHelperVariableChooser(),
+  );
   on("#new-body-dynamic", "click", () => editDynamicValue("body"));
   on("[data-edit-body-dynamic]", "click", (_, element) =>
     editDynamicValue("body", element.dataset.editBodyDynamic),
@@ -7246,13 +7261,65 @@ async function openCookieManager(workspace = null) {
   draw();
 }
 
-function insertVariable(name) {
+function openRawHelperVariableChooser() {
+  const editor = $("#body-code");
+  if (!editor) return;
+  const ownerProject = project,
+    ownerRequest = request(),
+    ownerEnvironment = env(),
+    ownerOpening = projectOpenSequence,
+    ownerEdit = editVersion,
+    selection = { start: editor.selectionStart, end: editor.selectionEnd };
+  const entries = rawHelperVariableNames(ownerProject, ownerEnvironment);
+  let selectedName,
+    inserted = false;
+  modal(
+    "引用变量",
+    rawHelperVariableChooser(entries),
+    () => {
+      const name = selectedName?.();
+      if (
+        page !== "apis" ||
+        mode !== "debug" ||
+        param !== "body" ||
+        !helperOpen ||
+        !useTabbedRawHelper() ||
+        project !== ownerProject ||
+        request() !== ownerRequest ||
+        ownerRequest?.bodyType !== "json" ||
+        env() !== ownerEnvironment ||
+        projectOpenSequence !== ownerOpening ||
+        editVersion !== ownerEdit ||
+        $("#body-code") !== editor
+      )
+        throw Error("接口、环境或草稿已变化，未插入变量");
+      if (!entries.some((entry) => entry.name === name))
+        throw Error("请选择当前项目的变量");
+      insertVariable(name, selection);
+      inserted = true;
+    },
+    "确定",
+    () => {
+      const target = inserted
+        ? $("#body-code")
+        : $("#raw-helper-reference-variable") || $("#toggle-parameter-helper");
+      target?.focus({ preventScroll: true });
+    },
+  );
+  selectedName = bindRawHelperVariableChooser(
+    $(".raw-helper-variable-chooser"),
+    $("#dialog-save"),
+    $('#dialog footer button[value="cancel"]'),
+  );
+}
+
+function insertVariable(name, selection) {
   const editor = $("#body-code");
   if (!editor) return;
   const helperScrollRegion = () =>
     $("#raw-helper-dynamic:not([hidden])") || $(".parameter-helper");
-  const start = editor.selectionStart,
-    end = editor.selectionEnd,
+  const start = selection?.start ?? editor.selectionStart,
+    end = selection?.end ?? editor.selectionEnd,
     helperScroll = helperScrollRegion()?.scrollTop || 0;
   request().body =
     editor.value.slice(0, start) + "{{" + name + "}}" + editor.value.slice(end);

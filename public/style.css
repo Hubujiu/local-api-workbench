@@ -5082,3 +5082,121 @@ body:not(.dark) .workspace-document-toolbar {
     border-block-end: 1px solid var(--line);
   }
 }
+
+/* Workbench's real variable reference action within the opened desktop helper. */
+.raw-helper-open #raw-helper-reference-variable {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 54px;
+  padding: 6px;
+  border: 0;
+  text-align: left;
+  background: #f7f2e7;
+}
+.raw-helper-open #raw-helper-reference-variable:hover {
+  background: var(--hover);
+}
+#raw-helper-reference-variable strong,
+#raw-helper-reference-variable small {
+  display: block;
+}
+#raw-helper-reference-variable strong {
+  margin-bottom: 3px;
+  font-weight: 500;
+}
+#raw-helper-reference-variable small {
+  color: #786b57;
+}
+.raw-helper-variable-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  color: #7857b3;
+  background: #f3ebfa;
+}
+.raw-helper-variable-icon svg,
+.raw-helper-variable-next svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+}
+
+#dialog[open]:has(.raw-helper-variable-chooser) {
+  width: 360px;
+  height: min(536px, calc(100dvh - 36px));
+  border-radius: 4px;
+  box-shadow: 0 8px 21px #0002;
+}
+#dialog:has(.raw-helper-variable-chooser)::backdrop {
+  background: transparent;
+}
+#dialog:has(.raw-helper-variable-chooser) > form {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+#dialog:has(.raw-helper-variable-chooser) > form > :is(header, footer) {
+  padding: 12px 18px;
+  border: 0;
+}
+#dialog:has(.raw-helper-variable-chooser) > form > #dialog-content {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  padding: 0 18px 10px;
+}
+#dialog .raw-helper-variable-chooser label {
+  margin-top: 0;
+  color: #786b57;
+}
+#raw-helper-variable-search {
+  height: 32px;
+}
+.raw-helper-variable-options {
+  margin-top: 5px;
+  max-height: 218px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.raw-helper-variable-options button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 0;
+  text-align: left;
+}
+.raw-helper-variable-options button[aria-pressed="true"] {
+  background: var(--hover);
+}
+.raw-helper-variable-options button:focus-visible {
+  outline-offset: -2px;
+}
+.raw-helper-variable-options button > span {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.raw-helper-variable-options small {
+  color: #786b57;
+}
+.raw-helper-variable-options > [role="status"] {
+  padding: 0 9px;
+  color: #786b57;
+}
+.raw-helper-variable-options > button[hidden] {
+  display: none;
+}
+@media (min-width: 1000px) and (min-height: 720px) {
+  #dialog[open]:has(.raw-helper-variable-chooser) {
+    transform: translate(min(15vw, 194px), -34px);
+  }
+}
