@@ -7,6 +7,8 @@ import {
   editDesignResponseRoot,
   scopedResponseExamples,
   supportsDesignExamples,
+  designExampleTarget,
+  prepareDesignExampleBody,
   responseSelection,
 } from "../public/design-response.js";
 
@@ -240,6 +242,102 @@ test("JSON recognition does not flatten parameterized profile identity", () => {
     scopedResponseExamples(examples, 404, profile).map((x) => x.index),
     [1],
   );
+});
+
+test("inline example targeting is explicit for same-name rows and stable under reordering", () => {
+  const one = { name: "Fixture" };
+  const two = { name: "Fixture" };
+  const rows = [
+    { example: one, index: 4 },
+    { example: two, index: 7 },
+  ];
+  assert.deepEqual(designExampleTarget(rows), { key: "" });
+  assert.deepEqual(designExampleTarget(rows.toReversed(), one), {
+    example: one,
+    index: 4,
+    key: "4",
+  });
+  assert.deepEqual(designExampleTarget(rows, { ...one }), { key: "" });
+  assert.deepEqual(designExampleTarget(rows, "new"), { key: "new" });
+  assert.deepEqual(designExampleTarget([]), { key: "new" });
+});
+
+test("example body edit accepts JSON roots without rewriting source bytes or unrelated metadata", () => {
+  const definition = definitions[1];
+  const media = "application/json";
+  const original = {
+    name: "Fixture",
+    status: 404,
+    headers: { "content-type": media, "x-fixture": "v" },
+    body: "{}",
+    openapiExampleSource: { key: "bound" },
+  };
+  for (const body of [
+    "null",
+    " false ",
+    "0",
+    '""',
+    '"<x>"',
+    "[1]",
+    '{"i":9007199254740993}',
+    "\n  [0]\n",
+  ]) {
+    const result = prepareDesignExampleBody(
+      definition,
+      media,
+      true,
+      original,
+      body,
+    );
+    assert.deepEqual(result, { ...original, body });
+    assert.equal(result.openapiExampleSource, original.openapiExampleSource);
+    assert.equal(Object.hasOwn(result, "delayMs"), false);
+  }
+  assert.deepEqual(
+    prepareDesignExampleBody(definition, media, true, undefined, "null"),
+    {
+      name: "响应示例",
+      status: 404,
+      headers: { "content-type": media },
+      body: "null",
+    },
+  );
+  for (const body of ["", " ", "{", "NaN", "undefined"]) {
+    assert.throws(
+      () => prepareDesignExampleBody(definition, media, true, original, body),
+      /JSON 响应示例正文无效/,
+    );
+  }
+  assert.throws(
+    () =>
+      prepareDesignExampleBody(
+        definition,
+        "text/plain",
+        true,
+        original,
+        "null",
+      ),
+    /不属于/,
+  );
+  assert.throws(
+    () =>
+      prepareDesignExampleBody(
+        { ...definition, status: "4XX" },
+        media,
+        true,
+        undefined,
+        "null",
+      ),
+    /不属于/,
+  );
+  assert.equal(original.body, "{}");
+  const html = designResponsePanel(
+    [definition],
+    { status: "404", media, bodyView: "examples" },
+    true,
+    [{ ...original, body: '"</textarea>"' }],
+  );
+  assert.match(html, /&lt;\/textarea&gt;/);
 });
 
 test("root description and field edits preserve media, examples, constraints and sibling responses", () => {

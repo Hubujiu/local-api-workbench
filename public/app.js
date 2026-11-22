@@ -122,12 +122,15 @@ import {
   headerEditorFields,
   exampleMedia,
   scopedResponseExamples,
+  designExampleTarget,
+  prepareDesignExampleBody,
   supportsDesignExamples,
 } from "./design-response.js";
 import {
   createDesignResponseSettingsDrafts,
   unappliedDesignResponseSettings,
   unappliedDesignResponseHeader,
+  unappliedDesignResponseExample,
   unchangedResponseDefinitions,
 } from "./design-response-settings-draft.js";
 import {
@@ -3608,6 +3611,173 @@ function bind() {
   on("[data-edit-design-example]", "click", (_, e) =>
     openDesignExample(Number(e.dataset.editDesignExample)),
   );
+  const inlineExamplePane = $(".design-example-pane");
+  if (inlineExamplePane) {
+    const owner = project;
+    const r = request();
+    const key = designResponseKey(r);
+    const selection = designResponseSelections.get(key);
+    const { definition, index, media } = responseSelection(
+      r.responses,
+      selection,
+    );
+    const status = String(definition.status);
+    const managed = r.openapiExampleBindingsVersion === 1;
+    const rows = scopedResponseExamples(r.examples, status, media);
+    const target = designExampleTarget(rows, selection?.exampleChoice);
+    const form = $("#design-inline-example-form");
+    const body = $("#design-inline-example-body");
+    const apply = $("#design-inline-example-apply");
+    const cancel = $("#design-inline-example-cancel");
+    const raw = $("#response-definitions");
+    const owns = () => {
+      if (
+        !inlineExamplePane.isConnected ||
+        project !== owner ||
+        request() !== r ||
+        page !== "apis" ||
+        mode !== "design" ||
+        workspaceDocument()
+      )
+        return false;
+      const current = designResponseSelections.get(key);
+      const selected = responseSelection(r.responses, current);
+      return (
+        (current?.view || "body") === "body" &&
+        current?.bodyView === "examples" &&
+        selected.index === index &&
+        String(selected.definition?.status) === status &&
+        selected.media === media &&
+        supportsDesignExamples(selected.definition, media, managed)
+      );
+    };
+    const redraw = (selector) => {
+      const top = $(".http-design-canvas").scrollTop;
+      render();
+      $(".http-design-canvas").scrollTop = top;
+      $(selector)?.focus({ preventScroll: true });
+    };
+    on("#design-inline-example-choice", "change", (_, picker) => {
+      if (!owns()) return;
+      const next = picker.value;
+      try {
+        collect();
+        const match = rows.find((row) => String(row.index) === next);
+        if (
+          next !== "new" &&
+          (!match || r.examples[match.index] !== match.example)
+        )
+          throw Error("响应示例已变化，请重新选择。");
+        designResponseSelections.set(key, {
+          ...selection,
+          exampleChoice: next === "new" ? "new" : match.example,
+        });
+        redraw("#design-inline-example-choice");
+      } catch (error) {
+        picker.value = target.key;
+        throw error;
+      }
+    });
+    if (form) {
+      const visible = (target.example?.body ?? "").replace(/\r\n?/g, "\n");
+      const ownsBody = () =>
+        owns() &&
+        (!target.example || r.examples[target.index] === target.example);
+      const gutter = $(".design-inline-example-gutter");
+      const drawLine = () => {
+        // Show the real first visible line, not a fictitious ruler for soft-wrapped text.
+        const lines = 1 + Math.floor(body.scrollTop / 20);
+        gutter.textContent = String(lines);
+      };
+      const reflect = () => {
+        apply.disabled = cancel.disabled = !designResponseSettingsDrafts.get(r);
+      };
+      const reset = () => {
+        if (!ownsBody()) return;
+        if (designResponseSettingsDrafts.clear(r)) editVersion++;
+        body.value = visible;
+        drawLine();
+        reflect();
+        body.focus({ preventScroll: true });
+      };
+      on("#design-inline-example-body", "scroll", drawLine);
+      on("#design-inline-example-body", "input", () => {
+        if (!ownsBody()) return;
+        const pending = designResponseSettingsDrafts.get(r);
+        if (!pending && !unchangedResponseDefinitions(raw.value, r.responses)) {
+          reset();
+          throw Error(
+            "响应定义 JSON 有未应用的修改，请先处理后再编辑示例正文。",
+          );
+        }
+        if (body.value === visible) designResponseSettingsDrafts.clear(r);
+        else
+          designResponseSettingsDrafts.stage(r, {
+            kind: "example",
+            body: body.value,
+            definition: pending?.definition ?? r.responses[index],
+            definitionIndex: index,
+            status,
+            media,
+            example: target.example,
+            exampleIndex: target.index,
+            raw: pending?.raw ?? raw.value,
+            rawCurrent: pending?.rawCurrent,
+          });
+        editVersion++;
+        drawLine();
+        reflect();
+      });
+      on("#design-inline-example-cancel", "click", reset);
+      on("#design-inline-example-form", "keydown", (event) => {
+        if (event.isComposing) return;
+        const pending = designResponseSettingsDrafts.get(r);
+        if (
+          (event.ctrlKey || event.metaKey) &&
+          ["enter", "s"].includes(event.key.toLowerCase())
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (pending) toast(unappliedDesignResponseExample);
+        } else if (event.key === "Escape" && pending) {
+          event.preventDefault();
+          event.stopPropagation();
+          reset();
+        }
+      });
+      on("#design-inline-example-form", "submit", (event) => {
+        event.preventDefault();
+        const draft = designResponseSettingsDrafts.get(r);
+        if (!draft || draft.kind !== "example") return;
+        if (
+          !ownsBody() ||
+          draft.definition !== r.responses[index] ||
+          draft.example !== target.example ||
+          draft.exampleIndex !== target.index ||
+          draft.raw !== raw.value ||
+          busy ||
+          saving
+        )
+          throw Error("响应示例或 JSON 草稿已变化，请取消后再编辑。");
+        const next = prepareDesignExampleBody(
+          draft.definition,
+          media,
+          managed,
+          target.example,
+          draft.body,
+        );
+        if (target.example) r.examples[target.index] = next;
+        else r.examples.push(next);
+        designResponseSettingsDrafts.clear(r);
+        designResponseSelections.set(key, {
+          ...selection,
+          exampleChoice: next,
+        });
+        mark();
+        redraw("#design-inline-example-body");
+      });
+    }
+  }
   const editResponseHeader = (name = null) => {
     const r = request();
     collect();

@@ -60,6 +60,9 @@ jobs:
       - run: node tests/workspace-global-variables-ui.mjs
       - run: node tests/workspace-global-parameters-ui.mjs
       - run: node tests/http-design-pane-ui.mjs
+      - run: node tests/http-design-response-example-inline-ui.mjs
+        env:
+          DESIGN_RESPONSE_EXAMPLE_INLINE_EVIDENCE: /tmp/local-api-design-response-example-inline
       - run: node tests/http-design-response-header-inline-ui.mjs
         env:
           DESIGN_RESPONSE_HEADER_INLINE_EVIDENCE: /tmp/local-api-design-response-header-inline
@@ -161,6 +164,7 @@ jobs:
           name: ui-evidence
           path: |
             /tmp/local-api-*.png
+            /tmp/local-api-design-response-example-inline/design-response-example-*.png
             /tmp/local-api-design-response-header-inline/design-response-header-*.png
             /tmp/local-api-design-response-settings-inline/design-response-settings-*.png
             /tmp/local-api-http-success-response/response-*-workbench.png
