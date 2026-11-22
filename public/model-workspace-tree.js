@@ -1,4 +1,8 @@
 import { addSchemaProperty, schemaRows } from "./schema-editor.js";
+import {
+  isModelTypeProperty,
+  modelFieldTypeMenuHTML,
+} from "./model-workspace-type.js";
 
 const esc = (value) =>
   String(value ?? "").replace(
@@ -98,9 +102,13 @@ export class ModelWorkspaceTree {
 const plus = (attributes, label) =>
   `<button class="model-field-plus ghost" type="button" aria-label="${label}" title="${label}" ${attributes}><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor"><circle cx="8" cy="8" r="7"/><path d="M4.5 8h7M8 4.5v7"/></svg></button>`;
 
-function fieldRow(row) {
+function fieldRow(row, index) {
   const depth = Math.min(row.depth, 8);
-  return `<li class="model-tree-row model-schema-field" data-model-field-depth="${depth}"><span class="model-field-name">${esc(row.name)}</span><span class="model-field-type"><span class="model-draft-type">${esc(typeOf(row.schema))}</span></span><span class="model-field-required">${row.required ? "必填" : ""}</span><span class="model-field-description muted">${esc(describe(row.schema))}</span></li>`;
+  const type = esc(typeOf(row.schema));
+  const typeCell = isModelTypeProperty(row)
+    ? `<button id="model-type-trigger-${index}" class="ghost model-draft-type" type="button" data-model-type-trigger="${index}" data-model-type-current="${type}" aria-haspopup="menu" aria-expanded="false" aria-controls="model-field-type-menu" aria-label="${esc(row.name)} 的字段类型：${type}">${type}</button>`
+    : `<span class="model-draft-type">${type}</span>`;
+  return `<li class="model-tree-row model-schema-field" data-model-field-depth="${depth}"><span class="model-field-name">${esc(row.name)}</span><span class="model-field-type">${typeCell}</span><span class="model-field-required">${row.required ? "必填" : ""}</span><span class="model-field-description muted">${esc(describe(row.schema))}</span></li>`;
 }
 
 function pendingRow(row) {
@@ -111,5 +119,5 @@ function pendingRow(row) {
 export function modelWorkspaceTree(draft) {
   const tree = draft.tree;
   const { rows, canAdd, error } = readTree(draft.schema);
-  return `<div class="model-tree-row model-draft-root"><button id="model-root-expand" class="ghost" type="button" aria-controls="model-tree-children" aria-expanded="${tree.expanded}"><span class="model-root-chevron" aria-hidden="true">›</span>根节点</button><span class="model-field-type">${canAdd ? plus('id="model-root-add"', "添加子级节点") : ""}<span class="model-draft-type">${esc(typeOf(draft.schema))}</span></span><span class="model-field-required"></span><span class="model-field-description muted">${esc(describe(draft.schema))}</span></div><ul id="model-tree-children" role="list" aria-label="模型字段"${tree.expanded ? "" : " hidden"}>${rows.map(fieldRow).join("")}${tree.pending.map(pendingRow).join("")}${error ? `<li class="model-tree-unavailable muted">请使用 Raw 编辑：${esc(error)}</li>` : ""}</ul>`;
+  return `<div class="model-tree-row model-draft-root"><button id="model-root-expand" class="ghost" type="button" aria-controls="model-tree-children" aria-expanded="${tree.expanded}"><span class="model-root-chevron" aria-hidden="true">›</span>根节点</button><span class="model-field-type">${canAdd ? plus('id="model-root-add"', "添加子级节点") : ""}<span class="model-draft-type">${esc(typeOf(draft.schema))}</span></span><span class="model-field-required"></span><span class="model-field-description muted">${esc(describe(draft.schema))}</span></div><ul id="model-tree-children" role="list" aria-label="模型字段"${tree.expanded ? "" : " hidden"}>${rows.map(fieldRow).join("")}${tree.pending.map(pendingRow).join("")}${error ? `<li class="model-tree-unavailable muted">请使用 Raw 编辑：${esc(error)}</li>` : ""}</ul>${modelFieldTypeMenuHTML()}`;
 }
