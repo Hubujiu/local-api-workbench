@@ -652,7 +652,6 @@ try {
       "must-not-create-on-cancel",
     ),
   );
-  await page.locator(".tree-create summary").click();
   assert.equal(await page.locator("#new-folder").isVisible(), false);
   const activeName = await page.locator("#request-name").inputValue();
   await page.locator("#request-name").fill("定位保留未保存内容");
@@ -1436,7 +1435,7 @@ try {
   );
   await saveAndWait();
   await page.locator(".tree-create summary").click();
-  await page.locator('[data-page="protocols"]').click();
+  await page.locator('[data-tree-protocol="sse"]').click();
   await page.locator("#protocol-url").fill(fixtureURL + "/sse");
   await page.locator("#protocol-name").fill("Saved SSE fixture");
   await Promise.all([

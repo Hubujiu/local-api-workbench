@@ -1,3 +1,4 @@
+import { apiCreateMenu, bindApiCreateMenu } from "./api-create-menu.js";
 import { confirmDirtyProjectSwitch } from "./project-switch-confirmation.js";
 import { apiWelcome } from "./api-welcome.js";
 import {
@@ -1917,7 +1918,7 @@ function render(preserveEditingFocus = false) {
               )
               .join(
                 "",
-              )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="${doc ? "定位当前文档" : "定位当前接口"}" aria-label="${doc ? "定位当前文档" : "定位当前接口"}">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button><button data-page="grpc">gRPC unary</button><button data-page="socketio">Socket.IO</button><button id="new-folder">新建目录</button></div></details>`
+              )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="${doc ? "定位当前文档" : "定位当前接口"}" aria-label="${doc ? "定位当前文档" : "定位当前接口"}">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div>${apiCreateMenu()}`
     }</aside><main class="workspace">${
       page === "apis"
         ? `<div class="tabs"><div class="tab-scroll">${opened
@@ -2870,6 +2871,27 @@ function bind() {
     bindTree();
   });
   bindTree();
+  bindApiCreateMenu($(".tree-create"));
+  on("[data-tree-protocol]", "click", (_, button) => {
+    const type = button.dataset.treeProtocol;
+    if (!["sse", "websocket", "tcp"].includes(type)) return;
+    collect();
+    selectedProtocolId = "";
+    page = "protocols";
+    render();
+    $("#protocol-type").value = type;
+    $("#protocol-name").focus();
+  });
+  on("[data-tree-import]", "click", (_, button) => {
+    $("#import")?.click();
+    const selector =
+      button.dataset.treeImport === "file" ? "#import-file" : "#import-text";
+    const input = $(selector);
+    if (button.dataset.treeImport === "curl" && input)
+      input.placeholder = "粘贴 cURL 命令。导入只解析定义，不执行命令。";
+    input?.focus({ preventScroll: true });
+  });
+  on("#new-tree-document", "click", () => editDocument());
   on("#new-folder", "click", () =>
     modal("新建目录", '<label>目录名称</label><input id="folder-name">', () => {
       const name = $("#folder-name").value.trim();
