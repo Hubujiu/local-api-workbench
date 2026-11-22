@@ -1,0 +1,177 @@
+#dialog:has(.local-project-import) {
+  width: 1022px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+}
+#dialog:has(.local-project-import) > form {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: calc(100dvh - 34px);
+}
+#dialog-content:has(.local-project-import) {
+  min-height: 0;
+  max-height: none;
+  padding: 18px 24px;
+  overflow: auto;
+}
+.local-project-import .local-import-source {
+  position: relative;
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0 0 16px;
+}
+.local-import-source legend {
+  padding: 0;
+  margin-bottom: 14px;
+}
+.local-import-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 178px));
+  gap: 10px 16px;
+}
+#dialog-content .local-import-mode-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+#dialog-content .local-import-mode-card:has(input:checked) {
+  border-color: var(--accent);
+}
+#dialog-content .local-import-mode-card:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+#dialog-content .local-import-mode-card input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+.local-import-mode-card :is(strong, small) {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.local-import-mode-card small,
+.local-import-chooser small {
+  color: var(--muted);
+}
+.local-import-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--text);
+  background: var(--hover);
+  border-radius: 6px;
+}
+.local-import-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.local-import-target {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 12px 0;
+  border-block: 1px solid var(--line);
+}
+#local-import-mode-help {
+  min-height: 1em;
+  margin: 12px 0;
+  line-height: 1.5;
+}
+#dialog-content .local-import-chooser {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 9px;
+  min-height: 168px;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  cursor: pointer;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.local-import-chooser .local-import-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+.local-import-chooser:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+#dialog-content .local-project-import :is(#import-mode, input[type="file"]) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  clip-path: inset(50%);
+}
+#dialog-content .local-project-import #import-text {
+  display: block;
+  min-height: 86px;
+  width: 100%;
+}
+.local-import-safety {
+  display: block;
+  margin-top: 14px;
+}
+@media (min-width: 900px) {
+  #dialog-content .local-import-mode-card {
+    block-size: 52px;
+    grid-template-columns: 20px minmax(0, 1fr) 14px;
+    gap: 6px;
+    padding: 5px 9px;
+  }
+  .local-import-mode-card .local-import-icon {
+    width: 20px;
+    height: 20px;
+  }
+  .local-import-mode-card :is(strong, small) {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .local-import-mode-card strong {
+    line-height: 16px;
+    font-size: 13px;
+  }
+  .local-import-mode-card small {
+    line-height: 14px;
+    font-size: 11px;
+  }
+}
+@media (min-width: 1000px) and (min-height: 820px) {
+  #dialog-content .local-import-chooser {
+    min-height: 219px;
+  }
+}
+@media (max-width: 640px) {
+  #dialog-content:has(.local-project-import) {
+    padding: 12px;
+  }
+  .local-import-cards {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  #dialog-content .local-import-mode-card {
+    min-height: 44px;
+  }
+  #dialog-content .local-import-chooser {
+    min-height: 132px;
+  }
+}

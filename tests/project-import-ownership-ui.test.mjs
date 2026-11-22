@@ -7,6 +7,7 @@ import { createProjectImportGuard } from "../public/project-import-guard.js";
 import { createNativeRequestLifecycle } from "../public/native-request-lifecycle.js";
 import { createApp } from "../src/server.mjs";
 import { normalizeRequest } from "../src/core.mjs";
+import { localProjectImportMarkup } from "../public/local-project-import.js";
 const source = await readFile(
   new URL("../public/app.js", import.meta.url),
   "utf8",
@@ -59,6 +60,7 @@ function harness({
     "nativeRequestLifecycle",
     "hooks",
     "importMode",
+    "localProjectImportMarkup",
     `
     let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
@@ -80,13 +82,44 @@ function harness({
   `,
   );
   return {
-    ...create(initial, api, guard, native, hooks, mode),
+    ...create(
+      initial,
+      api,
+      guard,
+      native,
+      hooks,
+      mode,
+      localProjectImportMarkup,
+    ),
     calls,
     guard,
     native,
   };
 }
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+test("explicit import uses selected file over pasted content without pre-reading", async () => {
+  const h = harness();
+  let reads = 0;
+  h.els["#import-text"].value = "ignored pasted content";
+  h.els["#import-file"].files = [
+    {
+      async text() {
+        reads++;
+        return "selected file content";
+      },
+    },
+  ];
+  assert.equal(reads, 0);
+  assert.equal(h.calls.length, 0);
+  const submission = h.run();
+  await tick();
+  assert.equal(reads, 1);
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].body.document, "selected file content");
+  h.calls[0].resolve(fixture());
+  await submission;
+});
+
 test("actual merge callback applies its own response once", async () => {
   const h = harness();
   const running = h.run();
