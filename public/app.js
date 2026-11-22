@@ -28,6 +28,7 @@ import {
 } from "./project-create-settlement.js";
 const projectCreationFlow = createProjectCreationFlow(sessionStorage);
 import { apiCreateMenu, bindApiCreateMenu } from "./api-create-menu.js";
+import { createGraphQLSchemaDirectory } from "./graphql-schema-directory.js";
 import { newGraphQLEditorRequest } from "./graphql-editor.js";
 import {
   bindGraphQLWorkspace,
@@ -371,6 +372,7 @@ const designResponseSelections = new Map();
 const collapsedDesignResponseRoots = new WeakMap();
 const debugAuthDrafts = new WeakMap();
 const graphqlDrafts = createGraphQLWorkspaceDrafts();
+const graphqlSchemaDirectory = createGraphQLSchemaDirectory();
 let debugParameterOwner = "";
 const designResponseKey = (r) => JSON.stringify([project?.id, r.id]);
 const caseResults = createCaseResultStore();
@@ -2006,7 +2008,9 @@ function render(preserveEditingFocus = false) {
             )
             .map((id) => {
               const item = project.requests.find((r) => r.id === id);
-              return `<div class="tab ${!doc && current === id ? "selected" : ""}"><button class="ghost tab-switch" data-open-tab="${id}"><span class="method ${item.graphqlEditorVersion === 1 ? "graphql-badge" : item.method}">${item.graphqlEditorVersion === 1 ? "GraphQL" : item.method}</span> <span data-tab-name="${id}">${esc(item.name)}</span></button><button class="ghost tab-close" data-close-tab="${id}" aria-label="关闭 ${esc(item.name)}">×</button></div>`;
+              const graphql = item.graphqlEditorVersion === 1;
+              const graphqlName = graphql ? esc("GraphQL " + item.name) : "";
+              return `<div class="tab ${!doc && current === id ? "selected" : ""}"><button class="ghost tab-switch" data-open-tab="${id}"${graphql ? ` title="${graphqlName}" aria-label="${graphqlName}"` : ""}><span class="method ${graphql ? "graphql-badge" : item.method}"${graphql ? ' aria-hidden="true" title="GraphQL"' : ""}>${graphql ? "GQL" : item.method}</span> <span data-tab-name="${id}">${esc(item.name)}</span></button><button class="ghost tab-close" data-close-tab="${id}" aria-label="关闭 ${esc(item.name)}">×</button></div>`;
             })
             .join(
               "",
@@ -4392,6 +4396,7 @@ function bind() {
     bindGraphQLWorkspace(graphqlEditor, {
       request: target,
       drafts: graphqlDrafts,
+      directory: graphqlSchemaDirectory,
       owns: () =>
         project === owner &&
         request() === target &&
@@ -4408,6 +4413,7 @@ function bind() {
       detach: () => {
         collect();
         delete target.graphqlEditorVersion;
+        graphqlSchemaDirectory.clear(target);
         param = "body";
         mark();
         render();

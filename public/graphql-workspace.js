@@ -1,4 +1,8 @@
 import { prepareGraphQLEdit, readGraphQLEditor } from "./graphql-editor.js";
+import {
+  bindGraphQLSchemaDirectory,
+  graphQLSchemaDirectoryHTML,
+} from "./graphql-schema-directory.js";
 
 export const unappliedGraphQL =
   "GraphQL 编辑有未应用的更改。请先回到对应接口应用或放弃。";
@@ -62,7 +66,7 @@ export function graphqlWorkspaceHTML(request, drafts, esc, ownerId) {
   return `<section class="graphql-workspace" data-graphql-owner="${esc(ownerId + ":" + request.id)}" aria-label="GraphQL 请求编辑">
     ${
       data
-        ? `<div class="graphql-panes${opened ? " variables-open" : ""}">
+        ? `<div class="graphql-editor-layout">${graphQLSchemaDirectoryHTML()}<div class="graphql-panes${opened ? " variables-open" : ""}">
       <label class="graphql-source">
         <span>Query</span><textarea id="graphql-query" data-graphql-field="query" spellcheck="false" wrap="off">
 ${esc(value("query"))}</textarea>
@@ -72,7 +76,7 @@ ${esc(value("query"))}</textarea>
         <span>Variables <small id="graphql-variables-hint">JSON 对象或 null；清空则省略</small></span><textarea id="graphql-variables" aria-label="Variables" aria-describedby="graphql-variables-hint" data-graphql-field="variablesSource" spellcheck="false" wrap="off">
 ${esc(value("variablesSource"))}</textarea>
       </label>
-    </div>
+    </div></div>
     <div class="graphql-workspace-actions">
       <div class="graphql-draft-actions"${pending ? "" : " hidden"}>
         <button type="button" id="graphql-discard" class="ghost">放弃</button><button type="button" id="graphql-apply" class="primary">应用到正文</button>
@@ -89,11 +93,14 @@ ${esc(value("variablesSource"))}</textarea>
 
 export function bindGraphQLWorkspace(
   root,
-  { request, drafts, owns, revised, redraw, changed, detach },
+  { request, drafts, directory, owns, revised, redraw, changed, detach },
 ) {
   const query = root.querySelector("#graphql-query");
   const error = root.querySelector(".graphql-error");
   const active = () => root.isConnected && owns();
+  const schema = root.querySelector(".graphql-schema-directory");
+  if (schema)
+    bindGraphQLSchemaDirectory(schema, { request, directory, owns: active });
   const attempt = (fn) => {
     if (!active()) return;
     try {
