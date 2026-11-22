@@ -32,6 +32,13 @@ import {
   scopedResponseExamples,
   supportsDesignExamples,
 } from "./design-response.js";
+import {
+  documentCounts,
+  documentWorkspaceTabs,
+  prepareWorkspaceDocumentLinks,
+  workspaceDocumentById,
+  workspaceDocumentHTML,
+} from "./workspace-document.js";
 import { markdownEdit, markdownTools } from "./design-markdown.js";
 import { emptyCasePanel } from "./case-empty-view.js";
 import {
@@ -267,6 +274,9 @@ const collapsedFolders = new Set();
 const loadOptions = new Map();
 const parameterScopes = new Map();
 const pendingOAuth1 = new Set();
+let openedDocuments = [];
+let activeDocumentId = null;
+const documentModes = new Map();
 let modalRevision = 0;
 let modalFocusHandlers;
 let opened = [],
@@ -971,6 +981,20 @@ function toast(s) {
 function request() {
   return project?.requests.find((r) => r.id === current);
 }
+function workspaceDocument() {
+  return page === "apis"
+    ? workspaceDocumentById(project, activeDocumentId)
+    : null;
+}
+function openWorkspaceDocument(id) {
+  collect();
+  if (!workspaceDocumentById(project, id))
+    throw Error("文档标识不存在或重复，请从文档总览查看");
+  if (!openedDocuments.includes(id)) openedDocuments.push(id);
+  activeDocumentId = id;
+  page = "apis";
+  render();
+}
 function defaultRequest(name = "新建接口") {
   return {
     id: uid(),
@@ -1134,7 +1158,7 @@ function rollbackProjectSave(error, rollback) {
 
 function collect() {
   const r = request();
-  if (!r || page !== "apis") return;
+  if (!r || page !== "apis" || workspaceDocument()) return;
   for (const [selector, key] of [
     ["#request-name", "name"],
     ["#url", "url"],
@@ -1247,6 +1271,9 @@ async function openProject(id) {
   projectImports.acknowledgeReload(id, importCheckpoint);
   current = project.requests.find((r) => !r.deletedAt)?.id;
   opened = current ? [current] : [];
+  openedDocuments = [];
+  activeDocumentId = null;
+  documentModes.clear();
   dirty = false;
   response = null;
   lastRun = null;
@@ -1439,6 +1466,7 @@ function tree() {
     searchType,
     page,
     current,
+    activeDocumentId: workspaceDocument()?.id,
     selectedProtocolId,
     collapsedFolders,
   });
@@ -1461,8 +1489,15 @@ function render(preserveEditingFocus = false) {
     parameterStrip?.querySelector(".active")?.dataset.param;
   const oldTabs = $(".tab-scroll");
   const oldTabScroll = oldTabs?.scrollLeft || 0;
-  const oldSelectedTab = oldTabs?.querySelector(".selected [data-open-tab]")
-    ?.dataset.openTab;
+  const tabIdentity = (button) =>
+    button?.dataset.openDocumentTab !== undefined
+      ? "doc:" + button.dataset.openDocumentTab
+      : button?.dataset.openTab !== undefined
+        ? "http:" + button.dataset.openTab
+        : null;
+  const oldSelectedTab = tabIdentity(
+    oldTabs?.querySelector(".selected .tab-switch"),
+  );
   const editing =
     preserveEditingFocus &&
     active &&
@@ -1488,6 +1523,7 @@ function render(preserveEditingFocus = false) {
       }
     : null;
   const r = request();
+  const doc = workspaceDocument();
   document.body.classList.toggle("compact-ui", compactUI);
   $("#app").innerHTML =
     `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" ${busy || saving ? "disabled" : ""} class="ghost">＋ 新建/导入项目</button></div><div class="top-group project-group"><select id="project-select" ${busy || saving ? "disabled" : ""} aria-label="项目">${projects
@@ -1517,7 +1553,7 @@ function render(preserveEditingFocus = false) {
             )
             .join(
               "",
-            )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="定位当前接口" aria-label="定位当前接口">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button><button data-page="grpc">gRPC unary</button><button data-page="socketio">Socket.IO</button><button id="new-folder">新建目录</button></div></details>`
+            )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="${doc ? "定位当前文档" : "定位当前接口"}" aria-label="${doc ? "定位当前文档" : "定位当前接口"}">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button><button data-page="grpc">gRPC unary</button><button data-page="socketio">Socket.IO</button><button id="new-folder">新建目录</button></div></details>`
     }</aside><main class="workspace">${
       page === "apis"
         ? `<div class="tabs"><div class="tab-scroll">${opened
@@ -1526,19 +1562,19 @@ function render(preserveEditingFocus = false) {
             )
             .map((id) => {
               const item = project.requests.find((r) => r.id === id);
-              return `<div class="tab ${current === id ? "selected" : ""}"><button class="ghost tab-switch" data-open-tab="${id}"><span class="method ${item.method}">${item.method}</span> <span data-tab-name="${id}">${esc(item.name)}</span></button><button class="ghost tab-close" data-close-tab="${id}" aria-label="关闭 ${esc(item.name)}">×</button></div>`;
+              return `<div class="tab ${!doc && current === id ? "selected" : ""}"><button class="ghost tab-switch" data-open-tab="${id}"><span class="method ${item.method}">${item.method}</span> <span data-tab-name="${id}">${esc(item.name)}</span></button><button class="ghost tab-close" data-close-tab="${id}" aria-label="关闭 ${esc(item.name)}">×</button></div>`;
             })
             .join(
               "",
-            )}<button id="tab-add" class="ghost" aria-label="新建接口标签页">＋</button></div><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button id="open-environment-settings" type="button" class="ghost" title="环境设置" aria-label="环境设置" aria-haspopup="dialog">☷</button></div></div>${r ? editor(r) : '<div class="empty"><span class="empty-symbol">↗</span><p>从一个请求开始</p><small>创建或导入接口，所有数据只留在本机。</small><button id="welcome-add" class="primary">＋ 新建接口</button></div>'}`
+            )}${documentWorkspaceTabs(project, openedDocuments, doc?.id)}<button id="tab-add" class="ghost" aria-label="新建接口标签页">＋</button></div><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button id="open-environment-settings" type="button" class="ghost" title="环境设置" aria-label="环境设置" aria-haspopup="dialog">☷</button></div></div>${doc ? workspaceDocumentHTML(doc, { editing: documentModes.get(doc.id) === "edit", saving, status: (project.settings?.statuses || []).find((item) => item.id === doc.statusId)?.name }) : r ? editor(r) : '<div class="empty"><span class="empty-symbol">↗</span><p>从一个请求开始</p><small>创建或导入接口，所有数据只留在本机。</small><button id="welcome-add" class="primary">＋ 新建接口</button></div>'}`
         : renderPage()
-    }</main></div><footer class="statusbar"><span>◈ 本地工作空间 &nbsp; / &nbsp; ${esc(project?.name || "")} &nbsp; <span id="saved-state">${dirty ? "● 未保存" : "✓ 已保存"}</span></span><span class="status-actions"><button id="compact-ui" aria-pressed="${compactUI}" title="隐藏项目树，保留导航和工作区">${compactUI ? "完整模式" : "精简模式"}</button><button id="response-layout" ${page !== "apis" || mode !== "debug" ? "disabled" : ""} aria-pressed="${responseLayout === "split"}">${responseLayout === "split" ? "上下布局" : "左右布局"}</button><span>Local API 0.1.0</span></span></footer>`;
+    }</main></div><footer class="statusbar"><span>◈ 本地工作空间 &nbsp; / &nbsp; ${esc(project?.name || "")} &nbsp; <span id="saved-state">${dirty ? "● 未保存" : "✓ 已保存"}</span></span><span class="status-actions"><button id="compact-ui" aria-pressed="${compactUI}" title="隐藏项目树，保留导航和工作区">${compactUI ? "完整模式" : "精简模式"}</button><button id="response-layout" ${page !== "apis" || doc || mode !== "debug" ? "disabled" : ""} aria-pressed="${responseLayout === "split"}">${responseLayout === "split" ? "上下布局" : "左右布局"}</button><span>Local API 0.1.0</span></span></footer>`;
   bind();
   const tabScroll = $(".tab-scroll");
   if (tabScroll) {
     tabScroll.scrollLeft = oldTabScroll;
-    const selectedTab = tabScroll.querySelector(".selected [data-open-tab]");
-    if (selectedTab && selectedTab.dataset.openTab !== oldSelectedTab)
+    const selectedTab = tabScroll.querySelector(".selected .tab-switch");
+    if (selectedTab && tabIdentity(selectedTab) !== oldSelectedTab)
       selectedTab.parentElement.scrollIntoView({
         block: "nearest",
         inline: "nearest",
@@ -1989,6 +2025,7 @@ function addRequest() {
   const r = defaultRequest();
   project.requests.push(r);
   current = r.id;
+  activeDocumentId = null;
   if (!opened.includes(r.id)) opened.push(r.id);
   page = "apis";
   mode = "debug";
@@ -2198,10 +2235,26 @@ function bind() {
     render();
     if (fromRailKeyboard) $(".rail [aria-current='page']")?.focus();
   });
+  bindWorkspaceDocument();
+  on("[data-open-document-tab]", "click", (event, button) => {
+    const keyboard = event.detail === 0 && button === document.activeElement;
+    openWorkspaceDocument(button.dataset.openDocumentTab);
+    if (keyboard) $(".tab.selected .tab-switch")?.focus();
+  });
+  on("[data-close-document-tab]", "click", (event, button) => {
+    const keyboard = event.detail === 0 && button === document.activeElement;
+    const id = button.dataset.closeDocumentTab;
+    openedDocuments = openedDocuments.filter((entry) => entry !== id);
+    if (activeDocumentId === id)
+      activeDocumentId = openedDocuments.at(-1) ?? null;
+    render();
+    if (keyboard) ($(".tab.selected .tab-switch") || $("#tab-add"))?.focus();
+  });
   on("[data-open-tab]", "click", (event, e) => {
     const fromKeyboard = event.detail === 0 && e === document.activeElement;
     collect();
     current = e.dataset.openTab;
+    activeDocumentId = null;
     response = responses.get(project.id + ":" + current) || null;
     render();
     if (fromKeyboard) $(".tab.selected .tab-switch")?.focus();
@@ -4155,6 +4208,7 @@ function bind() {
             project = result;
             dirty = false;
             current = project.requests.at(-1)?.id;
+            activeDocumentId = null;
             response = null;
             if (current && !opened.includes(current)) opened.push(current);
             if (request()?.importNotes?.length) {
@@ -4209,8 +4263,10 @@ function bind() {
   });
   on("#locate-request", "click", () => {
     collect();
-    const selected = request();
-    if (!selected || selected.deletedAt) throw Error("没有当前接口可定位");
+    const doc = workspaceDocument();
+    const selected = doc || request();
+    if (!selected || selected.deletedAt)
+      throw Error("没有当前接口或文档可定位");
     search = "";
     searchType = "all";
     const selectedPath = selected.folder || "";
@@ -4224,9 +4280,9 @@ function bind() {
     }
     page = "apis";
     render();
-    const item = document.querySelector(
-      '[data-request="' + CSS.escape(current) + '"]',
-    );
+    const item = doc
+      ? $('[data-document-index="' + project.documents.indexOf(doc) + '"]')
+      : $('[data-request="' + CSS.escape(current) + '"]');
     item?.scrollIntoView({ block: "nearest" });
     item?.focus({ preventScroll: true });
   });
@@ -6008,6 +6064,7 @@ function bind() {
     );
     mark();
     page = "apis";
+    activeDocumentId = null;
     mode = "design";
     render();
   });
@@ -6074,15 +6131,11 @@ function bindTree() {
     page = "grpc";
     render();
   });
-  on("[data-document-index]", "click", (_, element) => {
-    collect();
-    const index = Number(element.dataset.documentIndex);
-    page = "docs";
-    render();
-    document
-      .querySelector('[data-edit-document="' + index + '"]')
-      ?.closest("article")
-      ?.scrollIntoView({ block: "start" });
+  on("[data-document-index]", "click", (event, element) => {
+    const item = project.documents[Number(element.dataset.documentIndex)];
+    const keyboard = event.detail === 0 && element === document.activeElement;
+    openWorkspaceDocument(item?.id);
+    if (keyboard) $(".tab.selected .tab-switch")?.focus();
   });
   on("[data-protocol-id]", "click", (_, element) => {
     collect();
@@ -6143,6 +6196,7 @@ function bindTree() {
   on("[data-request]", "click", (_, e) => {
     collect();
     current = e.dataset.request;
+    activeDocumentId = null;
     if (!opened.includes(current)) opened.push(current);
     page = "apis";
     response = responses.get(project.id + ":" + current) || null;
@@ -6561,7 +6615,73 @@ function editMockField(id) {
   );
 }
 
-function editDocument(index) {
+function bindWorkspaceDocument() {
+  const doc = workspaceDocument();
+  if (!doc) return;
+  const owner = project;
+  const active = () => owner === project && workspaceDocument() === doc;
+  const preview = $("#workspace-document-preview");
+  prepareWorkspaceDocumentLinks(preview);
+  on("#workspace-document-toggle", "click", () => {
+    if (!active()) return;
+    const editing = documentModes.get(doc.id) !== "edit";
+    documentModes.set(doc.id, editing ? "edit" : "preview");
+    render();
+    $(
+      editing ? "#workspace-document-text" : "#workspace-document-toggle",
+    )?.focus();
+  });
+  on("#workspace-document-settings", "click", () => {
+    if (active()) editDocument(owner.documents.indexOf(doc), doc);
+  });
+  on("#workspace-document-title", "input", (_, input) => {
+    if (!active() || !input.isConnected || doc.title === input.value) return;
+    doc.title = input.value;
+    mark();
+    const title = doc.title || "未命名文档";
+    $(".tab.selected [data-workspace-document-tab-name]").textContent = title;
+    $(".tab.selected [data-close-document-tab]").setAttribute(
+      "aria-label",
+      "关闭 " + title,
+    );
+    $("#tree").innerHTML = tree();
+    bindTree();
+  });
+  const input = $("#workspace-document-text");
+  let previewTimer;
+  on("#workspace-document-text", "input", () => {
+    if (!active() || !input.isConnected || doc.content === input.value) return;
+    doc.content = input.value;
+    mark();
+    $("#workspace-document-count").textContent = documentCounts(doc.content);
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      if (active() && input.isConnected) {
+        preview.innerHTML = renderMarkdown(doc.content);
+        prepareWorkspaceDocumentLinks(preview);
+      }
+    }, 120);
+  });
+  on("[data-workspace-markdown]", "click", (_, control) => {
+    if (!active() || !input?.isConnected) return;
+    const patch = markdownEdit(
+      control.dataset.workspaceMarkdown,
+      input.value,
+      input.selectionStart,
+      input.selectionEnd,
+    );
+    if (!patch) return;
+    input.setRangeText(patch.replacement, patch.start, patch.end, "select");
+    input.focus();
+    input.setSelectionRange(patch.anchor, patch.anchor + patch.length);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+function editDocument(index, workspaceOwner) {
+  const owner = project,
+    openedVersion = editVersion;
+  let initialInput;
   const existing = project.documents[index] || {
     title: "新文档",
     content: "# 使用说明\n\n",
@@ -6571,6 +6691,14 @@ function editDocument(index) {
     "项目文档",
     `<label>标题</label><input id="document-title" value="${esc(existing.title)}"><label>目录</label><input id="document-folder" value="${esc(existing.folder || "")}"><label>状态</label><select id="document-status"><option value="">未设置状态</option>${existing.statusId && !statuses.some((status) => status.id === existing.statusId) ? `<option selected value="${esc(existing.statusId)}">已删除状态（保留标记）</option>` : ""}${statuses.map((status) => `<option value="${esc(status.id)}" ${status.id === existing.statusId ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><div class="form-grid">${attributeFields(project.settings?.attributes || [], existing.attributes, "doc-attribute")}</div><label>Markdown 正文</label><textarea id="document-content">${esc(existing.content)}</textarea><label>插入本地图片（PNG/JPEG，最多128KiB，随文档离线保存）</label><input id="document-image" type="file" accept="image/png,image/jpeg"><label>实时预览</label><div id="document-preview" class="markdown-content"></div>`,
     () => {
+      if (
+        workspaceOwner &&
+        (owner !== project ||
+          openedVersion !== editVersion ||
+          workspaceDocument() !== workspaceOwner ||
+          project.documents[index] !== workspaceOwner)
+      )
+        throw Error("项目或文档草稿已变化，请重新打开文档设置");
       const fields = project.settings?.attributes || [];
       validateAttributeDefinitions(fields);
       const attributes = { ...(existing.attributes || {}) };
@@ -6592,16 +6720,30 @@ function editDocument(index) {
         folder: $("#document-folder").value,
         statusId: $("#document-status").value,
         attributes,
-        content: $("#document-content").value,
+        content:
+          workspaceOwner && $("#document-content").value === initialInput
+            ? existing.content
+            : $("#document-content").value,
       };
       if (index === undefined) project.documents.push(record);
       else project.documents[index] = record;
       mark();
       render();
     },
+    workspaceOwner ? "应用到项目草稿" : undefined,
+    workspaceOwner
+      ? () => {
+          if (
+            owner === project &&
+            workspaceDocument()?.id === workspaceOwner.id
+          )
+            $("#workspace-document-settings")?.focus();
+        }
+      : undefined,
   );
   const input = $("#document-content"),
     preview = $("#document-preview");
+  initialInput = input.value;
   let timer;
   input.oninput = () => {
     clearTimeout(timer);
