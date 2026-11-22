@@ -84,6 +84,77 @@ try {
   const content = work.getByRole("textbox", { name: "Markdown 正文" });
   const edit = work.getByRole("button", { name: "编辑", exact: true });
   const reader = work.getByRole("button", { name: "预览", exact: true });
+  const toolbar = work.getByRole("group", { name: "文档格式工具" });
+  const toolNames = [
+    "标题",
+    "加粗",
+    "斜体",
+    "引用",
+    "链接",
+    "行内代码",
+    "代码块",
+    "无序列表",
+    "有序列表",
+    "删除线",
+    "任务列表",
+    "表格",
+  ];
+  const toolbarMetrics = () =>
+    toolbar.evaluate((surface) =>
+      [...surface.querySelectorAll("button")].map((button) => {
+        const rect = button.getBoundingClientRect();
+        const svg = button.querySelector("svg");
+        const icon = svg?.getBoundingClientRect();
+        return {
+          width: rect.width,
+          height: rect.height,
+          x: rect.x + rect.width / 2,
+          y: rect.y + rect.height / 2,
+          svg: icon && [icon.width, icon.height],
+          decorative: svg?.getAttribute("aria-hidden"),
+          label: button.getAttribute("aria-label"),
+        };
+      }),
+    );
+  const validateTools = (measurements) => {
+    assert.deepEqual(
+      measurements.map((item) => item.label),
+      toolNames,
+    );
+    for (const { width, height, svg, decorative } of measurements)
+      assert.deepEqual(
+        [width, height, svg, decorative],
+        [36, 32, [16, 16], "true"],
+      );
+  };
+  const measureToolPixels = async (png, measurements) =>
+    page.evaluate(
+      async ({ encoded, centers }) => {
+        const image = new Image();
+        image.src = "data:image/png;base64," + encoded;
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0);
+        return centers.map(([x, y]) => {
+          const pixels = context.getImageData(x - 8, y - 8, 16, 16).data;
+          let ink = 0,
+            blue = 0;
+          for (let i = 0; i < pixels.length; i += 4) {
+            const [r, g, b] = [pixels[i], pixels[i + 1], pixels[i + 2]];
+            if (r < 160 && g < 150 && b < 135) ink++;
+            if (b > r + 14 && b > g + 6) blue++;
+          }
+          return { ink, blue };
+        });
+      },
+      {
+        encoded: png.toString("base64"),
+        centers: measurements.map(({ x, y }) => [x, y]),
+      },
+    );
   const active = (locator) =>
     locator.evaluate((element) => element === document.activeElement);
   await page.locator("#url").waitFor();
@@ -99,7 +170,7 @@ try {
   );
   assert.equal(await page.locator("#send").count(), 0);
   await preview.getByRole("heading", { name: original.title }).waitFor();
-  let editor, panes;
+  let editor, panes, tools, iconPixels;
   if (captures) {
     const snapshot = (state) =>
       page.screenshot({
@@ -125,8 +196,22 @@ try {
     );
     assert.equal(panes.y, editor.y);
     assert(Math.abs(panes.x - editor.x - editor.width) < 1);
+    tools = await toolbarMetrics();
+    validateTools(tools);
+    assert.deepEqual(
+      tools.map(({ x }) => x),
+      toolNames.map((_, i) => 402 + 36 * i),
+    );
+    assert(tools.every(({ y }) => y === 193));
     await content.blur();
-    await snapshot("editor-populated");
+    iconPixels = await measureToolPixels(
+      await snapshot("editor-populated"),
+      tools,
+    );
+    assert(
+      iconPixels.every(({ ink, blue }) => ink >= 10 && blue === 0),
+      JSON.stringify(iconPixels),
+    );
     assert.deepEqual(
       (await app.store.get(project.id)).documents,
       project.documents,
@@ -134,6 +219,13 @@ try {
   } else {
     await edit.press("Enter");
     assert(await active(content));
+    validateTools(await toolbarMetrics());
+    await toolbar
+      .getByRole("button", { name: "标题", exact: true })
+      .press("Tab");
+    assert(
+      await active(toolbar.getByRole("button", { name: "加粗", exact: true })),
+    );
     const newTitle = "Verification Notes Updated";
     await work.getByRole("textbox", { name: "文档标题" }).fill(newTitle);
     assert.match(await docTab.innerText(), /Verification Notes Updated/);
@@ -184,10 +276,27 @@ try {
     const narrowEditor = await content.boundingBox();
     const narrowPreview = await preview.boundingBox();
     assert(narrowPreview.y >= narrowEditor.y + narrowEditor.height);
-    assert.equal(
-      await page.evaluate(() => document.documentElement.scrollWidth),
-      430,
+    assert.deepEqual(
+      await page.evaluate(() => {
+        const { clientWidth, scrollWidth } = document.documentElement;
+        return [window.innerWidth, scrollWidth - clientWidth];
+      }),
+      [430, 0],
+      "a classic vertical scrollbar may reduce the usable width, but not create horizontal overflow",
     );
+    const narrowTools = await toolbarMetrics();
+    validateTools(narrowTools);
+    const toolbarRect = await toolbar.boundingBox();
+    assert(
+      narrowTools.every(
+        ({ x, y }) =>
+          x - 18 >= toolbarRect.x &&
+          x + 18 <= toolbarRect.x + toolbarRect.width &&
+          y - 16 >= toolbarRect.y &&
+          y + 16 <= toolbarRect.y + toolbarRect.height,
+      ),
+    );
+    assert(new Set(narrowTools.map(({ y }) => y)).size > 1);
     await work.getByRole("button", { name: "文档设置" }).press("Enter");
     const dialog = page.locator("#dialog");
     assert.equal(
@@ -263,6 +372,8 @@ try {
     JSON.stringify({
       editor,
       panes,
+      tools,
+      iconPixels,
       writes: snapshots.length,
       errors,
       forbidden,
