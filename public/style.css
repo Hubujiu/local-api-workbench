@@ -5717,3 +5717,54 @@ body.dark .sse-workbench-tab strong {
 .empty-trash-content p {
   margin: 10px 0 0;
 }
+
+#dialog:has(.request-trash-confirmation) {
+  inset: min(100px, 14vh) 0 auto;
+  width: 416px;
+  max-width: calc(100vw - 24px);
+  min-height: 117px;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 7px;
+}
+#dialog:has(.request-trash-confirmation)::backdrop {
+  background: rgb(0 0 0 / 44%);
+}
+#dialog:has(.request-trash-confirmation) > form > header {
+  min-height: 65px;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 16px 24px;
+  border: 0;
+}
+#dialog:has(.request-trash-confirmation) #dialog-title {
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+#dialog:has(.request-trash-confirmation) > form > header::before {
+  content: "!";
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #eea40a;
+  color: #2d200b;
+  font-size: 14px;
+  font-weight: 700;
+}
+#dialog:has(.request-trash-confirmation) > form > header button,
+#dialog:has(.request-trash-confirmation) #dialog-content {
+  display: none;
+}
+#dialog:has(.request-trash-confirmation) > form > footer {
+  gap: 8px;
+  padding: 0 24px 20px;
+  border: 0;
+}
+#dialog:has(.request-trash-confirmation) > form > footer button {
+  min-width: 59px;
+  min-height: 32px;
+  padding: 4px 12px;
+}

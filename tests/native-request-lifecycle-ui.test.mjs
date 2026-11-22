@@ -312,13 +312,18 @@ test("actual application wiring awaits native controller and guards ordinary sav
   const execute = new Function(
     "project",
     "changeNativeRequestLifecycle",
-    "confirm",
     "request",
     "mark",
     "render",
     "save",
     "responses",
-    `let current="r1",response;const handlers={};const on=(s,e,f)=>handlers[s]=f;${handlers};return handlers;`,
+    `let current="r1",response, editVersion=0, modalRevision=0, page="apis", busy=false, saving=false;
+      const handlers={};const on=(s,e,f)=>handlers[s]=f;
+      const workspaceDocument=()=>null, $=()=>({ open:true, focus(){} });
+      const modal=(title,_html,submit)=>{modalRevision++;handlers.title=title;handlers.confirm=submit};
+      ${handlers};
+      handlers.edit=()=>{editVersion++};
+      return handlers;`,
   );
   const calls = [];
   const p = fixture();
@@ -326,7 +331,6 @@ test("actual application wiring awaits native controller and guards ordinary sav
   const native = execute(
     p,
     async (...x) => calls.push(x),
-    () => true,
     () => p.requests[0],
     () => marks++,
     () => {},
@@ -350,7 +354,6 @@ test("actual application wiring awaits native controller and guards ordinary sav
     () => {
       throw Error("wrong branch");
     },
-    () => true,
     () => ordinary.requests[0],
     () => marks++,
     () => {},
@@ -358,7 +361,20 @@ test("actual application wiring awaits native controller and guards ordinary sav
     new Map(),
   );
   await old["#delete"]();
+  assert.match(old.title, /移到回收站/);
+  assert.equal(ordinary.requests[0].deletedAt, undefined);
+  assert.equal(saved, 0);
+  old.edit();
+  assert.throws(old.confirm, /草稿已变化/);
+  assert.equal(ordinary.requests[0].deletedAt, undefined);
+  await old["#delete"]();
+  const superseded = old.confirm;
+  await old["#delete"]();
+  assert.throws(superseded, /草稿已变化/);
+  assert.equal(ordinary.requests[0].deletedAt, undefined);
+  old.confirm();
   assert(ordinary.requests[0].deletedAt);
+  assert.equal(saved, 0);
   await old["[data-restore]"](null, { dataset: { restore: "r1" } });
   assert.equal(ordinary.requests[0].deletedAt, undefined);
   assert.equal(saved, 1);
