@@ -138,6 +138,23 @@ try {
       Math.abs(bounds.y + bounds.height / 2 - 249) <= 10,
   );
   assert.equal(bounds.width, 60);
+  assert.equal(bounds.height, 30);
+  const textBox = await compact.evaluate((control) => {
+    const style = getComputedStyle(control);
+    const canvas = document.createElement("canvas").getContext("2d");
+    canvas.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const measure = canvas.measureText(control.selectedOptions[0].text);
+    return {
+      height:
+        control.clientHeight -
+        parseFloat(style.paddingBlockStart) -
+        parseFloat(style.paddingBlockEnd),
+      glyphHeight:
+        measure.fontBoundingBoxAscent + measure.fontBoundingBoxDescent,
+    };
+  });
+  console.log("HTTP_SPLIT_BODY_GLYPH_BOX", JSON.stringify(textBox));
+  assert(textBox.height >= textBox.glyphHeight + 2, JSON.stringify(textBox));
   assert.equal(await compact.locator("option").count(), 6);
   // Exercise the native select keyboard pattern on two safe, nonbinary modes.
   await compact.press("ArrowDown");

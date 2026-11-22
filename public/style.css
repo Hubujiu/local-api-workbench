@@ -6456,7 +6456,7 @@ body.dark .design-parameter-panel [data-query-type-color="boolean"] {
   min-width: 60px;
   max-width: 100%;
   height: 30px;
-  padding-inline: 8px 4px;
+  padding: 2px 4px 2px 8px;
   border-color: var(--line);
   border-radius: 4px;
   color: var(--text);
