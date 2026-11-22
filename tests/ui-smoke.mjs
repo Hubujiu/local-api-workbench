@@ -1,3 +1,4 @@
+import { openProjectCreateUI } from "./helpers/open-project-create-ui.mjs";
 import { pickProjectUI } from "./helpers/pick-project-ui.mjs";
 import { exerciseHTTPResponseTabs } from "./helpers/http-response-tabs-ui.mjs";
 import { exerciseRequestParameterTabs } from "./helpers/http-request-parameter-tabs-ui.mjs";
@@ -5452,7 +5453,7 @@ try {
     schemaMockProjectId,
   );
 
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("Response example roundtrip");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -6013,7 +6014,7 @@ try {
   assert(!markdownDocument.includes(privateUploadBase64));
   await page.locator("#dialog").waitFor({ state: "hidden" });
 
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("SDK URL mode fixture");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -6185,7 +6186,7 @@ try {
   // projects so the unsaved-change confirmation cannot cancel the switch.
   await saveAndWait();
 
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("OpenAPI URL query fixture");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -6320,7 +6321,7 @@ try {
   await page.screenshot({ path: "/tmp/local-api-restored-modern-project.png" });
 
   // Independent grouped-source fixture; no mutation of earlier validation inputs.
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("Imported sample groups fixture");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -6493,7 +6494,7 @@ try {
   await page.locator("#send:not([disabled])").waitFor();
   await page.screenshot({ path: "/tmp/local-api-imported-form-defaults.png" });
 
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("Case batch execution fixture");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -6752,7 +6753,7 @@ try {
     await mkdir(path.dirname(filePath), { recursive: true });
     await writeFile(filePath, file.text);
   }
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("Native JSON subset fixture");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -7095,7 +7096,7 @@ try {
   templateModern.apis[1].request.query.parameter = [
     { key: "q", value: '{{$function.fn_WRAP("a,b")|upper}}', is_checked: 1 },
   ];
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("Source Query function fixture");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });

@@ -1,3 +1,4 @@
+import { projectTopMenu, bindProjectTopMenu } from "./project-top-menu.js";
 import { projectCreateForm } from "./project-create-form.js";
 import { apiCreateMenu, bindApiCreateMenu } from "./api-create-menu.js";
 import { confirmDirtyProjectSwitch } from "./project-switch-confirmation.js";
@@ -1880,7 +1881,7 @@ function render(preserveEditingFocus = false) {
   );
   document.body.classList.toggle("compact-ui", compactUI);
   $("#app").innerHTML =
-    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" ${busy || saving ? "disabled" : ""} class="ghost">＋ 新建/导入项目</button></div><div class="top-group project-group"><select id="project-select" ${busy || saving ? "disabled" : ""} aria-label="项目">${selectableProjects(
+    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div>${projectTopMenu(busy || saving)}</div><div class="top-group project-group"><select id="project-select" ${busy || saving ? "disabled" : ""} aria-label="项目">${selectableProjects(
       projects,
     )
       .map(
@@ -2903,7 +2904,18 @@ function bind() {
     mark();
     render();
   });
-  on("#new-project", "click", (_, opener) => {
+  const topProjectOwner = project;
+  bindProjectTopMenu(
+    $("#new-project"),
+    $("#project-top-menu"),
+    () =>
+      project === topProjectOwner &&
+      !busy &&
+      !saving &&
+      !$("#dialog").open &&
+      !$("#project-switch-confirmation")?.open,
+  );
+  on("#project-menu-create", "click", () => {
     const owner = project;
     modal(
       "新建项目",
@@ -2921,8 +2933,8 @@ function bind() {
       },
       "确定",
       () => {
-        if (project === owner && opener.isConnected)
-          opener.focus({ preventScroll: true });
+        if (project === owner)
+          $("#new-project")?.focus({ preventScroll: true });
       },
     );
     const revision = modalRevision;
@@ -4721,7 +4733,7 @@ function bind() {
       "复制",
     );
   });
-  on("#import,#welcome-import", "click", (_, opener) => {
+  on("#import,#welcome-import,#project-menu-import", "click", (_, opener) => {
     const owner = project;
     modal(
       "导入项目（手动）",
@@ -4842,10 +4854,12 @@ function bind() {
         }
       },
       "导入",
-      opener.id === "welcome-import"
+      ["welcome-import", "project-menu-import"].includes(opener.id)
         ? () => {
-            if (project === owner && opener.isConnected)
-              opener.focus({ preventScroll: true });
+            if (project !== owner) return;
+            const restore =
+              opener.id === "project-menu-import" ? $("#new-project") : opener;
+            if (restore?.isConnected) restore.focus({ preventScroll: true });
           }
         : undefined,
     );

@@ -1,0 +1,41 @@
+#project-top-menu {
+  position: fixed;
+  inset: var(--project-menu-top, 45px) auto auto
+    clamp(8px, var(--project-menu-start, 8px), calc(100vw - 137px));
+  width: 129px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 5px 18px #30261821;
+}
+#project-top-menu:popover-open {
+  display: grid;
+}
+#project-top-menu > button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 32px;
+  padding: 4px 11px;
+  border: 0;
+  text-align: start;
+}
+#project-top-menu > button:focus-visible {
+  outline-offset: -2px;
+}
+#project-top-menu > button svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+header.top #new-project[aria-expanded="true"] {
+  color: #fff;
+  background: #8a6b3c;
+}
+body.dark header.top #new-project[aria-expanded="true"] {
+  color: #201a10;
+  background: var(--accent);
+}

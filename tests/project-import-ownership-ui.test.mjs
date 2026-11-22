@@ -12,7 +12,9 @@ const source = await readFile(
   new URL("../public/app.js", import.meta.url),
   "utf8",
 );
-const importStart = source.indexOf('  on("#import,#welcome-import",');
+const importStart = source.indexOf(
+  '  on("#import,#welcome-import,#project-menu-import",',
+);
 const importEnd = source.indexOf('  on("#export",', importStart);
 assert(importStart > 0 && importEnd > importStart);
 const importSource = source.slice(importStart, importEnd);

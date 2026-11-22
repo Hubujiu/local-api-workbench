@@ -1,3 +1,4 @@
+import { openProjectCreateUI } from "./open-project-create-ui.mjs";
 import assert from "node:assert/strict";
 import { assertRestartedProject } from "./restart-project-receipt.mjs";
 import { readFile } from "node:fs/promises";
@@ -100,7 +101,7 @@ export async function exerciseRestartJourney({
     });
     await page.locator('.rail [data-page="apis"]').click();
   }
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("Complete restart journey");
   await page.locator("#dialog-save").click();
   await closedDialog();
