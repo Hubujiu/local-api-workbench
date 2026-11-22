@@ -146,8 +146,12 @@ try {
   assert.equal(await active(tab("after")), true);
   assert.equal(await assertFull("after"), true);
   assert.equal((await expectedKeys()).includes("headers"), true);
-  assert.equal(await editor.locator("#script-code").isVisible(), true);
+  assert.equal(await editor.locator("#http-post-add").isVisible(), true);
   await capture("selected-desktop");
+  const postSettings = editor.locator("#http-post-advanced > summary");
+  await postSettings.press("Enter");
+  assert.equal(await editor.locator("#script-code").isVisible(), true);
+  await postSettings.press("Enter");
 
   await trigger.press("Enter");
   await menu.waitFor();
