@@ -470,7 +470,7 @@ try {
   await window.locator("#send:not([disabled])").waitFor();
   await window.locator('[data-open-tab="' + beforeJWTRequest + '"]').click();
   await window.locator('[data-param="auth"]').click();
-  await window.locator("#auth-type").selectOption("none");
+  await window.locator("#auth-type").selectOption("inherit");
   await window.locator("#url").fill(packagedRequestURL);
   phase = "xml";
   console.log("DESKTOP_PHASE", phase);
