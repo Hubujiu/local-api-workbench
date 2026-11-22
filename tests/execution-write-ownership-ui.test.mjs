@@ -98,7 +98,7 @@ function harness(initial = fixture()) {
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
  let openedDocuments=[],activeDocumentId=null;
  const documentModes=new Map();
- let project=initial,projects=[{id:"a"}],dirty=false,saving=false,busy=false,editVersion=0,projectOpenSequence=0,current="r",planId="p",planTab="plans",lastRun,runId,opened=[],response,loadResult,selectedProtocolId;
+ let project=initial,projects=[{id:"a"}],dirty=false,saving=false,busy=false,editVersion=0,projectOpenSequence=0,projectOpenRequestSequence=0,current="r",planId="p",planTab="plans",lastRun,runId,opened=[],response,loadResult,selectedProtocolId;
  const collect=()=>{},render=()=>{},toast=()=>{},env=()=>project.environments[0]?.id||"e",uid=()=>"run-id",confirm=()=>true;
  const document={querySelectorAll:()=>[]},sessionStorage={setItem(){}},caseResults={set(){}};
  const $=()=>null;const mark=()=>{dirty=true;editVersion++};
@@ -112,7 +112,7 @@ function harness(initial = fixture()) {
  assert.equal(typeof handlers["#run-plan"], "function", "plan handler must register eagerly");
  assert.equal(typeof handlers["[data-run-case]"], "function", "case handler must register eagerly");
  assert.deepEqual(Object.keys(handlers).sort(), ["#run-plan", "[data-run-case]"].sort(), "harness must register only the intended execution handlers");
- return {ready:assertExecutionReady,runPlan:()=>handlers["#run-plan"](),runCase:()=>handlers["[data-run-case]"](null,{dataset:{runCase:"c"}}),save,savePlan,open:openProject,dirty(){dirty=true},edit(){project.plans[0].name="new draft";mark()},state:()=>({project,dirty,busy,saving,planId,planTab,lastRun}),replace(p){project=p},navigate(){projectOpenSequence++},selectPlan(){planId="other"}};
+ return {ready:assertExecutionReady,runPlan:()=>handlers["#run-plan"](),runCase:()=>handlers["[data-run-case]"](null,{dataset:{runCase:"c"}}),save,savePlan,open:openProject,dirty(){dirty=true},edit(){project.plans[0].name="new draft";mark()},state:()=>({project,dirty,busy,saving,planId,planTab,lastRun}),replace(p){project=p},navigate(){projectOpenSequence++;projectOpenRequestSequence++},selectPlan(){planId="other"}};
  `,
   );
   return {
