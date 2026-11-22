@@ -1,3 +1,8 @@
+import {
+  appearanceFontScaleHTML,
+  baseFontScale,
+  bindAppearanceFontScale,
+} from "./appearance-font-scale.js";
 import { icon } from "./icons.js";
 
 export const appearanceTheme = (value) => (value === "dark" ? "dark" : "light");
@@ -12,7 +17,7 @@ export function applyAppearanceTheme(body, storage, theme) {
 
 export function openAppearanceSettings(
   dialog,
-  { opener, findOpener, read, apply },
+  { opener, findOpener, read, apply, readScale, applyScale },
 ) {
   if (dialog.open) return;
   dialog.innerHTML = `
@@ -38,6 +43,7 @@ export function openAppearanceSettings(
               .join("")}
           </div>
         </fieldset>
+        ${appearanceFontScaleHTML()}
       </div>
       <button id="appearance-close" type="button" class="ghost" aria-label="关闭外观设置" autofocus>×</button>
     </div>`;
@@ -49,10 +55,18 @@ export function openAppearanceSettings(
   const sync = () => {
     const current = read();
     for (const choice of choices) choice.checked = choice.value === current;
-    reset.disabled = current === "light";
+    reset.disabled = current === "light" && readScale() === baseFontScale;
   };
   const listeners = new AbortController();
   const options = { signal: listeners.signal };
+  const syncScale = bindAppearanceFontScale(dialog, {
+    read: readScale,
+    apply(scale) {
+      applyScale(scale);
+      sync();
+    },
+    options,
+  });
   const close = (event) => {
     event.preventDefault();
     if (!dialog.open) return;
@@ -76,6 +90,8 @@ export function openAppearanceSettings(
     () => {
       if (!dialog.open || reset.disabled) return;
       apply("light");
+      if (readScale() !== baseFontScale) applyScale(baseFontScale);
+      syncScale();
       sync();
       choices[0].focus({ preventScroll: true });
     },
@@ -85,6 +101,7 @@ export function openAppearanceSettings(
   dialog
     .querySelector("#appearance-close")
     .addEventListener("click", close, options);
+  syncScale();
   sync();
   dialog.showModal();
 }

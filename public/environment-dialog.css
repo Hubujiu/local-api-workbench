@@ -21,11 +21,11 @@
   z-index: 1;
 }
 #dialog:has(.environment-dialog) #dialog-title {
-  font-size: 16px;
+  font-size: calc(16 * var(--app-type-unit));
   font-weight: 500;
 }
 #dialog:has(.environment-dialog) > form > header button {
-  font-size: 20px;
+  font-size: calc(20 * var(--app-type-unit));
 }
 #dialog:has(.environment-dialog) #dialog-content {
   display: contents;
@@ -47,7 +47,7 @@
 }
 .environment-section-label {
   margin: 6px 0 12px;
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
   color: #a29683;
 }
 .environment-dialog-nav button {
@@ -62,7 +62,7 @@
   border-radius: 4px;
   background: transparent;
   color: #75664e;
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
   text-align: left;
   margin-bottom: 8px;
 }
@@ -115,12 +115,12 @@
 .environment-dialog-notice {
   background: #faf6ec;
   padding: 8px 16px;
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
   line-height: 17px;
   margin: 0 0 16px;
 }
 #dialog-content .environment-dialog-main > label {
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
   margin: 0 0 9px;
 }
 #dialog-content .environment-dialog-main > input {
@@ -128,20 +128,20 @@
   padding: 5px 12px;
   border-color: #eee7da;
   background: transparent;
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
 }
 .environment-service-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin: 18px 0;
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
 }
 .environment-service-heading button {
   border: 0;
   background: transparent;
   color: #a29580;
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
   padding: 0 16px;
 }
 .environment-table-wrap {
@@ -154,7 +154,7 @@
   margin: 0;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
 }
 .environment-dialog-main th {
   height: 35px;
@@ -192,7 +192,7 @@
 #dialog-content .environment-variable-heading label {
   white-space: nowrap;
   margin: 0;
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
 }
 #dialog-content .environment-dialog-main .environment-variable-heading input {
   width: 180px;
@@ -200,7 +200,7 @@
   min-height: 0;
   padding: 3px 10px;
   border-color: #eee7da;
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
 }
 .environment-value-table th:nth-child(1) {
   width: 29%;
@@ -209,7 +209,7 @@
   width: 29%;
 }
 .environment-value-table small {
-  font-size: 9px;
+  font-size: calc(9 * var(--app-type-unit));
 }
 #dialog-content .environment-value-table input {
   padding: 3px 0;
@@ -217,12 +217,12 @@
   background: transparent;
   min-width: 0;
   height: 27px;
-  font-size: 13px;
+  font-size: calc(13 * var(--app-type-unit));
 }
 .environment-value-table td:last-child {
   position: relative;
   padding-right: 38px;
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
 }
 .environment-value-table [data-env-remove] {
   position: absolute;
@@ -232,11 +232,11 @@
   background: transparent;
   padding: 0;
   color: #a29580;
-  font-size: 11px;
+  font-size: calc(11 * var(--app-type-unit));
 }
 .environment-empty-row td {
   color: #a29580;
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
 }
 .environment-add-variable {
   margin: 8px 0;
@@ -244,11 +244,11 @@
   border: 0;
   background: transparent;
   color: #8b6d3b;
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
 }
 .environment-json {
   margin: 6px 0 12px;
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
   color: #a29580;
 }
 .environment-json summary {
@@ -259,7 +259,7 @@
 }
 #environment-dialog-error {
   color: var(--danger, #c43535);
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
   margin: 4px 0;
 }
 #dialog:has(.environment-dialog) > form > footer {
@@ -275,7 +275,7 @@
   padding: 4px 16px;
   border-radius: 3px;
   border: 0;
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
 }
 #dialog:has(.environment-dialog) > form > footer .primary {
   background: #8b6d3b;
@@ -309,7 +309,7 @@ body.dark .environment-dialog-nav button:hover {
   .environment-dialog-nav button {
     padding: 0 8px;
     gap: 6px;
-    font-size: 12px;
+    font-size: calc(12 * var(--app-type-unit));
   }
   .environment-dialog-main {
     padding: 0 12px;
@@ -349,7 +349,7 @@ body.dark .environment-dialog-nav button:hover {
   border-radius: 3px;
   background: #8b6d3b;
   color: white;
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
   z-index: 1;
 }
 body.dark #dialog:has(.environment-dialog) > form > footer .primary {
@@ -439,7 +439,7 @@ body.dark #dialog:has(.environment-dialog) > form > footer .primary {
   width: 32.2%;
 }
 .environment-global-table th small {
-  font-size: 9px;
+  font-size: calc(9 * var(--app-type-unit));
 }
 .environment-global-table :is(input:not([type="checkbox"]), textarea) {
   width: 100%;
@@ -467,7 +467,7 @@ body.dark #dialog:has(.environment-dialog) > form > footer .primary {
 }
 #environment-global-status {
   color: var(--muted);
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
 }
 #environment-global-error {
   color: var(--danger);
@@ -516,7 +516,7 @@ body.dark #dialog:has(.environment-dialog) > form > footer .primary {
   align-items: center;
   justify-content: space-between;
   color: var(--muted);
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
 }
 .environment-parameter-scope > button {
   font-size: inherit;
@@ -537,13 +537,13 @@ body.dark #dialog:has(.environment-dialog) > form > footer .primary {
   min-width: 0;
 }
 [data-workspace-parameter-status] {
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
   color: var(--muted);
   margin-inline-end: 5px;
 }
 .environment-parameter-table [data-workspace-parameter-edit] {
   padding: 2px 6px;
-  font-size: 12px;
+  font-size: calc(12 * var(--app-type-unit));
 }
 #environment-parameter-error {
   color: var(--danger);

@@ -27,7 +27,7 @@
   order: -1;
   color: var(--text);
   padding-inline: 5px;
-  font-size: 18px;
+  font-size: calc(18 * var(--app-type-unit));
 }
 #dialog:has(.interface-case-editor) > form > footer {
   padding: 10px 16px;

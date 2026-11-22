@@ -33,7 +33,7 @@
   border-radius: 4px;
   background: transparent;
   color: var(--muted);
-  font-size: 14px;
+  font-size: calc(14 * var(--app-type-unit));
 }
 .recent-history-tabs button[aria-selected="true"] {
   background: var(--hover);

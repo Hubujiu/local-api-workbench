@@ -1,4 +1,9 @@
 import {
+  applyFontScale,
+  fontScaleKey,
+  readFontScale,
+} from "./appearance-font-scale.js";
+import {
   appearanceTheme,
   activeAppearanceTheme,
   applyAppearanceTheme,
@@ -2703,6 +2708,11 @@ function bind() {
       findOpener: () => $("#appearance-settings"),
       read: readTheme,
       apply: chooseTheme,
+      readScale: () => readFontScale(localStorage),
+      applyScale(scale) {
+        localStorage.setItem(fontScaleKey, String(scale));
+        applyFontScale(document.documentElement, scale);
+      },
     });
   });
   on("#project-select", "change", (_, e) => openProject(e.value));
@@ -7209,6 +7219,7 @@ window.addEventListener("beforeunload", (e) => {
   }
 });
 async function init() {
+  applyFontScale(document.documentElement, readFontScale(localStorage));
   compactUI = localStorage.getItem("compact-ui") === "true";
   responseLayout =
     localStorage.getItem("response-layout") === "split" ? "split" : "stacked";
