@@ -42,7 +42,7 @@ import {
 import { bindWorkspaceDocumentScroll } from "./workspace-document-scroll.js";
 import { markdownEdit, markdownTools } from "./design-markdown.js";
 import { insertTextareaText } from "./textarea-edit-history.js";
-import { emptyCasePanel } from "./case-empty-view.js";
+import { emptyCasePanel, populatedCasePanel } from "./case-empty-view.js";
 import {
   cookieManagerHTML,
   environmentDialogHTML,
@@ -299,7 +299,7 @@ function selectedInterfaceCases() {
 function caseSelectionToolbar() {
   const selected = selectedInterfaceCases(),
     all = (project.cases || []).filter((c) => c.sourceRequestId === current);
-  return `<div class="toolbar case-selection"><label><input type="checkbox" id="select-all-cases" ${all.length && selected.size === all.length ? "checked" : ""} ${busy || !all.length ? "disabled" : ""}> 全选</label><span role="status">已选 ${selected.size} 项</span><button id="run-selected-cases" ${busy || !selected.size ? "disabled" : ""}>运行所选</button><button id="run-all-cases" ${busy || !all.length ? "disabled" : ""}>全部运行</button>${canCancelCurrentCase() ? '<button type="button" id="cancel-case-run">取消运行</button>' : ""}<button id="move-selected-cases" ${busy || !selected.size ? "disabled" : ""}>移动所选</button><button id="delete-selected-cases" class="danger" ${busy || !selected.size ? "disabled" : ""}>删除所选</button></div><p class="muted">单次最多100个、请求快照总量4MiB，按当前列表顺序串行运行；用例未通过会继续，调用错误会停止且不重试。取消会停止后续用例。</p>${caseBatch?.projectId === project.id && caseBatch?.sourceRequestId === current ? `<p id="case-batch-status" role="status">${caseBatch.running ? "运行中" : caseBatch.cancelled ? "已取消" : caseBatch.stoppedOnError ? "已停止（调用错误）" : "已完成"} ${caseBatch.completed} / ${caseBatch.total} · 通过 ${caseBatch.passed} · 未通过 ${caseBatch.failed}${caseBatch.currentName ? " · " + esc(caseBatch.currentName) : ""}</p>` : ""}`;
+  return `<div class="toolbar case-selection"><div class="case-batch-selection"><label><input type="checkbox" id="select-all-cases" ${all.length && selected.size === all.length ? "checked" : ""} ${busy || !all.length ? "disabled" : ""}> 全选</label><span role="status" data-case-selection-count${selected.size ? "" : " data-empty"}>已选 ${selected.size} 项</span><div class="case-selected-actions"${selected.size ? "" : " hidden"}><button id="run-selected-cases" ${busy || !selected.size ? "disabled" : ""}>运行所选</button><button id="move-selected-cases" ${busy || !selected.size ? "disabled" : ""}>移动所选</button><button id="delete-selected-cases" class="danger" ${busy || !selected.size ? "disabled" : ""}>删除所选</button></div></div><div class="case-list-actions"><button id="new-case-folder" ${busy ? "disabled" : ""}>添加分组</button><button id="new-interface-case" ${busy ? "disabled" : ""}>添加用例</button><button id="run-all-cases" class="primary" ${busy || !all.length ? "disabled" : ""}>全部运行</button>${canCancelCurrentCase() ? '<button type="button" id="cancel-case-run">取消运行</button>' : ""}</div></div>${caseBatch?.projectId === project.id && caseBatch?.sourceRequestId === current ? `<p id="case-batch-status" role="status">${caseBatch.running ? "运行中" : caseBatch.cancelled ? "已取消" : caseBatch.stoppedOnError ? "已停止（调用错误）" : "已完成"} ${caseBatch.completed} / ${caseBatch.total} · 通过 ${caseBatch.passed} · 未通过 ${caseBatch.failed}${caseBatch.currentName ? " · " + esc(caseBatch.currentName) : ""}</p>` : ""}`;
 }
 const temporaryParameters = new Map();
 const workspaceModelDrafts = new WorkspaceModelDrafts();
@@ -1974,7 +1974,17 @@ function modePanel(r) {
     if (empty) return empty;
   }
   if (mode === "cases")
-    return `<div class="page"><h2>接口用例</h2><p class="muted">每个用例保存独立请求快照，可覆盖参数、断言和脚本。原接口修改不会自动覆盖用例。分组仅组织用例，移动分组不会改写已保存的请求快照。</p><button id="new-interface-case" class="primary" ${busy ? "disabled" : ""}>＋ 新建接口用例</button><button id="new-case-folder" ${busy ? "disabled" : ""}>＋ 新建用例分组</button><button id="create-case">从当前接口创建执行计划</button>${caseSelectionToolbar()}${caseCards(project, r.id, caseResults.results(project.id), busy, selectedInterfaceCases(), caseResults.collapsed(project.id))}</div>`;
+    return populatedCasePanel(
+      caseSelectionToolbar(),
+      caseCards(
+        project,
+        r.id,
+        caseResults.results(project.id),
+        busy,
+        selectedInterfaceCases(),
+        caseResults.collapsed(project.id),
+      ),
+    );
   return `<div class="page"><h2>一键压测</h2><p class="muted">仅对你有权测试的接口使用。最多100次主请求执行、并发10，支持取消。包含脚本、动态值和断言；每次执行的变量独立，不回写项目。脚本子请求另计（各自受沙箱上限约束），HTTP调用数不等于网络往返次数。P50/P95是主请求耗时，逐次elapsed另含脚本等待；脚本与子请求也可能产生副作用。</p><p class="muted">按时长模式限定1至60秒，仍受请求上限约束；先到时长或请求上限即停止，不保证持续到指定秒数。到时会中断尚未完成的请求和脚本，并保留记录。</p><div class="row load-controls"><label>模式 <select id="load-mode" ${busy ? "disabled" : ""}><option value="count" ${loadOptions.get(project.id + ":" + r.id)?.mode !== "duration" ? "selected" : ""}>按请求数</option><option value="duration" ${loadOptions.get(project.id + ":" + r.id)?.mode === "duration" ? "selected" : ""}>按持续时长</option></select></label><label>时长（秒，仅时长模式） <input id="load-duration" type="number" min="1" max="60" value="${esc(loadOptions.get(project.id + ":" + r.id)?.durationSeconds ?? 10)}" ${busy ? "disabled" : ""}></label><label>请求数 / 上限 <input id="load-count" type="number" value="${esc(loadOptions.get(project.id + ":" + r.id)?.count ?? 10)}" min="1" max="100"></label><label>并发 <input id="load-concurrency" type="number" value="${esc(loadOptions.get(project.id + ":" + r.id)?.concurrency ?? 1)}" min="1" max="10"></label><button id="load-run" class="primary" ${busy ? "disabled" : ""}>开始压测</button>${busy ? '<button id="cancel">停止</button>' : ""}</div><div class="load-data-panel"><label for="load-data">参数化数据（UTF-8 CSV，可选）</label><p class="muted">首行为变量名，后续行依次循环供 {{变量名}} 使用，仅覆盖本次运行。最多64 KiB、100行、50列；数据只保留在当前页面会话，不保存到项目。</p><textarea id="load-data" rows="4" spellcheck="false" ${busy ? "disabled" : ""} placeholder="id,name&#10;1,示例">${esc(loadOptions.get(project.id + ":" + r.id)?.dataCSV ?? "")}</textarea><label>导入 CSV <input id="load-data-file" type="file" accept=".csv,text/csv" ${busy ? "disabled" : ""}></label></div>${
     loadResult
       ? `<div class="grid-stats">${[
@@ -5487,32 +5497,53 @@ function bind() {
     await save();
     render();
   });
-  if ($("#select-all-cases")) {
-    const total = (project.cases || []).filter(
-      (c) => c.sourceRequestId === current,
-    ).length;
-    const count = selectedInterfaceCases().size;
-    $("#select-all-cases").indeterminate = count > 0 && count < total;
+  const casePanel = $(".case-populated-layout");
+  if (casePanel) {
+    const owner = project,
+      source = current;
+    const ownsSelection = () =>
+      casePanel.isConnected &&
+      project === owner &&
+      current === source &&
+      mode === "cases";
+    const all = casePanel.querySelector("#select-all-cases");
+    const rows = [...casePanel.querySelectorAll("[data-select-case]")];
+    const counter = casePanel.querySelector("[data-case-selection-count]");
+    const actions = casePanel.querySelector(".case-selected-actions");
+    const syncSelection = () => {
+      const selected = selectedInterfaceCases();
+      all.checked = rows.length > 0 && selected.size === rows.length;
+      all.indeterminate = selected.size > 0 && selected.size < rows.length;
+      for (const row of rows) {
+        row.checked = selected.has(row.dataset.selectCase);
+        row
+          .closest(".interface-case-row")
+          .classList.toggle("case-row-selected", row.checked);
+      }
+      counter.toggleAttribute("data-empty", !selected.size);
+      counter.textContent = "已选 " + selected.size + " 项";
+      actions.hidden = !selected.size;
+      for (const button of actions.querySelectorAll("button"))
+        button.disabled = busy || !selected.size;
+    };
+    syncSelection();
+    all.addEventListener("change", () => {
+      if (!ownsSelection() || busy || all.disabled) return;
+      caseSelections.set(
+        owner.id + ":" + source,
+        new Set(all.checked ? rows.map((row) => row.dataset.selectCase) : []),
+      );
+      syncSelection();
+    });
+    for (const row of rows)
+      row.addEventListener("change", () => {
+        if (!ownsSelection() || busy || row.disabled) return;
+        const selected = selectedInterfaceCases();
+        if (row.checked) selected.add(row.dataset.selectCase);
+        else selected.delete(row.dataset.selectCase);
+        syncSelection();
+      });
   }
-  on("#select-all-cases", "change", (_, element) => {
-    caseSelections.set(
-      project.id + ":" + current,
-      new Set(
-        element.checked
-          ? (project.cases || [])
-              .filter((c) => c.sourceRequestId === current)
-              .map((c) => c.id)
-          : [],
-      ),
-    );
-    render();
-  });
-  on("[data-select-case]", "change", (_, element) => {
-    const selected = selectedInterfaceCases();
-    if (element.checked) selected.add(element.dataset.selectCase);
-    else selected.delete(element.dataset.selectCase);
-    render();
-  });
   on("#move-selected-cases", "click", () => {
     const ids = [...selectedInterfaceCases()],
       source = current;

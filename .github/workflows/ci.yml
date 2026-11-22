@@ -76,6 +76,7 @@ jobs:
       - run: node tests/model-field-type-ui.mjs
       - run: node tests/model-field-required-ui.mjs
       - run: node tests/interface-case-drawer-ui.mjs
+      - run: node tests/interface-case-list-ui.mjs
       - run: node tests/ui-smoke.mjs
         env:
           HTTP_WORKBENCH_CHECKOUT_COMMIT: ${{ steps.browser_checkout.outputs.commit }}
