@@ -1864,7 +1864,7 @@ try {
   await page.screenshot({ path: "/tmp/local-api-ntlm.png" });
   await page.locator('[data-open-tab="' + beforeNTLMRequest + '"]').click();
   await page.locator('[data-param="auth"]').click();
-  await page.locator("#auth-type").selectOption("none");
+  await page.locator("#auth-type").selectOption("inherit");
   await page.locator("#url").fill(oauthPreviousURL);
   await page.locator('.rail [data-page="settings"]').click();
   await page.locator('[data-settings-anchor="resource-functions"]').click();
@@ -5048,7 +5048,9 @@ try {
     .getByText("Bearer shared-auth-fixture", { exact: false })
     .waitFor();
   await page.locator('[data-param="auth"]').click();
-  await page.locator("#inherit-auth").uncheck();
+  const authType = page.getByLabel("类型", { exact: true });
+  assert.equal(await authType.inputValue(), "inherit");
+  await authType.selectOption("none");
   const noSharedAuth = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
   );

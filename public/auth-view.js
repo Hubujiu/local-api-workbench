@@ -1,6 +1,7 @@
 import { asapAlgorithms } from "./asap-auth-model.js";
 import { jwtAlgorithms } from "./jwt-auth-model.js";
 import { authTypes } from "./auth-model.js";
+import { debugAuthChoice, debugAuthChoices } from "./debug-auth-choice.js";
 export { authTypes } from "./auth-model.js";
 const esc = (value) =>
   String(value ?? "").replace(
@@ -122,9 +123,29 @@ export function httpAuthPane(auth, inherit = true) {
     ">接口未设置具体认证时，继承项目/目录认证；取消勾选则明确不使用共享认证。</label></section>"
   );
 }
+const debugMethodLabels = {
+  ...httpMethodLabels,
+  inherit: "继承父级",
+  none: "无需认证",
+  apiKey: "私密键值对",
+  basic: "Basic auth",
+  digest: "Digest auth",
+  jwt: "JWT Bearer",
+};
+
+export function httpDebugAuthPane(request) {
+  return `<section class="http-auth-pane http-debug-auth-pane" aria-label="请求认证">${authPanel(
+    request.auth,
+    {
+      standaloneHTTP: true,
+      debugRequest: request,
+    },
+  )}${request.authSnapshot === true ? '<p class="muted" id="http-debug-auth-closure">此请求的认证已固定，不能继承父级。</p>' : ""}</section>`;
+}
+
 export function authPanel(
   auth = {},
-  { acquire = true, shared = false, standaloneHTTP = false } = {},
+  { acquire = true, shared = false, standaloneHTTP = false, debugRequest } = {},
 ) {
   const attribute = shared ? "data-shared-auth" : "data-auth";
   const type = auth.type || "none";
@@ -133,15 +154,29 @@ export function authPanel(
       ? '<div class="form-grid"><label for="auth-type">类型</label><select id="'
       : '<div class="form-grid"><label>认证类型</label><select id="') +
     (shared ? "shared-auth-type" : "auth-type") +
-    '">' +
-    (standaloneHTTP
-      ? authTypes
+    '"' +
+    (debugRequest
+      ? ' data-debug-auth-choice title="切换类型会保留本页的临时认证草稿；只保存当前类型。"' +
+        (debugRequest.authSnapshot === true
+          ? ' aria-describedby="http-debug-auth-closure"'
+          : "")
+      : "") +
+    ">" +
+    (debugRequest
+      ? debugAuthChoices
           .map(
             (value) =>
-              `<option value="${esc(value)}" ${type === value ? "selected" : ""}>${esc(httpMethodLabels[value])}</option>`,
+              `<option value="${esc(value)}"${debugAuthChoice(debugRequest) === value ? " selected" : ""}${value === "inherit" && debugRequest.authSnapshot === true ? " disabled" : ""}>${esc(debugMethodLabels[value])}</option>`,
           )
           .join("")
-      : options(authTypes, type)) +
+      : standaloneHTTP
+        ? authTypes
+            .map(
+              (value) =>
+                `<option value="${esc(value)}" ${type === value ? "selected" : ""}>${esc(httpMethodLabels[value])}</option>`,
+            )
+            .join("")
+        : options(authTypes, type)) +
     "</select>";
   if (type === "asap")
     html +=

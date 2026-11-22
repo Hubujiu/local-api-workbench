@@ -152,7 +152,13 @@ import {
   editRequestResponseDefinition,
   editRequestResponseSettings,
 } from "./schema-editor.js";
-import { httpAuthPane } from "./auth-view.js";
+import { httpAuthPane, httpDebugAuthPane } from "./auth-view.js";
+import {
+  captureDebugAuthOperation,
+  debugAuthChoice,
+  updateDebugAuthChoice,
+  usesDebugAuthChoice,
+} from "./debug-auth-choice.js";
 import { renderMarkdown } from "./vendor/markdown-renderer.js";
 import { attributeFields, attributeChooser } from "./attribute-view.js";
 import {
@@ -209,6 +215,7 @@ const designParameterTabs = [
 let designParameter = "headers";
 const designResponseSelections = new Map();
 const collapsedDesignResponseRoots = new WeakMap();
+const debugAuthDrafts = new WeakMap();
 const designResponseKey = (r) => JSON.stringify([project?.id, r.id]);
 const caseResults = createCaseResultStore();
 const caseSelections = new Map();
@@ -1011,6 +1018,16 @@ async function save() {
       });
     if (project === owner) {
       if (editVersion === version) {
+        const previousRequests = new Map(owner.requests.map((r) => [r.id, r]));
+        for (const savedRequest of saved.requests) {
+          const previous = previousRequests.get(savedRequest.id);
+          const drafts = debugAuthDrafts.get(previous);
+          if (
+            drafts &&
+            JSON.stringify(savedRequest.auth) === JSON.stringify(previous.auth)
+          )
+            debugAuthDrafts.set(savedRequest, drafts);
+        }
         project = saved;
         dirty = false;
       } else {
@@ -1711,7 +1728,10 @@ function paramPanel(r, param, design = false) {
                 : ""
             }</div>`
     }`;
-  if (param === "auth") return httpAuthPane(r.auth, r.inheritAuth);
+  if (param === "auth")
+    return !design && mode === "debug" && usesDebugAuthChoice(project, r)
+      ? httpDebugAuthPane(r)
+      : httpAuthPane(r.auth, r.inheritAuth);
   if (param === "assertions")
     return `<table><thead><tr><th>目标</th><th>操作</th><th>预期值（JSON 或文本）</th><th></th></tr></thead><tbody>${r.assertions.map((a, i) => `<tr><td><input data-rule="${i}:target" value="${esc(a.target)}" placeholder="status / $.data.id / duration"></td><td><select data-rule="${i}:op">${["eq", "neq", "contains", "exists", "lt", "gt"].map((op) => `<option ${a.op === op ? "selected" : ""}>${op}</option>`).join("")}</select></td><td><input data-rule="${i}:value" value="${esc(JSON.stringify(a.value))}"></td><td><button data-remove-rule="${i}">×</button></td></tr>`).join("")}</tbody></table><p><button id="add-assertion">＋ 添加断言</button> <button id="edit-operations">JSON 高级编辑</button></p><div class="notice">status 为状态码，duration 为毫秒，body 为原文；JSON 路径如 $.data.id；响应头使用 header:content-type。</div>`;
   if (param === "extract")
@@ -3749,6 +3769,23 @@ function bind() {
     render();
   });
   on("#auth-type", "change", (_, e) => {
+    if (e.hasAttribute("data-debug-auth-choice")) {
+      const r = request();
+      if (!usesDebugAuthChoice(project, r) || mode !== "debug") return;
+      const drafts = debugAuthDrafts.get(r) || new Map();
+      const focused = document.activeElement === e;
+      try {
+        if (!updateDebugAuthChoice(r, e.value, drafts)) return;
+      } catch (error) {
+        e.value = debugAuthChoice(r);
+        throw error;
+      }
+      debugAuthDrafts.set(r, drafts);
+      mark();
+      render();
+      if (focused) $("#auth-type")?.focus({ preventScroll: true });
+      return;
+    }
     if (mode === "design") {
       try {
         collect();
@@ -3813,6 +3850,9 @@ function bind() {
       projectId = project.id,
       config = structuredClone(request().auth),
       original = JSON.stringify(request().auth);
+    const ownsAuth = $("#auth-type[data-debug-auth-choice]")
+      ? captureDebugAuthOperation(project, request())
+      : null;
     const pendingKey = projectId + ":" + requestId;
     if (pendingOAuth1.has(pendingKey)) return;
     pendingOAuth1.add(pendingKey);
@@ -3827,6 +3867,8 @@ function bind() {
       const flow = await api("/oauth1/start", "POST", config);
       if (project.id !== projectId || current !== requestId)
         throw Error("项目/接口已切换，请重新开始OAuth1授权");
+      if (ownsAuth && !ownsAuth(project, request()))
+        throw Error("原接口认证已变化，请重新授权");
       modal(
         "OAuth1 OOB/PIN 授权",
         `<p><a href="${esc(flow.authorizationUrl)}" target="_blank" rel="noopener noreferrer">打开服务授权页面</a></p><p>在服务页面授权后复制验证码。流程5分钟后过期；临时令牌密钥仅保留在内存。</p><label>Verifier / PIN</label><input id="oauth1-verifier" autocomplete="off">`,
@@ -3834,7 +3876,11 @@ function bind() {
           const target =
             project.id === projectId &&
             project.requests.find((item) => item.id === requestId);
-          if (!target || JSON.stringify(target.auth) !== original)
+          if (
+            !target ||
+            JSON.stringify(target.auth) !== original ||
+            (ownsAuth && !ownsAuth(project, target))
+          )
             throw Error("原接口认证已变化，请重新授权，避免覆盖修改");
           const result = await api("/oauth1/complete", "POST", {
             id: flow.id,
@@ -3848,7 +3894,11 @@ function bind() {
           const currentTarget = project.requests.find(
             (item) => item.id === requestId,
           );
-          if (!currentTarget || JSON.stringify(currentTarget.auth) !== original)
+          if (
+            !currentTarget ||
+            JSON.stringify(currentTarget.auth) !== original ||
+            (ownsAuth && !ownsAuth(project, currentTarget))
+          )
             throw Error("接口已更新，令牌未覆盖现有修改");
           currentTarget.auth.accessToken = result.accessToken;
           currentTarget.auth.tokenSecret = result.tokenSecret;
@@ -3867,11 +3917,16 @@ function bind() {
     const requestId = current,
       projectId = project.id;
     const config = structuredClone(request().auth);
+    const ownsAuth = $("#auth-type[data-debug-auth-choice]")
+      ? captureDebugAuthOperation(project, request())
+      : null;
     const applyToken = (result) => {
       if (project.id !== projectId)
         throw Error("项目已切换，令牌未写入其他项目");
       const target = project.requests.find((item) => item.id === requestId);
       if (!target) throw Error("原请求已不存在");
+      if (ownsAuth && !ownsAuth(project, target))
+        throw Error("原接口认证已变化，令牌未覆盖现有修改");
       target.auth.token = result.accessToken;
       if (result.refreshToken) target.auth.refreshToken = result.refreshToken;
       mark();
@@ -3880,6 +3935,8 @@ function bind() {
     };
     if (config.grantType === "authorization_code") {
       const flow = await api("/oauth/start", "POST", config);
+      if (ownsAuth && !ownsAuth(project, request()))
+        throw Error("原接口认证已变化，请重新授权");
       modal(
         "OAuth 授权",
         `<p>请先在身份提供方登记此回调地址：</p><pre>${esc(flow.redirectUri)}</pre><p><a href="${esc(flow.authorizationUrl)}" target="_blank" rel="noopener noreferrer">打开授权页面</a></p><p>授权结束后返回这里检查结果。流程 5 分钟后过期。</p>`,
