@@ -2147,7 +2147,7 @@ function pairs(rows, key, designOptions, debugOptions, formBodyType) {
     return `<table class="pairs-table request-pairs-table debug-pairs-table debug-pairs-empty"><colgroup><col span="3"></colgroup><thead><tr><th scope="col" class="debug-pair-name-heading">参数名</th><th scope="col">${valueHeading}</th><th scope="col">描述</th></tr></thead><tbody>${debugPairComposer(key, true)}</tbody></table>`;
   const designComposer = design && isDesignPairKind(key);
   const compactEmpty = designComposer && !rows.length;
-  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}"><thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${rows
+  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}${compactEmpty ? " design-pairs-empty" : ""}">${compactEmpty ? '<colgroup class="design-empty-pair-columns"><col><col><col><col></colgroup>' : ""}<thead><tr><th class="pair-enabled-heading" aria-label="启用"></th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${rows
     .map((p, i) => {
       const form = key === "form";
       const fileLike = form ? formFileRepresentation(p) : p.type === "file";

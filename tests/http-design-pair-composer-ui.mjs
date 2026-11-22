@@ -97,6 +97,56 @@ try {
     });
   };
 
+  const measureEmptyHead = () =>
+    panel.locator(".design-pairs-empty").evaluate((table) => {
+      const cells = table.tHead.rows[0].cells;
+      const text = (node, value) => {
+        const child = [...node.childNodes].find(
+          (part) =>
+            part.nodeType === Node.TEXT_NODE &&
+            part.textContent.includes(value),
+        );
+        const start = child.textContent.indexOf(value);
+        const range = document.createRange();
+        range.setStart(child, start);
+        range.setEnd(child, start + value.length);
+        const { left, width } = range.getBoundingClientRect();
+        return { x: left, center: left + width / 2 };
+      };
+      return {
+        name: text(cells[1], "参数名").x,
+        value: text(cells[2], "参数值").x,
+        description: text(cells[3], "描述").x,
+        equality:
+          cells[2]
+            .querySelector(".design-query-equality")
+            ?.getBoundingClientRect().x ?? null,
+        add: text(table.querySelector(".design-empty-pair"), "＋").center,
+        insideRules: [1, 2].map(
+          (i) => getComputedStyle(cells[i]).borderRightWidth,
+        ),
+        box: {
+          y: table.getBoundingClientRect().y,
+          height: table.getBoundingClientRect().height,
+        },
+      };
+    });
+  const near = (actual, expected, tolerance) =>
+    assert(
+      Math.abs(actual - expected) <= tolerance,
+      `expected ${actual} within ${tolerance}px of ${expected}`,
+    );
+  const assertEmptyHeading = (geometry, equality) => {
+    near(geometry.name, 416, 3);
+    near(geometry.value, 711, 4);
+    near(geometry.description, 1031, 3);
+    near(geometry.add, 399, 4);
+    assert.deepEqual(geometry.insideRules, ["0px", "0px"]);
+    if (equality) near(geometry.equality, 687, 3);
+    else assert.equal(geometry.equality, null);
+    near(geometry.box.height, 73, 2);
+  };
+
   await mode("design").press("Enter");
   await page.locator("#design-description summary").press("Enter");
   await compose("Header").waitFor();
@@ -106,6 +156,9 @@ try {
   ]);
   console.log("DESIGN_PAIR_HEADER_GEOMETRY", JSON.stringify(geometry));
   await capture("header-empty-desktop");
+  const headerHead = await measureEmptyHead();
+  console.log("DESIGN_PAIR_HEADER_HEAD", JSON.stringify(headerHead));
+  assertEmptyHeading(headerHead, false);
   assert(Math.abs(geometry[0].x - 371) <= 3);
   assert(Math.abs(geometry[1].height - 36) <= 2);
   await add().press("Enter");
@@ -165,6 +218,21 @@ try {
   assert.equal(await focus(tab("Query")), true);
   assert.equal(await compose("Query").inputValue(), "");
   await capture("query-empty-desktop");
+  const queryHead = await measureEmptyHead();
+  console.log("DESIGN_PAIR_QUERY_HEAD", JSON.stringify(queryHead));
+  assertEmptyHeading(queryHead, true);
+  near(queryHead.box.y, 577, 3);
+  const equals = panel.getByRole("checkbox", {
+    name: "空值 Query 参数添加等号",
+    exact: true,
+  });
+  assert.equal(await equals.isChecked(), true);
+  await equals.press("Space");
+  assert.equal(await equals.isChecked(), false);
+  await equals.press("Space");
+  assert.equal(await equals.isChecked(), true);
+  assert.equal(await all("query").count(), 0);
+  assert.deepEqual(writes, []);
   await compose("Query").fill(" filter+raw ");
   assert.equal(await key("query").inputValue(), " filter+raw ");
   await value("query").fill("a+b");
@@ -195,6 +263,20 @@ try {
   );
   assert.equal(await all("query").count(), 1);
   await capture("query-narrow");
+  await page.locator('[data-open-tab="preserved"]').press("Enter");
+  await tab("Query").press("Enter");
+  const compactCols = panel.locator(".design-empty-pair-columns");
+  assert.equal(
+    await compactCols.evaluate((node) => getComputedStyle(node).display),
+    "none",
+  );
+  assert.equal(await all("query").count(), 0);
+  assert.equal(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+    430,
+  );
+  await page.locator('[data-open-tab="authored"]').press("Enter");
+  assert.equal(await key("query").inputValue(), " filter+raw ");
   assert.deepEqual(await app.store.get(owner.id), baseline);
 
   maySave = true;
