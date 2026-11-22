@@ -12,13 +12,18 @@ const tabs = [
   ["extract", "提取变量"],
 ];
 
+export const namedMultipartRows = (request) =>
+  (request.form || []).filter((row) => String(row.key || "").trim()).length;
+
 export function requestParameterTabs(request, active) {
   return `<div class="param-tabs" role="group" aria-label="请求参数">${tabs
     .map(([key, label]) => {
       const selected = active === key;
       const count =
         key === "body"
-          ? Number(request.bodyType !== "none")
+          ? request.bodyType === "form-data"
+            ? namedMultipartRows(request)
+            : Number(request.bodyType !== "none")
           : Array.isArray(request[key])
             ? request[key].length
             : 0;
