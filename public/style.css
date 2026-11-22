@@ -4707,6 +4707,27 @@ body:not(.dark) .plans-heading {
     width: auto;
     border-inline-end: 0;
   }
+  body:not(.dark) .design-parameter-panel > .design-pairs-query-empty {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  body:not(.dark) .design-parameter-panel .design-pairs-query-empty thead th {
+    font-size: calc(14 * var(--app-type-unit));
+    line-height: 1.25;
+  }
+  body:not(.dark)
+    .design-parameter-panel
+    .design-pairs-query-empty
+    .design-pair-composer
+    > td {
+    border-bottom: 0;
+  }
+  body:not(.dark)
+    .design-parameter-panel
+    .design-pairs-query-empty
+    .design-query-equality {
+    margin-inline-end: 9px;
+  }
   .design-parameter-panel
     .request-pairs-table.design-pairs-empty
     thead
