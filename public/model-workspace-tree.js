@@ -100,7 +100,7 @@ const plus = (attributes, label) =>
 
 function fieldRow(row) {
   const depth = Math.min(row.depth, 8);
-  return `<li class="model-tree-row model-schema-field" style="--model-field-depth:${depth}"><span class="model-field-name">${esc(row.name)}</span><span class="model-field-type"><span class="model-draft-type">${esc(typeOf(row.schema))}</span></span><span class="model-field-required">${row.required ? "必填" : ""}</span><span class="model-field-description muted">${esc(describe(row.schema))}</span></li>`;
+  return `<li class="model-tree-row model-schema-field" data-model-field-depth="${depth}"><span class="model-field-name">${esc(row.name)}</span><span class="model-field-type"><span class="model-draft-type">${esc(typeOf(row.schema))}</span></span><span class="model-field-required">${row.required ? "必填" : ""}</span><span class="model-field-description muted">${esc(describe(row.schema))}</span></li>`;
 }
 
 function pendingRow(row) {

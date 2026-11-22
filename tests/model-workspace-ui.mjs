@@ -33,6 +33,18 @@ try {
     errors.push(error.message);
     console.error("MODEL_WORKSPACE_PAGE_ERROR", error.message);
   });
+  await page.addInitScript(() => {
+    window.__modelTreeCSP = [];
+    window.addEventListener("securitypolicyviolation", (event) => {
+      if (event.target?.matches?.(".model-schema-field"))
+        window.__modelTreeCSP.push({
+          directive: event.effectiveDirective,
+          source: event.sourceFile,
+          line: event.lineNumber,
+          column: event.columnNumber,
+        });
+    });
+  });
   await page.route("**/*", (route) => {
     const request = route.request(),
       url = new URL(request.url());
@@ -209,6 +221,17 @@ try {
   assert(await focusIs(rootAdd));
   await children.getByText("identifier", { exact: true }).waitFor();
   assert(await children.getByText("string", { exact: true }).isVisible());
+  const identifier = children.getByText("identifier", { exact: true });
+  assert.equal(
+    await children.first().getAttribute("data-model-field-depth"),
+    "1",
+  );
+  assert.equal(
+    await identifier.evaluate(
+      (node) => getComputedStyle(node).paddingInlineStart,
+    ),
+    "34px",
+  );
   await rootAdd.press("Enter");
   await first.fill("identifier");
   await pending
@@ -280,6 +303,13 @@ try {
     }),
     [430, 0],
   );
+  assert.equal(
+    await identifier.evaluate(
+      (node) => getComputedStyle(node).paddingInlineStart,
+    ),
+    "13px",
+  );
+  assert.deepEqual(await page.evaluate(() => window.__modelTreeCSP), []);
   await rootAdd.press("Enter");
   await first.fill("narrow-synthetic");
   assert(await focusIs(first));

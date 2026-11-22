@@ -477,6 +477,30 @@ body.dark .model-draft-schema .model-field-plus {
   background: var(--panel);
   overflow-wrap: anywhere;
 }
+.model-schema-field[data-model-field-depth="1"] {
+  --model-field-depth: 1;
+}
+.model-schema-field[data-model-field-depth="2"] {
+  --model-field-depth: 2;
+}
+.model-schema-field[data-model-field-depth="3"] {
+  --model-field-depth: 3;
+}
+.model-schema-field[data-model-field-depth="4"] {
+  --model-field-depth: 4;
+}
+.model-schema-field[data-model-field-depth="5"] {
+  --model-field-depth: 5;
+}
+.model-schema-field[data-model-field-depth="6"] {
+  --model-field-depth: 6;
+}
+.model-schema-field[data-model-field-depth="7"] {
+  --model-field-depth: 7;
+}
+.model-schema-field[data-model-field-depth="8"] {
+  --model-field-depth: 8;
+}
 .model-schema-field .model-field-name {
   padding-inline-start: calc(18px + var(--model-field-depth) * 16px);
 }

@@ -84,3 +84,19 @@ test("visual children show real schema metadata, and unsupported schema remains 
   assert.match(modelDraftPanel({}, draft), /请使用 Raw 编辑/);
   assert.doesNotMatch(modelDraftPanel({}, draft), /id="model-root-add"/);
 });
+
+test("model tree indentation uses bounded CSP-safe depth without inline styles", () => {
+  const draft = new WorkspaceModelDrafts().open("owner");
+  let schema = { type: "string" };
+  for (let i = 10; i >= 1; i--)
+    schema = { type: "object", properties: { ["field-" + i]: schema } };
+  draft.replaceSchema(schema);
+  const html = modelDraftPanel({}, draft);
+  assert.deepEqual(
+    [...html.matchAll(/data-model-field-depth="(\d+)"/g)].map(([, depth]) =>
+      Number(depth),
+    ),
+    [1, 2, 3, 4, 5, 6, 7, 8, 8, 8],
+  );
+  assert.doesNotMatch(html, /style="--model-field-depth/);
+});
