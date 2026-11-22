@@ -1,5 +1,10 @@
 import { projectTopMenu, bindProjectTopMenu } from "./project-top-menu.js";
 import { projectCreateForm } from "./project-create-form.js";
+import {
+  bindProjectCreationForm,
+  createProjectCreationFlow,
+} from "./project-create-settlement.js";
+const projectCreationFlow = createProjectCreationFlow(sessionStorage);
 import { apiCreateMenu, bindApiCreateMenu } from "./api-create-menu.js";
 import { confirmDirtyProjectSwitch } from "./project-switch-confirmation.js";
 import { apiWelcome } from "./api-welcome.js";
@@ -1080,7 +1085,12 @@ const env = () => {
     ? selected
     : project?.environments[0]?.id;
 };
-async function api(path, method = "GET", data, { signal } = {}) {
+async function api(
+  path,
+  method = "GET",
+  data,
+  { signal, expectedStatus } = {},
+) {
   const r = await fetch("/api" + path, {
     method,
     headers: { "content-type": "application/json", "x-local-token": token },
@@ -1097,6 +1107,8 @@ async function api(path, method = "GET", data, { signal } = {}) {
     };
     throw error;
   }
+  if (expectedStatus && r.status !== expectedStatus)
+    throw Error("服务未返回预期回执");
   return b;
 }
 function toast(s) {
@@ -1344,9 +1356,14 @@ async function changeNativeRequestLifecycle(requestId, restore) {
 }
 async function openProject(
   id,
-  { fromPicker = false, pickerGuard, targetSignal } = {},
+  { fromPicker = false, pickerGuard, targetSignal, creationSelection } = {},
 ) {
-  if (targetSignal?.aborted || (pickerGuard && !pickerGuard())) return false;
+  if (
+    targetSignal?.aborted ||
+    (pickerGuard && !pickerGuard()) ||
+    (creationSelection && !creationSelection.current())
+  )
+    return false;
   if (
     socketioWorkbenchState?.draftDirty &&
     socketioWorkbenchProject === project?.id &&
@@ -1386,6 +1403,7 @@ async function openProject(
     editVersion !== version ||
     dirty !== previousDirty ||
     (pickerGuard && !pickerGuard()) ||
+    (creationSelection && !creationSelection.current()) ||
     busy ||
     saving
   )
@@ -1414,6 +1432,7 @@ async function openProject(
   const resetWorkspace =
     fromPicker && previousProject && previousProject.id !== id;
   if (targetSignal) projectOpenSequence++;
+  if (creationSelection) projects = creationSelection.registry;
   project = loaded;
   nativeRequestLifecycle.acknowledgeReload(id, reloadCheckpoint);
   projectImports.acknowledgeReload(id, importCheckpoint);
@@ -2915,32 +2934,72 @@ function bind() {
       !$("#dialog").open &&
       !$("#project-switch-confirmation")?.open,
   );
-  on("#project-menu-create", "click", () => {
-    const owner = project;
+  on("#project-menu-create", "click", (_, button) => {
+    if (!button.isConnected || $("#dialog").open || busy || saving) return;
+    const owner = project,
+      view = page,
+      requestId = current,
+      documentId = activeDocumentId,
+      version = editVersion,
+      opening = projectOpenRequestSequence;
+    let registry = projects,
+      closeSettlement;
     modal(
       "新建项目",
       projectCreateForm(),
-      async () => {
-        const description = $("#new-description").value;
-        if (description.length > 2000) throw Error("项目描述最多 2000 个字符");
-        const p = await api("/projects", "POST", {
-          name: $("#new-name").value,
-          directory: $("#new-directory").value || undefined,
-          description: description || undefined,
-        });
-        projects = await api("/projects");
-        await openProject(p.id);
-      },
+      () => {},
       "确定",
       () => {
+        closeSettlement?.();
         if (project === owner)
           $("#new-project")?.focus({ preventScroll: true });
       },
     );
-    const revision = modalRevision;
+    const dialog = $("#dialog"),
+      revision = modalRevision;
+    const form = $(".project-create-form");
+    const currentForm = () =>
+      dialog.open && modalRevision === revision && form.isConnected;
+    const workspaceOwner = () =>
+      project === owner &&
+      registry === projects &&
+      version === editVersion &&
+      view === page &&
+      requestId === current &&
+      documentId === activeDocumentId &&
+      !busy &&
+      !saving;
+    closeSettlement = bindProjectCreationForm(dialog, {
+      flow: projectCreationFlow,
+      currentForm,
+      currentOwner: () =>
+        workspaceOwner() && opening === projectOpenRequestSequence,
+      oldIds: () => new Set(projects.map(({ id }) => id)),
+      create: (input) =>
+        api("/projects", "POST", input, { expectedStatus: 201 }),
+      readRegistry: () => api("/projects"),
+      adopt: (id, list, owns) =>
+        openProject(id, {
+          creationSelection: {
+            registry: list,
+            current: () => owns() && workspaceOwner(),
+          },
+        }),
+      publishRegistry(list) {
+        registry = projects = list;
+        render();
+      },
+    });
     const picker = $("#pick-directory"),
       field = $("#new-directory");
     picker.onclick = async () => {
+      if (
+        !currentForm() ||
+        !workspaceOwner() ||
+        picker.disabled ||
+        projectCreationFlow.current
+      )
+        return;
       if (!window.desktop?.chooseDirectory) {
         toast("浏览器模式请直接填写绝对路径；桌面版支持选择文件夹");
         return;
@@ -2951,7 +3010,8 @@ function bind() {
         modalRevision === revision &&
         $("#dialog").open &&
         picker.isConnected &&
-        field.isConnected;
+        field.isConnected &&
+        !projectCreationFlow.current;
       picker.disabled = true;
       try {
         const directory = await window.desktop.chooseDirectory();

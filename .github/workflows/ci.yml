@@ -67,6 +67,7 @@ jobs:
       - run: node tests/api-sidebar-tree-ui.mjs
       - run: node tests/api-create-menu-ui.mjs
       - run: node tests/project-create-form-ui.mjs
+      - run: node tests/project-create-settlement-ui.mjs
       - run: node tests/project-top-menu-ui.mjs
       - run: node tests/api-row-menu-ui.mjs
       - run: node tests/project-switcher-ui.mjs
