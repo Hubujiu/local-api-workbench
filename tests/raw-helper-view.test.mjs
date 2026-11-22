@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { resolveDynamicRequest } from "../src/dynamic-values.mjs";
+import { interpolate } from "../src/core.mjs";
 import { effectiveParameterDictionary } from "../public/dictionary-view.js";
 import {
   matchesRawHelperEntry,
+  bodyDynamicToken,
+  rawHelperFixedValue,
   rawHelperTabs,
   rawHelperVariableChooser,
   rawHelperVariableNames,
@@ -103,4 +107,36 @@ test("variable options read only names and prioritize the active environment", (
   );
   assert.match(html, /quoted&#39;Name/);
   assert.match(rawHelperVariableChooser([]), /当前项目没有可引用的变量/);
+});
+
+test("fixed chooser preview agrees with the existing no-transform body token contract", async () => {
+  const id = "owned-fixed-draft";
+  const text = '  local "fixed" 中文 {{ordinary text}}  ';
+  const { preview, spec } = rawHelperFixedValue(text);
+  const draft = {
+    url: "http://127.0.0.1:38982/verification",
+    method: "POST",
+    bodyType: "json",
+    body: bodyDynamicToken(id),
+    bodyDynamic: { [id]: spec },
+  };
+  const savedDraft = structuredClone(draft);
+  const resolved = await resolveDynamicRequest(draft, {}, [], interpolate);
+  assert.equal(resolved.body, preview);
+  assert.equal(JSON.parse(resolved.body), text);
+  assert.deepEqual(draft, savedDraft);
+  assert.deepEqual(spec, {
+    source: "fixed",
+    value: text,
+    format: "json",
+    functions: [],
+  });
+});
+
+test("fixed chooser rejects missing and oversized serialized values before insertion", () => {
+  assert.equal(rawHelperFixedValue(""), null);
+  assert.equal(rawHelperFixedValue(undefined), null);
+  assert(rawHelperFixedValue("x".repeat(65534)));
+  assert.equal(rawHelperFixedValue("x".repeat(65535)), null);
+  assert.equal(rawHelperFixedValue("中".repeat(22000)), null);
 });

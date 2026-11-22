@@ -614,6 +614,127 @@ try {
   );
   assert(await body.evaluate((el) => el === document.activeElement));
 
+  const fixedCard = helperPanel.getByRole("button", {
+    name: "固定值",
+    exact: true,
+  });
+  const fixedDialog = page.getByRole("dialog", { name: "固定值", exact: true });
+  const fixedValue = fixedDialog.getByRole("textbox", {
+    name: "固定值",
+    exact: true,
+  });
+  const fixedExpression = fixedDialog.getByRole("textbox", {
+    name: "表达式",
+    exact: true,
+  });
+  const fixedPreview = fixedDialog.getByRole("textbox", {
+    name: "预览",
+    exact: true,
+  });
+  const fixedConfirm = fixedDialog.getByRole("button", {
+    name: "确定",
+    exact: true,
+  });
+  const waitFixedClosed = async () => {
+    await fixedDialog.waitFor({ state: "hidden" });
+    assert.equal(
+      await page.locator("#dialog").evaluate((el) => el.open),
+      false,
+    );
+  };
+  const fixedText = "local synthetic fixed";
+  await body.fill("");
+  await fixedCard.press("Enter");
+  assert(await fixedValue.evaluate((el) => el === document.activeElement));
+  assert(await fixedConfirm.isDisabled());
+  assert.equal(await fixedExpression.inputValue(), "");
+  assert.equal(await fixedPreview.inputValue(), "");
+  const fixedBox = await fixedDialog.boundingBox();
+  near(fixedBox.x, 696, 5, "fixed dialog left");
+  near(fixedBox.y, 210, 5, "fixed dialog top");
+  near(fixedBox.width, 360, 2, "fixed dialog width");
+  near(fixedBox.height, 536, 3, "fixed dialog height");
+  measurements.fixedChooser = fixedBox;
+  await capture("open-fixed");
+  await fixedValue.fill(fixedText);
+  assert.match(
+    await fixedExpression.inputValue(),
+    /^\{\{@value:[a-z0-9-]+\}\}$/,
+  );
+  assert.equal(await fixedPreview.inputValue(), JSON.stringify(fixedText));
+  assert(await fixedExpression.evaluate((el) => el.readOnly));
+  assert(await fixedPreview.evaluate((el) => el.readOnly));
+  assert(await fixedConfirm.isEnabled());
+  assert.equal(await body.inputValue(), "");
+  await capture("open-fixed-filled");
+  await fixedValue.press("Enter");
+  assert(await fixedDialog.isVisible());
+  await fixedValue.press("Escape");
+  await waitFixedClosed();
+  assert(await fixedCard.evaluate((el) => el === document.activeElement));
+  assert.equal(await body.inputValue(), "");
+
+  await fixedCard.press("Enter");
+  await fixedValue.fill(fixedText);
+  await fixedDialog.getByRole("button", { name: "取消", exact: true }).click();
+  await waitFixedClosed();
+  assert(await fixedCard.evaluate((el) => el === document.activeElement));
+  assert.equal(await body.inputValue(), "");
+
+  await fixedCard.press("Enter");
+  await fixedValue.fill(fixedText);
+  await page.setViewportSize({ width: 430, height: 760 });
+  await fixedConfirm.click();
+  assert(await fixedDialog.isVisible());
+  assert.match(
+    await page.locator("#toast").textContent(),
+    /接口、环境或草稿已变化/,
+  );
+  await page.keyboard.press("Escape");
+  await waitFixedClosed();
+  await page.setViewportSize({ width: 1363, height: 1023 });
+  await fixedCard.waitFor();
+  assert.equal(await body.inputValue(), "");
+
+  await fixedCard.press("Enter");
+  await fixedValue.fill(fixedText);
+  const fixedToken = await fixedExpression.inputValue();
+  await fixedConfirm.press("Enter");
+  await waitFixedClosed();
+  assert.equal(await body.inputValue(), fixedToken);
+  assert(await body.evaluate((el) => el === document.activeElement));
+  assert.equal(
+    await body.evaluate((el) => el.selectionStart),
+    fixedToken.length,
+  );
+  await capture("fixed-inserted");
+  const dynamicId = fixedToken.slice("{{@value:".length, -2);
+  await helperPanel
+    .locator(`[data-edit-body-dynamic="${dynamicId}"]`)
+    .press("Enter");
+  const legacyDynamic = page.getByRole("dialog", { name: "动态参数值" });
+  assert.equal(
+    await legacyDynamic.locator("#dynamic-source").inputValue(),
+    "fixed",
+  );
+  assert.equal(
+    await legacyDynamic.locator("#dynamic-value").inputValue(),
+    JSON.stringify(fixedText),
+  );
+  assert.equal(
+    await legacyDynamic.locator("#dynamic-format").inputValue(),
+    "json",
+  );
+  assert.equal(
+    await legacyDynamic.locator("#dynamic-functions").inputValue(),
+    "",
+  );
+  await legacyDynamic
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await legacyDynamic.waitFor({ state: "hidden" });
+  assert.equal(await body.inputValue(), fixedToken);
+
   assert.deepEqual(blocked, []);
   assert.deepEqual(errors, []);
   assert.deepEqual(await app.store.get(project.id), baseline);
