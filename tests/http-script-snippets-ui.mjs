@@ -158,6 +158,45 @@ try {
   assert.equal(await active(toggle), true);
   const folded = await panel.boundingBox();
   assert.equal(folded.width, 40);
+  const foldedLayout = await toggle.evaluate((button) => {
+    const characters = button.firstElementChild.firstChild;
+    const rect = (node) => {
+      const { left, right, top, bottom } = node.getBoundingClientRect();
+      return { left, right, top, bottom };
+    };
+    return {
+      label: characters.textContent,
+      glyphs: [...characters.textContent].map((_, index) => {
+        const letter = document.createRange();
+        letter.setStart(characters, index);
+        letter.setEnd(characters, index + 1);
+        return rect(letter);
+      }),
+      chevron: rect(button.lastElementChild),
+      rail: rect(button.closest("aside")),
+    };
+  });
+  console.log(
+    "HTTP_SCRIPT_SNIPPETS_FOLDED_GLYPHS",
+    JSON.stringify(foldedLayout),
+  );
+  assert.equal(foldedLayout.label, "常用脚本");
+  assert.equal(foldedLayout.glyphs.length, 4);
+  const { glyphs, chevron, rail } = foldedLayout;
+  for (const [index, glyph] of glyphs.entries()) {
+    assert(glyph.right > glyph.left && glyph.bottom > glyph.top);
+    assert(glyph.left >= rail.left && glyph.right <= rail.right);
+    if (index)
+      assert(
+        glyph.top >= glyphs[index - 1].bottom - 0.5,
+        "Chinese characters must not overlap",
+      );
+  }
+  assert(
+    chevron.top >= glyphs.at(-1).bottom - 0.5,
+    "Chevron follows the label",
+  );
+  assert(chevron.bottom <= rail.bottom, "Chevron remains in its rail");
   assert.equal(await editor.inputValue(), afterPre);
   await capture("pre-desktop-folded");
 
@@ -202,6 +241,73 @@ try {
   assert.equal(await toggle.getAttribute("aria-expanded"), "true");
   assert.equal(await editor.inputValue(), afterPre);
   await capture("pre-narrow");
+  const requestPane = page.locator(".request-panel");
+  const lastRecipe = option("读取环境变量");
+  const recipeNames = [
+    "设置当前请求变量",
+    "读取可用变量（优先当前请求）",
+    "读取环境变量",
+  ];
+  const note = panel.getByText("在当前行后插入，不运行或保存。", {
+    exact: true,
+  });
+  await requestPane.evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  const paneBox = await requestPane.boundingBox();
+  const hintBox = await note.boundingBox();
+  const motion = Math.max(
+    0,
+    Math.ceil(hintBox.y + hintBox.height - paneBox.y - paneBox.height + 8),
+  );
+  if (motion) {
+    await page.mouse.move(paneBox.x + paneBox.width / 2, paneBox.y + 10);
+    await page.mouse.wheel(0, motion);
+  }
+  const lastHandle = await lastRecipe.elementHandle();
+  await page.waitForFunction((button) => {
+    const row = button.getBoundingClientRect();
+    const pane = button.closest(".request-panel").getBoundingClientRect();
+    const note = button.parentElement.lastElementChild.getBoundingClientRect();
+    return (
+      row.top >= pane.top &&
+      note.bottom <= pane.bottom + 1 &&
+      button.contains(
+        document.elementFromPoint(
+          row.left + row.width / 2,
+          row.top + row.height / 2,
+        ),
+      )
+    );
+  }, lastHandle);
+  await capture("pre-narrow-last-recipe-pointer");
+  const target = await lastRecipe.boundingBox();
+  await page.mouse.click(
+    target.x + target.width / 2,
+    target.y + target.height / 2,
+  );
+  assert.match(
+    await editor.inputValue(),
+    /pm\.environment\.get\("exampleKey"\)/,
+  );
+  await editor.press(mod + "+z");
+  assert.equal(await editor.inputValue(), afterPre);
+  await requestPane.evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  await toggle.press("Tab");
+  for (const [index, name] of recipeNames.entries()) {
+    if (index) await page.keyboard.press("Tab");
+    assert.equal(await active(option(name)), true);
+  }
+  const focused = await lastRecipe.boundingBox();
+  const keyboardPane = await requestPane.boundingBox();
+  assert(
+    focused.y >= keyboardPane.y &&
+      focused.y + focused.height <= keyboardPane.y + keyboardPane.height + 1,
+  );
+  await capture("pre-narrow-last-recipe-keyboard");
+  assert.equal(await editor.inputValue(), afterPre);
   assert.deepEqual(await app.store.get(owner.id), baseline);
   assert.deepEqual(writes, []);
   assert.deepEqual(blocked, []);
