@@ -112,7 +112,8 @@ import {
 } from "./http-post-actions.js";
 import { bindHTTPPreActions, httpPreActionsHTML } from "./http-pre-actions.js";
 import {
-  debugCookieSelection,
+  debugHeaderNameListHTML,
+  debugPairSelection,
   debugPairComposer,
   debugPairFromKey,
   debugQueryEquality,
@@ -2234,6 +2235,10 @@ function editor(r) {
 function pairs(rows, key, designOptions, debugOptions, formBodyType) {
   const debugComposer = Boolean(debugOptions);
   const debugCookie = debugComposer && key === "cookies";
+  const debugHeader = key === "headers" && debugOptions?.ordinaryHeader;
+  const compactDebug = debugCookie || debugHeader;
+  const debugGroup = debugHeader ? "header" : "cookie";
+  const debugLabel = debugHeader ? "Header" : "Cookie";
   const design = Boolean(designOptions);
   const metadataColumn = ["headers", "query", "path", "cookies"].includes(key);
   const queryEquality =
@@ -2248,7 +2253,7 @@ function pairs(rows, key, designOptions, debugOptions, formBodyType) {
     debugComposer && key === "query"
       ? `<span class="debug-query-value-heading">${queryEquality}参数值</span>`
       : queryEquality + "参数值";
-  if (debugComposer && !debugCookie && !rows.length)
+  if (debugComposer && !compactDebug && !rows.length)
     return `<table class="pairs-table request-pairs-table debug-pairs-table debug-pairs-empty"><colgroup><col span="3"></colgroup><thead><tr><th scope="col" class="debug-pair-name-heading">参数名</th><th scope="col">${valueHeading}</th><th scope="col">描述</th></tr></thead><tbody>${debugPairComposer(key, true)}</tbody></table>`;
   const designComposer = design && isDesignPairKind(key);
   const compactEmpty = designComposer && !rows.length;
@@ -2275,19 +2280,19 @@ function pairs(rows, key, designOptions, debugOptions, formBodyType) {
           : fileLike
             ? `<span class="pair-file"><input type="file" data-field-file="${i}"><small title="${esc(p.filename || "未选择文件")}">${esc(p.filename || "未选择文件")}</small></span>`
             : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`;
-      const name = `<input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}">`;
+      const name = `<input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"${debugHeader ? ' list="debug-header-names" autocomplete="off" spellcheck="false"' : ""}>`;
       const metadata = inlineQuery ? designQueryMetadataHTML(p, i, esc) : "";
       const enabled = `<input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数">`;
       const actions = `<div class="pair-row-actions"><button data-dynamic-pair="${key}:${i}">${p.dynamic ? "动态✓" : "动态"}</button><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></div>`;
       const description = esc(p.description || "");
-      if (debugCookie)
-        return `<tr><td><div class="debug-cookie-name">${enabled}${name}</div></td><td>${value}</td><td class="pair-description" title="${description}">${description}${actions}</td></tr>`;
+      if (compactDebug)
+        return `<tr><td><div class="debug-${debugGroup}-name">${enabled}${name}</div></td><td>${value}</td><td class="pair-description" title="${description}">${description}${actions}</td></tr>`;
       return `<tr><td>${enabled}</td><td>${metadata ? `<div class="design-query-name">${name}${metadata}</div>` : name}</td><td><div class="pair-value">${selector}${value}</div></td>${metadataColumn ? `<td class="pair-description" title="${description}">${description}</td>` : ""}<td>${actions}</td></tr>`;
     })
     .join("");
-  if (debugCookie) {
-    const { checked, disabled } = debugCookieSelection(rows);
-    return `<table class="pairs-table request-pairs-table debug-pairs-table debug-cookie-pairs" aria-label="Cookie 请求参数"><colgroup><col span="3"></colgroup><thead><tr><th scope="col"><div class="debug-cookie-name"><input type="checkbox" id="debug-cookie-enable-all" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} aria-label="启用全部 Cookie 参数（仅参数表）"><span>参数名</span></div></th><th scope="col">参数值</th><th scope="col">描述</th></tr></thead><tbody>${rowsHTML}${debugPairComposer(key, false)}</tbody></table>`;
+  if (compactDebug) {
+    const { checked, disabled } = debugPairSelection(rows);
+    return `<table class="pairs-table request-pairs-table debug-pairs-table debug-${debugGroup}-pairs" aria-label="${debugLabel} 请求参数"><colgroup><col span="3"></colgroup><thead><tr><th scope="col"><div class="debug-${debugGroup}-name"><input type="checkbox" id="debug-${debugGroup}-enable-all" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} aria-label="启用全部 ${debugLabel} 参数（仅参数表）"><span>参数名</span></div></th><th scope="col">参数值</th><th scope="col">描述</th></tr></thead><tbody>${rowsHTML}${debugPairComposer(key, false, debugHeader)}</tbody></table>${debugHeader ? debugHeaderNameListHTML() : ""}`;
   }
   return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}${compactEmpty ? " design-pairs-empty" : ""}${compactEmpty && queryMetadata ? " design-pairs-query-empty" : ""}${inlineQuery ? " design-query-metadata-table" : ""}">${compactEmpty ? '<colgroup class="design-empty-pair-columns"><col><col><col><col></colgroup>' : ""}<thead><tr><th class="pair-enabled-heading" aria-label="启用">${queryDraft ? provisionalQueryEnabled(queryDraft, true) : ""}</th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${rowsHTML}${debugComposer ? debugPairComposer(key, false) : designComposer ? designPairComposer(key, compactEmpty, queryDraft) : ""}</tbody></table>${inlineQuery || queryDraft ? designQueryTypeMenuHTML() : ""}${queryDraft ? provisionalQueryNotice(queryDraft) : ""}${designComposer || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
 }
@@ -2425,7 +2430,11 @@ function paramPanel(r, param, design = false) {
         param,
         design ? { queryAddEqual: r.queryAddEqual } : null,
         !design && ownsDebugPairComposer(param, page, mode, param, r)
-          ? { queryAddEqual: r.queryAddEqual }
+          ? {
+              queryAddEqual: r.queryAddEqual,
+              ordinaryHeader:
+                param === "headers" && r.graphqlEditorVersion !== 1,
+            }
           : null,
       ) +
       (param === "cookies"
@@ -4610,8 +4619,8 @@ function bind() {
       const [kind, index] = composer
         ? [composer, undefined]
         : element.dataset.dictionaryPair.split(":");
-      const cookie = debugCookiePairCapture(element, index);
-      if (cookie && !cookie.current()) return;
+      const compactPair = compactDebugPairCapture(element, index);
+      if (compactPair && !compactPair.current()) return;
       if (mode === "design") collect();
       const ownerProject = project;
       const ownerRequest = request();
@@ -4625,7 +4634,7 @@ function bind() {
           )
           .join("")}</select>`,
         () => {
-          cookie?.assertCurrent();
+          compactPair?.assertCurrent();
           if (
             composer &&
             (project !== ownerProject ||
@@ -4643,10 +4652,8 @@ function bind() {
             ? debugPairFromKey(entry.key)
             : request()[kind][Number(index)];
           if (!row) throw Error("字典参数必须包含名称");
-          if (composer === "cookies")
-            row.enabled = element
-              .closest(".debug-pair-composer")
-              .querySelector("[data-debug-cookie-next]").checked;
+          if (composer && compactPair)
+            row.enabled = readCompactDebugNext(element);
           Object.assign(row, {
             key: entry.key,
             value:
@@ -4740,10 +4747,10 @@ function bind() {
   });
   onPair("[data-dynamic-pair]", "click", (_, element) => {
     const [group, index] = element.dataset.dynamicPair.split(":");
-    const cookie = debugCookiePairCapture(element, index);
-    if (cookie && !cookie.current()) return;
+    const compactPair = compactDebugPairCapture(element, index);
+    if (compactPair && !compactPair.current()) return;
     collect();
-    editDynamicValue(group, Number(index), cookie);
+    editDynamicValue(group, Number(index), compactPair);
   });
   function editParameterDescription(index) {
     const existing = project.settings?.parameterDescriptions?.[index];
@@ -4800,15 +4807,15 @@ function bind() {
   });
   onPair("[data-define-pair]", "click", (_, element) => {
     const [kind, index] = element.dataset.definePair.split(":");
-    const cookie = debugCookiePairCapture(element, index);
-    if (cookie && !cookie.current()) return;
+    const compactPair = compactDebugPairCapture(element, index);
+    if (compactPair && !compactPair.current()) return;
     if (mode === "design") collect();
     const parameter = request()[kind][Number(index)];
     modal(
       "参数定义",
       `<label>说明</label><input id="parameter-description" value="${esc(parameter.description || "")}">${project.settings?.parameterDescriptions?.length ? parameterDescriptionChoices(project.settings.parameterDescriptions, parameter.key) : ""}<label><input id="parameter-required" type="checkbox" ${parameter.required ? "checked" : ""}>必填</label><label>JSON Schema</label>${jsonEditor(parameter.schema ?? { type: "string" })}`,
       () => {
-        cookie?.assertCurrent();
+        compactPair?.assertCurrent();
         parameter.description = $("#parameter-description").value;
         parameter.required = $("#parameter-required").checked;
         parameter.schema = JSON.parse($("#modal-json").value);
@@ -5707,12 +5714,7 @@ function bind() {
     if (staleDebugFormControl(e)) return;
     const [k, i, f] = e.dataset.pair.split(":");
     if (k === "path" && (!e.isConnected || e.readOnly)) return;
-    if (
-      k === "cookies" &&
-      e.closest(".debug-cookie-pairs") &&
-      !ownsDebugCookieControl(e)
-    )
-      return;
+    if (compactKind(e) && !ownsCompactDebugPair(e)) return;
     request()[k][i][f] = e.value;
     if (f === "key") {
       delete request()[k][i].schemaDefined;
@@ -5727,14 +5729,9 @@ function bind() {
   onPair("[data-pair-enabled]", "change", (_, e) => {
     if (staleDebugFormControl(e)) return;
     const [k, i] = e.dataset.pairEnabled.split(":");
-    if (
-      k === "cookies" &&
-      e.closest(".debug-cookie-pairs") &&
-      !ownsDebugCookieControl(e)
-    )
-      return;
+    if (compactKind(e) && !ownsCompactDebugPair(e)) return;
     request()[k][i].enabled = e.checked;
-    if (k === "cookies") syncDebugCookieAll();
+    if (compactKind(e)) syncCompactDebugAll();
     if (k === "form")
       syncMultipartAll(
         $("#debug-multipart-enable-all, #debug-urlencoded-enable-all"),
@@ -5775,42 +5772,63 @@ function bind() {
   on(formNewKey, "compositionend", commitDebugFormRow);
   const composerProject = project;
   const composerRequest = request();
-  const ownsDebugCookieControl = (element) =>
+  const compactKind = (element) =>
+    element.closest(".debug-header-pairs")
+      ? "headers"
+      : element.closest(".debug-cookie-pairs")
+        ? "cookies"
+        : null;
+  const readCompactDebugNext = (element) =>
+    element
+      .closest(".debug-pair-composer")
+      .querySelector("[data-debug-header-next], [data-debug-cookie-next]")
+      .checked;
+  const ownsCompactDebugPair = (element, kind = compactKind(element)) =>
+    kind &&
     element.isConnected &&
     project === composerProject &&
     request() === composerRequest &&
-    ownsDebugPairComposer("cookies", page, mode, param, composerRequest) &&
-    Boolean(element.closest(".debug-cookie-pairs"));
-  const debugCookiePairCapture = (element, index) => {
-    if (!element.closest(".debug-cookie-pairs")) return null;
-    const rows = composerRequest?.cookies;
+    ownsDebugPairComposer(kind, page, mode, param, composerRequest);
+  const compactDebugPairCapture = (element, index) => {
+    const kind = compactKind(element);
+    if (!kind) return null;
+    const rows = composerRequest?.[kind];
     const row = rows?.[index];
     const current = () =>
-      ownsDebugCookieControl(element) &&
-      composerRequest.cookies === rows &&
+      ownsCompactDebugPair(element, kind) &&
+      composerRequest[kind] === rows &&
       (index === undefined || (Boolean(row) && rows[index] === row));
+    const error =
+      (kind === "headers" ? "Header" : "Cookie") +
+      " 参数草稿已变化，请重新打开编辑器";
     return {
       current,
+      error,
       assertCurrent() {
-        if (!current()) throw Error("Cookie 参数草稿已变化，请重新打开编辑器");
+        if (!current()) throw Error(error);
       },
     };
   };
-  const cookieAll = $("#debug-cookie-enable-all");
-  const syncDebugCookieAll = () => {
-    if (cookieAll?.isConnected)
-      Object.assign(cookieAll, debugCookieSelection(composerRequest.cookies));
+  const compactEnableAll = "#debug-header-enable-all, #debug-cookie-enable-all";
+  const enableAll = $(compactEnableAll);
+  const syncCompactDebugAll = () => {
+    if (enableAll?.isConnected)
+      Object.assign(
+        enableAll,
+        debugPairSelection(composerRequest[compactKind(enableAll)]),
+      );
   };
-  syncDebugCookieAll();
-  on("#debug-cookie-enable-all", "change", (_, element) => {
-    if (!ownsDebugCookieControl(element) || !composerRequest.cookies.length)
+  syncCompactDebugAll();
+  on(compactEnableAll, "change", (_, element) => {
+    const kind = compactKind(element);
+    if (!ownsCompactDebugPair(element, kind) || !composerRequest[kind].length)
       return;
-    for (const row of composerRequest.cookies) row.enabled = element.checked;
+    for (const row of composerRequest[kind]) row.enabled = element.checked;
     for (const checkbox of element
-      .closest(".debug-cookie-pairs")
+      .closest("table")
       .querySelectorAll("[data-pair-enabled]"))
       checkbox.checked = element.checked;
-    syncDebugCookieAll();
+    syncCompactDebugAll();
     mark();
   });
   const commitDebugPair = (event, input) => {
@@ -5825,10 +5843,7 @@ function bind() {
       return;
     const row = debugPairFromKey(input.value);
     if (!row) return;
-    if (kind === "cookies")
-      row.enabled = input
-        .closest(".debug-pair-composer")
-        .querySelector("[data-debug-cookie-next]").checked;
+    if (compactKind(input)) row.enabled = readCompactDebugNext(input);
     const rows = composerRequest[kind];
     const index = rows.length;
     const { selectionStart, selectionEnd, selectionDirection } = input;
@@ -6042,8 +6057,8 @@ function bind() {
   onPair("[data-remove-pair]", "click", (_, e) => {
     if (staleDebugFormControl(e)) return;
     const [k, i] = e.dataset.removePair.split(":");
-    const cookie = debugCookiePairCapture(e, i);
-    if (cookie && !cookie.current()) return;
+    const compactPair = compactDebugPairCapture(e, i);
+    if (compactPair && !compactPair.current()) return;
     if (mode === "design") collect();
     request()[k].splice(Number(i), 1);
     mark();
@@ -9830,7 +9845,7 @@ function editFunction(index) {
   };
 }
 
-function editDynamicValue(group, index, cookie) {
+function editDynamicValue(group, index, compactPair) {
   const target = request();
   const editor = $("#body-code");
   const selection = {
@@ -9876,7 +9891,7 @@ function editDynamicValue(group, index, cookie) {
     "动态参数值",
     `<p>预览使用当前环境值；发送时会重新读取前置脚本运行后的值。固定值输入JSON，变量输入变量名。处理函数按逗号分隔顺序执行。</p><label>来源</label><select id="dynamic-source"><option value="fixed">固定值</option><option value="variable">变量</option><option value="mock">Mock样例</option><option value="apipost-function">原版函数模板（Query受限子集）</option><option value="apipost-header-function">原版函数模板（Header受限子集）</option><option value="apipost-form-function">原版函数模板（表单文本受限子集）</option><option value="apipost-body-function">原版函数模板（完整正文受限子集）</option></select><p>原版函数模板仅支持匹配位置的Query/Header/表单文本表达式或整个raw/JSON正文，支持原样函数参数、安全点路径变量或引号原文起始；首函数抛错保留首段模板，后续抛错保留上一步值。支持无参数fn_及lower/upper/length/number及concat/lconcat原文拼接、substr有界整数截取、padstart/padend有界填充及URI编解码加工链；MD5/SHA、Base64文本及ISO日期加工暂不能与共享函数混用；允许响应后置脚本及仅改变量的前置脚本；禁止前置请求修改、SDK模式及额外原生加工链，Header/表单/正文允许前后缀及多个白名单变量/原文表达式（多表达式不支持共享函数），Query仍须单个完整表达式；结果不再次插值。</p><label>输入值 / 变量名 / Mock表达式</label><textarea id="dynamic-value"></textarea><details><summary>Mock类型与种子</summary><p>支持 @cname()、@email()、@integer(min,max) 等有界表达式，不是完整Faker/Mock.js。种子留空每次重新生成；填写整数可复现。预览不代表下次随机结果。</p><select id="dynamic-mock-type">${["string", "integer", "number", "boolean", "object", "array"].map((type) => `<option>${type}</option>`).join("")}</select><input id="dynamic-seed" type="number" placeholder="随机种子（可选）"></details>${group === "body" ? '<label>输出方式</label><select id="dynamic-format"><option value="json">JSON值（自动转义/引号）</option><option value="text">原始文本</option></select>' : ""}<label>处理函数</label><input id="dynamic-functions" list="dynamic-function-list"><datalist id="dynamic-function-list">${(project.settings?.functions || []).map((fn) => `<option value="${esc(fn.name)}"></option>`).join("")}</datalist><button id="dynamic-preview" type="button">预览</button><button id="dynamic-remove" type="button">移除动态值</button><pre id="dynamic-result">尚未预览</pre>`,
     () => {
-      cookie?.assertCurrent();
+      compactPair?.assertCurrent();
       const spec = read();
       if (isApipostFunctionSource(spec.source)) {
         if (group !== apipostFunctionSourceGroups[spec.source])
@@ -9917,7 +9932,7 @@ function editDynamicValue(group, index, cookie) {
   $("#dynamic-preview").onclick = async () => {
     const output = $("#dynamic-result");
     try {
-      cookie?.assertCurrent();
+      compactPair?.assertCurrent();
       const result = await api(
         "/projects/" + project.id + "/dynamic-preview",
         "POST",
@@ -9936,8 +9951,7 @@ function editDynamicValue(group, index, cookie) {
     }
   };
   $("#dynamic-remove").onclick = () => {
-    if (cookie && !cookie.current())
-      return toast("Cookie 参数草稿已变化，请重新打开编辑器");
+    if (compactPair && !compactPair.current()) return toast(compactPair.error);
     if (group === "body") {
       delete target.bodyDynamic?.[bodyId];
       target.body = target.body.split(bodyDynamicToken(bodyId)).join("");
