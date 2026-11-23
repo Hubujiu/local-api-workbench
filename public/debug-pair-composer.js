@@ -14,7 +14,7 @@ export function debugPairFromKey(key) {
   return { key, value: "", enabled: true };
 }
 
-export function debugCookieSelection(rows) {
+export function debugPairSelection(rows) {
   const enabled = rows.filter((row) => row.enabled !== false).length;
   return {
     checked: enabled === rows.length,
@@ -23,7 +23,25 @@ export function debugCookieSelection(rows) {
   };
 }
 
-export function debugPairComposer(kind, empty) {
+export const debugCookieSelection = debugPairSelection;
+const headerNames = [
+  "Accept",
+  "Accept-Encoding",
+  "Accept-Language",
+  "Cache-Control",
+  "Content-Type",
+  "If-Match",
+  "If-Modified-Since",
+  "If-None-Match",
+  "If-Unmodified-Since",
+  "Range",
+];
+export const debugHeaderNameListHTML = () =>
+  `<datalist id="debug-header-names">${headerNames.map((name) => `<option value="${name}"></option>`).join("")}</datalist>`;
+
+export function debugPairComposer(kind, empty, ordinaryHeader = false) {
+  if (kind === "headers" && ordinaryHeader)
+    return '<tr class="debug-pair-composer"><td><div class="debug-header-name"><input type="checkbox" data-debug-header-next checked aria-label="启用新 Header 参数"><input type="text" data-debug-pair-name="headers" aria-label="新Header参数名" list="debug-header-names" autocomplete="off" spellcheck="false"></div></td><td></td><td><button type="button" class="ghost debug-pair-dictionary" data-debug-pair-dictionary="headers" title="从字典添加参数">字典</button></td></tr>';
   if (kind === "cookies")
     return '<tr class="debug-pair-composer"><td><div class="debug-cookie-name"><input type="checkbox" data-debug-cookie-next checked aria-label="启用新 Cookie 参数"><input type="text" data-debug-pair-name="cookies" aria-label="新 Cookie 参数名" autocomplete="off" spellcheck="false"></div></td><td></td><td><button type="button" class="ghost debug-pair-dictionary" data-debug-pair-dictionary="cookies" title="从字典添加参数">字典</button></td></tr>';
   const label = kind === "headers" ? "Header" : "Query";

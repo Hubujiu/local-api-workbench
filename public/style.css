@@ -6871,16 +6871,16 @@ body.dark .request-panel > .debug-path-pairs .design-path-type {
   }
 }
 
-.request-panel > .debug-cookie-pairs {
+.request-panel > :is(.debug-cookie-pairs, .debug-header-pairs) {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   border-radius: 4px;
 }
-.debug-cookie-pairs col {
+:is(.debug-cookie-pairs, .debug-header-pairs) col {
   width: 33.333%;
 }
-.request-panel > .debug-cookie-pairs th {
+.request-panel > :is(.debug-cookie-pairs, .debug-header-pairs) th {
   padding-inline: 9px;
   height: 35px;
   color: var(--muted);
@@ -6888,20 +6888,24 @@ body.dark .request-panel > .debug-path-pairs .design-path-type {
   border-inline-end: 0;
   background: transparent;
 }
-.request-panel > .debug-cookie-pairs :is(th, td):first-child {
+.request-panel
+  > :is(.debug-cookie-pairs, .debug-header-pairs)
+  :is(th, td):first-child {
   padding-inline-start: 20px;
   text-align: start;
 }
-.request-panel > .debug-cookie-pairs td:nth-child(2) {
+.request-panel > :is(.debug-cookie-pairs, .debug-header-pairs) td:nth-child(2) {
   padding-inline: 9px;
 }
-.debug-cookie-name {
+:is(.debug-cookie-name, .debug-header-name) {
   display: flex;
   align-items: center;
   gap: 7px;
   min-width: 0;
 }
-.debug-cookie-pairs .debug-cookie-name input[type="checkbox"] {
+:is(.debug-cookie-pairs, .debug-header-pairs)
+  :is(.debug-cookie-name, .debug-header-name)
+  input[type="checkbox"] {
   flex: 0 0 16px;
   width: 16px;
   height: 16px;
@@ -6910,25 +6914,35 @@ body.dark .request-panel > .debug-path-pairs .design-path-type {
   padding: 0;
   accent-color: var(--accent);
 }
-.debug-cookie-pairs .debug-cookie-name [data-debug-cookie-next] {
+:is(.debug-cookie-pairs, .debug-header-pairs)
+  :is(.debug-cookie-name, .debug-header-name)
+  :is([data-debug-cookie-next], [data-debug-header-next]) {
   accent-color: var(--muted);
 }
-.debug-cookie-name > :is([data-debug-pair-name], [data-pair]),
-.debug-cookie-pairs td:nth-child(2) input[data-pair] {
+:is(.debug-cookie-name, .debug-header-name)
+  > :is([data-debug-pair-name], [data-pair]),
+:is(.debug-cookie-pairs, .debug-header-pairs) td:nth-child(2) input[data-pair] {
   width: 100%;
 }
-.debug-cookie-pairs .pair-row-actions {
+:is(.debug-cookie-pairs, .debug-header-pairs) .pair-row-actions {
   flex-wrap: wrap;
 }
 @media (max-width: 760px) {
-  .request-panel > .debug-cookie-pairs :is(th, td):first-child {
+  .request-panel
+    > :is(.debug-cookie-pairs, .debug-header-pairs)
+    :is(th, td):first-child {
     padding-inline-start: 5px;
   }
-  .debug-cookie-pairs .pair-description {
+  :is(.debug-cookie-pairs, .debug-header-pairs) .pair-description {
     white-space: normal;
     overflow-wrap: anywhere;
   }
-  .debug-cookie-pairs .debug-cookie-name {
+  :is(.debug-cookie-pairs, .debug-header-pairs)
+    :is(.debug-cookie-name, .debug-header-name) {
     gap: 4px;
   }
+}
+
+.debug-header-name {
+  gap: 4px;
 }

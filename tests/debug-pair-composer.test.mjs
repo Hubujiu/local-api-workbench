@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   debugCookieSelection,
+  debugHeaderNameListHTML,
   debugPairComposer,
   debugPairFromKey,
   ownsDebugPairComposer,
@@ -65,4 +66,16 @@ test("Cookie composer owns a real next-row choice and aggregate excludes it", ()
     selection(false, true, false),
   );
   assert.deepEqual(debugCookieSelection([off]), selection(false, false, false));
+});
+
+test("ordinary Header offers real known names, aggregate row markup and dictionary; legacy remains separate", () => {
+  const ordinary = debugPairComposer("headers", true, true);
+  assert.match(ordinary, /data-debug-header-next checked/);
+  assert.match(ordinary, /list="debug-header-names"/);
+  assert.match(ordinary, /data-debug-pair-dictionary="headers"/);
+  assert.doesNotMatch(ordinary, /data-add-pair|必填/);
+  const suggestions = debugHeaderNameListHTML();
+  assert.match(suggestions, /value="Content-Type"/);
+  assert.doesNotMatch(suggestions, /Authorization|Cookie|Content-Length/);
+  assert.doesNotMatch(debugPairComposer("headers", true), /debug-header-names/);
 });
