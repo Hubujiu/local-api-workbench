@@ -1,3 +1,4 @@
+import { createDebugExampleDrafts } from "../public/http-debug-examples.js";
 import { createHTTPPreWaitDrafts } from "../public/http-pre-wait.js";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -64,6 +65,7 @@ function harness(initial = fixture(), transport) {
     "changedProvisionalQuery",
     "provisionalQuery",
     "httpPreWaitDrafts",
+    "debugExampleDrafts",
     `
  const debugAuthDrafts = new WeakMap();
  const request=()=>project.requests.find((entry)=>entry.id===current);
@@ -90,6 +92,7 @@ function harness(initial = fixture(), transport) {
       changedProvisionalQuery,
       provisional,
       createHTTPPreWaitDrafts(),
+      createDebugExampleDrafts(),
     ),
     guard,
     calls,

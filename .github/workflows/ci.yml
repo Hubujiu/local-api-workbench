@@ -77,6 +77,9 @@ jobs:
       - run: node tests/http-pre-wait-ui.mjs
         env:
           HTTP_PRE_WAIT_EVIDENCE: /tmp/local-api-http-pre-wait
+      - run: node tests/http-script-snippets-ui.mjs
+        env:
+          HTTP_SCRIPT_SNIPPET_EVIDENCE: /tmp/local-api-http-script-snippets
       - run: node tests/http-pre-actions-ui.mjs
         env:
           HTTP_PRE_ACTIONS_EVIDENCE: /tmp/local-api-http-pre-actions
@@ -132,9 +135,18 @@ jobs:
         env:
           HTTP_DEBUG_PATH_EVIDENCE: /tmp/local-api-http-debug-path
       - run: node tests/http-debug-body-empty-ui.mjs
+      - run: node tests/http-debug-examples-ui.mjs
+        env:
+          HTTP_DEBUG_EXAMPLE_EVIDENCE: /tmp/local-api-http-debug-example
       - run: node tests/http-success-response-ui.mjs
         env:
           HTTP_SUCCESS_RESPONSE_EVIDENCE: /tmp/local-api-http-success-response
+      - run: node tests/http-response-headers-ui.mjs
+        env:
+          HTTP_RESPONSE_HEADERS_EVIDENCE: /tmp/local-api-http-response-headers
+      - run: node tests/http-unsent-actual-request-ui.mjs
+        env:
+          HTTP_UNSENT_ACTUAL_REQUEST_EVIDENCE: /tmp/local-api-http-unsent-actual-request
       - run: node tests/debug-multipart-editor-ui.mjs
       - run: node tests/debug-urlencoded-editor-ui.mjs
       - run: node tests/form-file-privacy-ui.mjs
@@ -222,12 +234,16 @@ jobs:
             /tmp/local-api-design-response-example-inline/design-response-example-*.png
             /tmp/local-api-design-response-header-inline/design-response-header-*.png
             /tmp/local-api-design-response-settings-inline/design-response-settings-*.png
+            /tmp/local-api-http-debug-example/http-debug-example-*.png
             /tmp/local-api-http-success-response/response-*-workbench.png
+            /tmp/local-api-http-response-headers/http-response-headers-*.png
+            /tmp/local-api-http-unsent-actual-request/http-unsent-actual-request-*.png
             /tmp/local-api-http-response-layout/http-response-layout-*.png
             /tmp/local-api-http-split-body/http-split-body-*.png
             /tmp/local-api-http-request-overflow/http-request-overflow-*.png
             /tmp/local-api-http-post-actions/http-post-actions-*.png
             /tmp/local-api-http-pre-actions/http-pre-actions-*.png
+            /tmp/local-api-http-script-snippets/http-script-snippets-*.png
             /tmp/local-api-http-pre-wait/http-pre-wait-*.png
             /tmp/local-api-plan-inspection/plan-inspection-*.png
             /tmp/local-api-http-request-auth/http-request-auth-*.png
