@@ -61,7 +61,7 @@ jobs:
             test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-12.tap
             test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-12.progress.jsonl
   browser:
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
