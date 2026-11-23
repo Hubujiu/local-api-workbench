@@ -356,6 +356,12 @@ import {
 } from "./schema-editor.js";
 import { httpAuthPane, httpRequestAuthPane } from "./auth-view.js";
 import {
+  createDesignPathDrafts,
+  designPathTabLabel,
+  designPathTable,
+  usesDesignPathDraft,
+} from "./design-path-draft.js";
+import {
   captureDebugAuthOperation,
   debugAuthChoice,
   updateDebugAuthChoice,
@@ -429,6 +435,7 @@ const uid = () => crypto.randomUUID();
 const responses = new Map();
 const graphqlResponseFence = createGraphQLResponseFence();
 const openDesignDescriptions = new WeakMap();
+const designPathDrafts = createDesignPathDrafts();
 const designDescriptionScroll = new WeakMap();
 let rememberDesignDescriptionScroll;
 const designParameterTabs = [
@@ -2373,6 +2380,12 @@ function bodyParameterHelper(r, tabbed) {
   return `<aside id="body-parameter-helper" class="parameter-helper${tabbed ? " raw-helper-open" : ""}">${contents}</aside>`;
 }
 function paramPanel(r, param, design = false) {
+  if (design && param === "path" && usesDesignPathDraft(project, r))
+    return designPathTable(
+      r.path,
+      (row) => designPathDrafts.isLinked(project, r, row),
+      esc,
+    );
   if (r.graphqlEditorVersion === 1 && param === "graphql" && !design)
     return graphqlWorkspaceHTML(r, graphqlDrafts, esc, project.id);
   if (r.graphqlEditorVersion === 1 && param === "body")
@@ -2569,7 +2582,8 @@ function designParameterPanel(r) {
   return `<div class="design-parameter-tabs" role="tablist" aria-label="设计请求参数标签">${designParameterTabs
     .map(([key, label]) => {
       const selected = key === designParameter;
-      return `<button type="button" class="ghost" id="design-tab-${key}" role="tab" aria-selected="${selected}" tabindex="${selected ? 0 : -1}" aria-controls="design-parameter-panel" data-design-parameter="${key}">${label}</button>`;
+      const path = key === "path" && usesDesignPathDraft(project, r);
+      return `<button type="button" class="ghost" id="design-tab-${key}" role="tab" aria-selected="${selected}" tabindex="${selected ? 0 : -1}" aria-controls="design-parameter-panel" data-design-parameter="${key}"${path ? ' aria-label="Path"' : ""}>${path ? designPathTabLabel(r) : label}</button>`;
     })
     .join(
       "",
@@ -2744,8 +2758,8 @@ function renderPage() {
         .join("") || '<div class="empty"><p>创建接口后自动生成文档</p></div>'
   }</div>`;
 }
-function on(selector, event, fn) {
-  document.querySelectorAll(selector).forEach((el) =>
+function on(selector, event, fn, root = document) {
+  root.querySelectorAll(selector).forEach((el) =>
     el.addEventListener(event, async (e) => {
       try {
         await fn(e, el);
@@ -2934,6 +2948,12 @@ function showMCPClientConfiguration(configuration) {
     };
 }
 function bind() {
+  // Path URL edits replace only their parameter panel, never the URL input.
+  const pathBindings = [];
+  const onPair = (selector, event, fn) => {
+    on(selector, event, fn);
+    pathBindings.push([selector, event, fn]);
+  };
   const planEditor = $(".plans-page .plan-editor");
   if (planEditor)
     bindPlanInspection(
@@ -3427,33 +3447,72 @@ function bind() {
     $("#request-name")?.focus({ preventScroll: true });
   });
   on("#save,#save-project", "click", save);
-  on("#request-name,#url,#body-code,#description", "input", (_, element) => {
-    if (designResponseSettingsDrafts.get(request())) {
-      const field = {
-        "request-name": "name",
-        url: "url",
-        "body-code": "body",
-        description: "description",
-      }[element.id];
-      request()[field] = element.value;
-    } else collect();
-    mark();
-    if (element.id === "request-name") {
-      const id = CSS.escape(current);
-      document
-        .querySelectorAll('[data-tab-name="' + id + '"]')
-        .forEach((label) => {
-          label.textContent = request().name;
-        });
-      document
-        .querySelector('[data-close-tab="' + id + '"]')
-        ?.setAttribute("aria-label", "关闭 " + request().name);
-      if ($("#tree")) {
-        $("#tree").innerHTML = tree();
-        bindTree();
-      }
-    }
+  const pathProject = project;
+  const pathRequest = request();
+  const ownsPathURL = (element) =>
+    element.isConnected &&
+    page === "apis" &&
+    mode === "design" &&
+    !workspaceDocument() &&
+    project === pathProject &&
+    request() === pathRequest &&
+    usesDesignPathDraft(project, pathRequest);
+  const updatePathFromURL = (element) => {
+    if (!ownsPathURL(element) || !designPathDrafts.sync(project, pathRequest))
+      return;
+    $("#design-tab-path").textContent = designPathTabLabel(pathRequest);
+    if (designParameter !== "path") return;
+    const surface = $("#design-parameter-panel");
+    surface.innerHTML = paramPanel(pathRequest, "path", true);
+    for (const [selector, event, fn] of pathBindings)
+      on(selector, event, fn, surface);
+  };
+  let composingPathURL = false;
+  on("#url", "compositionstart", (_, element) => {
+    if (ownsPathURL(element)) composingPathURL = true;
   });
+  on("#url", "compositionend", (_, element) => {
+    if (!ownsPathURL(element)) return;
+    composingPathURL = false;
+    if (pathRequest.url !== element.value) {
+      pathRequest.url = element.value;
+      mark();
+    }
+    updatePathFromURL(element);
+  });
+  on(
+    "#request-name,#url,#body-code,#description",
+    "input",
+    (event, element) => {
+      if (designResponseSettingsDrafts.get(request())) {
+        const field = {
+          "request-name": "name",
+          url: "url",
+          "body-code": "body",
+          description: "description",
+        }[element.id];
+        request()[field] = element.value;
+      } else collect();
+      mark();
+      if (element.id === "url" && !event.isComposing && !composingPathURL)
+        updatePathFromURL(element);
+      if (element.id === "request-name") {
+        const id = CSS.escape(current);
+        document
+          .querySelectorAll('[data-tab-name="' + id + '"]')
+          .forEach((label) => {
+            label.textContent = request().name;
+          });
+        document
+          .querySelector('[data-close-tab="' + id + '"]')
+          ?.setAttribute("aria-label", "关闭 " + request().name);
+        if ($("#tree")) {
+          $("#tree").innerHTML = tree();
+          bindTree();
+        }
+      }
+    },
+  );
   on("#method", "change", (_, element) => {
     if (designResponseSettingsDrafts.get(request())) {
       element.value = request().method;
@@ -4479,7 +4538,7 @@ function bind() {
       ],
     ),
   );
-  on(
+  onPair(
     "[data-dictionary-pair], [data-debug-pair-dictionary]",
     "click",
     (_, element) => {
@@ -4608,7 +4667,7 @@ function bind() {
     );
     context.bindDialog();
   });
-  on("[data-dynamic-pair]", "click", (_, element) => {
+  onPair("[data-dynamic-pair]", "click", (_, element) => {
     collect();
     const [group, index] = element.dataset.dynamicPair.split(":");
     editDynamicValue(group, Number(index));
@@ -4666,7 +4725,7 @@ function bind() {
       throw error;
     }
   });
-  on("[data-define-pair]", "click", (_, element) => {
+  onPair("[data-define-pair]", "click", (_, element) => {
     if (mode === "design") collect();
     const [kind, index] = element.dataset.definePair.split(":"),
       parameter = request()[kind][Number(index)];
@@ -5563,9 +5622,10 @@ function bind() {
       },
     );
   });
-  on("[data-pair]", "input", (_, e) => {
+  onPair("[data-pair]", "input", (_, e) => {
     if (staleDebugFormControl(e)) return;
     const [k, i, f] = e.dataset.pair.split(":");
+    if (k === "path" && (!e.isConnected || e.readOnly)) return;
     request()[k][i][f] = e.value;
     if (f === "key") {
       delete request()[k][i].schemaDefined;
@@ -5577,7 +5637,7 @@ function bind() {
     }
     mark();
   });
-  on("[data-pair-enabled]", "change", (_, e) => {
+  onPair("[data-pair-enabled]", "change", (_, e) => {
     if (staleDebugFormControl(e)) return;
     const [k, i] = e.dataset.pairEnabled.split(":");
     request()[k][i].enabled = e.checked;
@@ -5811,7 +5871,7 @@ function bind() {
       "required",
     ),
   );
-  on("[data-add-pair]", "click", (_, e) => {
+  onPair("[data-add-pair]", "click", (_, e) => {
     if (staleDebugFormControl(e)) return;
     const key = e.dataset.addPair;
     if (e.closest(".design-pair-composer")) {
@@ -5835,7 +5895,7 @@ function bind() {
     if (mode === "design" || (key === "form" && $(debugFormEditor)))
       $(`[data-pair="${key}:${index}:key"]`)?.focus();
   });
-  on("[data-remove-pair]", "click", (_, e) => {
+  onPair("[data-remove-pair]", "click", (_, e) => {
     if (staleDebugFormControl(e)) return;
     if (mode === "design") collect();
     const [k, i] = e.dataset.removePair.split(":");

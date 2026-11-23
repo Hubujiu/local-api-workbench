@@ -106,6 +106,9 @@ jobs:
       - run: node tests/http-design-pair-composer-ui.mjs
         env:
           DESIGN_PAIR_COMPOSER_EVIDENCE: /tmp/local-api-design-pair-composer
+      - run: node tests/http-design-path-ui.mjs
+        env:
+          DESIGN_PATH_EVIDENCE: /tmp/local-api-http-design-path
       - run: node tests/http-design-query-metadata-ui.mjs
         env:
           DESIGN_QUERY_METADATA_EVIDENCE: /tmp/local-api-design-query-metadata
@@ -212,6 +215,7 @@ jobs:
             /tmp/local-api-plan-inspection/plan-inspection-*.png
             /tmp/local-api-http-request-auth/http-request-auth-*.png
             /tmp/local-api-design-pair-composer/design-pair-*.png
+            /tmp/local-api-http-design-path/design-path-*.png
             /tmp/local-api-design-query-metadata/design-query-*.png
             /tmp/local-api-http-design-description-scroll/design-description-*.png
             /tmp/local-api-graphql-named-workspace/named-workbench-*.png

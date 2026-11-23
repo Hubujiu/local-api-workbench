@@ -6718,3 +6718,46 @@ body.dark .design-parameter-panel [data-query-type-color="boolean"] {
     font-size: calc(14 * var(--app-type-unit));
   }
 }
+
+.design-parameter-panel .design-path-pairs {
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.design-parameter-panel .design-path-pairs col {
+  width: 33.333%;
+}
+.design-parameter-panel .design-path-pairs thead th {
+  height: 35px;
+  border-inline-end: 0;
+  padding-inline: 10px;
+}
+.design-parameter-panel .design-path-pairs td {
+  height: 36px;
+  overflow-wrap: anywhere;
+}
+.design-parameter-panel .design-path-name {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 4px;
+}
+.design-parameter-panel .design-path-name input[readonly] {
+  background: var(--panel);
+}
+.design-parameter-panel .design-path-name input[type="checkbox"] {
+  flex: none;
+}
+.design-parameter-panel .design-path-type {
+  margin-inline-end: 4px;
+  flex: none;
+  font-size: calc(12 * var(--app-type-unit));
+}
+.design-parameter-panel .design-path-pairs .pair-row-actions {
+  flex-wrap: wrap;
+}
+@media (max-width: 650px) {
+  .design-parameter-panel .design-path-name {
+    flex-wrap: wrap;
+  }
+}
