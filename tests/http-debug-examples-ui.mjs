@@ -180,7 +180,28 @@ try {
   await body.fill("  ");
   assert.equal(await ready(), "✓ 已保存");
   assert.equal(await format.isVisible(), false);
+  // Chromium may combine clearing and subsequent typing into one native
+  // undo transaction. The whitespace restored by that transaction is virtual.
   await body.fill("");
+  await body.pressSequentially("x");
+  assert.equal(await body.inputValue(), "x");
+  assert.match(await format.textContent(), /纯文本 · 200/);
+  await body.press("Control+z");
+  assert.equal(await body.inputValue(), "  ");
+  assert.equal(await ready(), "✓ 已保存");
+  assert.equal(await format.isVisible(), false);
+  assert.equal(await choice("成功").getAttribute("title"), "未保存的示例预设");
+
+  // Use a newly mounted, pristine editor for a single-keystroke undo/redo.
+  const whitespaceEditor = await body.elementHandle();
+  await choice("失败").press("Enter");
+  await choice("成功").press("Enter");
+  assert.equal(
+    await whitespaceEditor.evaluate((node) => node.isConnected),
+    false,
+  );
+  assert.equal(await body.inputValue(), "");
+  assert.equal(await ready(), "✓ 已保存");
   const originalEditor = await body.elementHandle();
   await body.pressSequentially("x");
   assert.equal(await body.inputValue(), "x");
