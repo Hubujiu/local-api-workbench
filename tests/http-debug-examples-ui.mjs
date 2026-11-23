@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { normalizeRequest } from "../src/core.mjs";
 import { createApp } from "../src/server.mjs";
+import { bindExampleStartupTrace } from "./helpers/http-debug-examples-startup.mjs";
 import { isMockTransportRoute } from "./helpers/mock-transport-route.mjs";
 
 const { chromium } = createRequire(import.meta.url)(
@@ -71,17 +72,11 @@ try {
     sessionStorage.setItem("project", id);
   }, owner.id);
   const origin = new URL(app.launchUrl).origin;
+  const ownerPath = "/api/projects/" + owner.id;
+  const startup = bindExampleStartupTrace(page, origin, ownerPath);
   const writes = [],
-    forbidden = [],
-    errors = [];
+    forbidden = [];
   let allowSave = false;
-  page.on("pageerror", (error) => errors.push(error.name));
-  page.on("response", (response) =>
-    recordStartup(response.url(), response.status()),
-  );
-  page.on("requestfailed", (request) =>
-    recordStartup(request.url(), "blocked or failed"),
-  );
   await page.route("**/*", (route) => {
     const req = route.request(),
       dest = new URL(req.url());
@@ -137,7 +132,7 @@ try {
     const initial = page.locator(`.sidebar [data-request="${a.id}"]`);
     await page.goto(app.launchUrl);
     await initial.waitFor({ state: "visible", timeout: 10000 });
-    assert.equal(startupTrace.get("/mock-target.js"), 200);
+    assert.equal(startup.status("/mock-target.js"), 200);
   } catch {
     const startupError = await page
       .getByRole("heading", { name: "无法启动工作台", exact: true })
@@ -146,9 +141,8 @@ try {
     throw Error(
       "Workbench startup did not expose the seeded request: " +
         JSON.stringify({
-          responses: Object.fromEntries(startupTrace),
+          ...startup.snapshot(),
           startupError,
-          pageErrors: errors,
         }),
     );
   }
@@ -320,7 +314,7 @@ try {
   assert.equal(saved.settings.mockEnabled, baseline.settings.mockEnabled);
   assert.deepEqual(writes, ["PUT"]);
   assert.deepEqual(forbidden, []);
-  assert.deepEqual(errors, []);
+  assert.deepEqual(startup.snapshot().pageErrors, []);
   console.log(
     "HTTP_DEBUG_EXAMPLES_UI_PASS explicit local save, separate drafts and no dispatch",
   );
