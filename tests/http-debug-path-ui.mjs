@@ -208,6 +208,48 @@ try {
   near(multiple.rows[0].y, 270);
   near(multiple.rows[1].y, 306);
   near(multiple.rows[1].height, 36);
+  const linkedGeometry = await table.evaluate((node) =>
+    [...node.querySelectorAll("tbody tr[data-design-path-linked]")].map(
+      (row) => {
+        const name = row.querySelector(".design-path-name input[readonly]");
+        const type = row.querySelector(".design-path-type");
+        const star = row.querySelector(".debug-path-required");
+        const value = row.querySelector(".debug-path-value input");
+        const typeText = document.createRange();
+        typeText.selectNodeContents(type);
+        const nameBox = name.getBoundingClientRect();
+        const starBox = star.getBoundingClientRect();
+        const valueBox = value.getBoundingClientRect();
+        const valueStyle = getComputedStyle(value);
+        return {
+          nameStart: nameBox.left,
+          nameEnd: nameBox.right,
+          typeStart: typeText.getBoundingClientRect().left,
+          typeEnd: typeText.getBoundingClientRect().right,
+          starStart: starBox.left,
+          starEnd: starBox.right,
+          valueStart:
+            valueBox.left +
+            parseFloat(valueStyle.borderLeftWidth) +
+            parseFloat(valueStyle.paddingLeft),
+        };
+      },
+    ),
+  );
+  console.log(
+    "HTTP_DEBUG_PATH_LINKED_GEOMETRY",
+    JSON.stringify(linkedGeometry),
+  );
+  assert.equal(linkedGeometry.length, 2);
+  for (const row of linkedGeometry) {
+    near(row.nameStart, 372);
+    near(row.nameEnd, 592);
+    near(row.typeStart, 602);
+    near(row.starStart, 675);
+    near(row.starEnd, 691);
+    near(row.valueStart, 702);
+    assert(row.typeEnd < row.starStart, "Type does not cover the marker");
+  }
   assert.deepEqual(syntheticExecutions, []);
   assert.deepEqual(writes, []);
 
