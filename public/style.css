@@ -6809,3 +6809,32 @@ body.dark .request-panel > .debug-path-pairs .design-path-type {
 .debug-path-pairs .debug-path-value input {
   min-width: 0;
 }
+
+@media (min-width: 1240px) {
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    .debug-path-pairs
+    tr[data-design-path-linked]:has(.debug-path-value)
+    > td:first-child {
+    padding-inline-start: 0;
+  }
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    .debug-path-pairs
+    tr[data-design-path-linked]:has(.debug-path-value)
+    .design-path-name {
+    gap: 10px;
+  }
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    .debug-path-pairs
+    tr[data-design-path-linked]:has(.debug-path-value)
+    .design-path-name
+    > input[readonly] {
+    flex: 0 0 69%;
+  }
+  .editor[data-editor-mode="debug"]:not(.split-layout)
+    .debug-path-pairs
+    tr[data-design-path-linked]
+    .debug-path-value {
+    /* The required marker starts just before the value column heading. */
+    margin-inline-start: -28px;
+  }
+}
