@@ -206,32 +206,84 @@ try {
   await open();
   await selected("Body", "未定义请求体");
 
+  await tab("Body").press("Home");
   await page.setViewportSize({ width: 430, height: 830 });
   await page.locator("#theme").press("Enter");
   assert.equal(
     await page.evaluate(() => document.body.classList.contains("dark")),
     true,
   );
+  await responseTab("body").press("Enter");
   await open();
-  await tab("Body").press("Home");
   await selected("Header", "未定义请求头");
-  assert.equal(await active(tab("Header")), true);
   const narrow = await region.evaluate((node) => {
     const frame = node.getBoundingClientRect();
     const tabs = node.querySelector('[role="tablist"]');
+    const scroller = node.closest(".response-body");
+    const viewport = scroller.getBoundingClientRect();
+    const centers = [...tabs.querySelectorAll('[role="tab"]')].map((item) => {
+      const { x, y, width, height } = item.getBoundingClientRect();
+      const center = { x: x + width / 2, y: y + height / 2 };
+      const hit = document.elementFromPoint(center.x, center.y);
+      return {
+        name: item.textContent,
+        ...center,
+        hit: item === hit || item.contains(hit),
+        withinScroller: y >= viewport.top && y + height <= viewport.bottom,
+      };
+    });
     return {
       left: frame.left,
       right: frame.right,
       tabWidth: tabs.clientWidth,
       tabScrollWidth: tabs.scrollWidth,
       docWidth: document.documentElement.scrollWidth,
+      scrollTop: scroller.scrollTop,
+      wheel: {
+        x: viewport.left + viewport.width / 2,
+        y: viewport.top + viewport.height / 2,
+      },
+      centers,
     };
   });
+  console.log(
+    "HTTP_UNSENT_ACTUAL_REQUEST_NARROW_INITIAL",
+    JSON.stringify(narrow),
+  );
+  await capture("initial-narrow-dark");
   assert(narrow.left >= 0 && narrow.right <= 430.5, JSON.stringify(narrow));
   assert.equal(narrow.docWidth, 430);
   assert.equal(narrow.tabWidth, narrow.tabScrollWidth);
-  await panel("Header").scrollIntoViewIfNeeded();
-  await capture("header-narrow-dark");
+  assert.equal(narrow.scrollTop, 0);
+  assert.deepEqual(
+    narrow.centers.map(({ name, hit, withinScroller }) => [
+      name,
+      hit,
+      withinScroller,
+    ]),
+    ["Header", "Query", "Path", "Body"].map((name) => [name, true, true]),
+    JSON.stringify(narrow),
+  );
+
+  const bodyCenter = narrow.centers[3];
+  await page.mouse.click(bodyCenter.x, bodyCenter.y);
+  await selected("Body", "未定义请求体");
+  assert.equal(await active(tab("Body")), true);
+  await tab("Body").press("Tab");
+  assert.equal(await active(panel("Body")), true);
+  await page.mouse.move(narrow.wheel.x, narrow.wheel.y);
+  await page.mouse.wheel(0, 200);
+  await page.waitForFunction(
+    () => document.querySelector(".response-body").scrollTop > 0,
+  );
+  await page.waitForFunction(() => {
+    const label = document.querySelector(
+      "#actual-unsent-panel-body .unsent-response-message p",
+    );
+    const { x, y, width, height } = label.getBoundingClientRect();
+    return document.elementFromPoint(x + width / 2, y + height / 2) === label;
+  });
+  await capture("scrolled-narrow-dark");
 
   await page.setViewportSize({ width: 1363, height: 1023 });
   await page.locator("#project-select").selectOption(other.id);
