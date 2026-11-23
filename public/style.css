@@ -7158,3 +7158,51 @@ body.dark .http-pre-wait-title {
     min-height: 30px;
   }
 }
+
+.http-response-header-count {
+  color: #18796d;
+}
+body.dark .http-response-header-count {
+  color: #66cdbc;
+}
+.http-response-header-scroll {
+  min-width: 0;
+  margin-top: 12px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.http-response-header-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.http-response-header-table {
+  table-layout: fixed;
+}
+.http-response-header-table thead th:first-child {
+  width: 25%;
+}
+.http-response-header-table th,
+.http-response-header-table td {
+  height: 37px;
+  padding: 7px 8px;
+  background: transparent;
+  vertical-align: middle;
+  font-weight: normal;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.http-response-header-table thead th {
+  color: var(--muted);
+}
+.http-response-header-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.http-response-header-table .http-response-header-empty {
+  color: var(--muted);
+}
+@media (max-width: 760px) {
+  .http-response-header-table thead th:first-child {
+    width: 38%;
+  }
+}

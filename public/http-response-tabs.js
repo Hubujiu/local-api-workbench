@@ -11,14 +11,14 @@ const responseViews = [
   ["extracted", "提取变量"],
 ];
 
-export function httpResponseTabs(active, hasSubrequests) {
+export function httpResponseTabs(active, hasSubrequests, headerCount) {
   const views = hasSubrequests
     ? [...responseViews, ["subrequests", "脚本子请求"]]
     : responseViews;
   return `<div class="response-tabs" role="group" aria-label="响应视图">${views
     .map(
       ([key, label]) =>
-        `<button type="button" data-response="${key}" class="${active === key ? "active" : ""}" aria-pressed="${active === key}">${label}</button>`,
+        `<button type="button" data-response="${key}" class="${active === key ? "active" : ""}" aria-pressed="${active === key}">${label}${key === "headers" && Number.isSafeInteger(headerCount) && headerCount >= 0 ? ` <span class="http-response-header-count">(${headerCount})</span>` : ""}</button>`,
     )
     .join("")}</div>`;
 }
