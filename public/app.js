@@ -112,6 +112,10 @@ import {
 } from "./http-post-actions.js";
 import { bindHTTPPreActions, httpPreActionsHTML } from "./http-pre-actions.js";
 import {
+  bindHTTPScriptSnippets,
+  httpScriptSnippetWorkspaceHTML,
+} from "./http-script-snippets.js";
+import {
   addHTTPPreWait,
   createHTTPPreWaitDrafts,
   httpPreWaitHTML,
@@ -560,6 +564,7 @@ let releaseHTTPResponseLayout,
   releaseHTTPPostActions,
   releaseHTTPPreActions;
 const httpPreEditors = new WeakMap();
+const httpSnippetEditors = new WeakMap();
 const httpPreWaitDrafts = createHTTPPreWaitDrafts();
 let httpPreOwner;
 const httpPostAdvanced = new Set();
@@ -2549,6 +2554,25 @@ function paramPanel(r, param, design = false) {
       r.graphqlEditorVersion !== 1;
     const scriptControls = `<div class="script-mode-controls"><label>脚本兼容模式<select id="script-dialect">${scriptDialectOptions(r.scriptDialect)}</select></label><label>URL脚本模式<select id="script-url-mode">${scriptURLModeOptions(r.scriptURLMode)}</select></label></div><p class="script-actions">${preWorkspace ? "" : '<button id="expand-script" aria-haspopup="dialog">展开脚本编辑器</button> '}<button id="edit-operations">声明式操作（高级）</button> <button id="add-db-operation">添加数据库查询</button></p>`;
     const inlineScript = `<textarea id="script-code" class="full-code" aria-label="接口脚本" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea>`;
+    const postWorkspace =
+      !design &&
+      mode === "debug" &&
+      param === "after" &&
+      r.graphqlEditorVersion !== 1;
+    const snippetEditor =
+      page === "apis" &&
+      (preWorkspace || postWorkspace) &&
+      r.nativeTasks === undefined &&
+      r.nativeInheritance === undefined &&
+      r.importedNativeTaskSource === undefined &&
+      r.importedScriptTasks === undefined &&
+      r.graphqlVariableTemplate === undefined
+        ? httpScriptSnippetWorkspaceHTML(
+            inlineScript,
+            param,
+            httpSnippetEditors.get(r)?.[param] === true,
+          )
+        : inlineScript;
     const scriptHelp = `<p class="muted">${scriptDialectNotice}</p><label class="notice"><input id="inherit-shared-scripts" type="checkbox" ${r.inheritSharedScripts !== false ? "checked" : ""}>调试继承项目/当前目录脚本；执行计划不自动继承。</label><details class="notice script-policy"><summary>JavaScript 沙箱 · 无文件访问 · 250ms计算 / 2s总截止</summary><p>JavaScript 在独立 QuickJS 沙箱中执行，无文件/Node或任意模块访问。支持Promise/await、有界定时器及pm.sendRequest(config[, callback]) HTTP子请求（最多10次/并发4次、总计仍限2秒），以及 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test/Chai断言、CryptoJS（含受限安全随机数）、lodash（_）、moment、uuid、JSON5（输入/输出各64KiB）、有界 csv2array(text) / xml2Json(text) 和 console.log；累计250ms脚本运行预算（墙钟时间，不含HTTP等待）、2秒worker总截止、16MiB VM 内存限制。前置 getFinalRequestRawBody() 支持至多64KiB的 raw/JSON正文及已有变量替换，写回后避免发送时重复替换；暂不支持表单和声明式动态正文。后置脚本可用 apt.visualizer.set(template, data) 生成隔离的静态表格/列表；数据库操作须单独授权会话连接。</p><p>表单支持 pm.request.body.update 和 urlencoded/formdata 集合；one/all/each 的文本项可赋值或 update。最多1000项，单值64KiB、文本合计256KiB；文件仅提供已选择的元数据，不接受路径或新增文件。后置 setBody/setCode 仅生成独立脚本视图，不改写网络证据。</p></details>`;
     const operations = r[param] || [];
     const hasWaits =
@@ -2577,20 +2601,17 @@ function paramPanel(r, param, design = false) {
       return httpPreActionsHTML({
         configured,
         advanced: scriptControls + scriptHelp,
-        script: inlineScript,
+        script: snippetEditor,
         scriptOpen: editor?.scriptOpen ?? hasScript,
         advancedOpen: editor?.advancedOpen,
         canWait: supportsHTTPPreWait(r),
         hasScript,
       });
     }
-    return !design &&
-      mode === "debug" &&
-      param === "after" &&
-      r.graphqlEditorVersion !== 1
+    return postWorkspace
       ? httpPostActionsHTML({
           configured,
-          advanced: inlineScript + scriptControls + scriptHelp,
+          advanced: snippetEditor + scriptControls + scriptHelp,
           open: httpPostAdvanced.has(httpPostAdvancedKey(r)),
           hasScript: Boolean(r.afterScript),
         })
@@ -6329,8 +6350,35 @@ function bind() {
       onError: (error) => toast(error.message),
     });
   }
+  const snippetWorkspace = $(".http-script-workspace");
+  const snippetStage = snippetWorkspace?.dataset.httpScriptStage;
+  const snippetOwnerProject = project;
+  const snippetOwner = request();
+  const ownsSnippets = () =>
+    snippetWorkspace?.isConnected &&
+    project === snippetOwnerProject &&
+    request() === snippetOwner &&
+    page === "apis" &&
+    mode === "debug" &&
+    !workspaceDocument() &&
+    snippetWorkspace.closest("[data-http-response-layout]") &&
+    param === snippetStage;
+  if (snippetWorkspace)
+    bindHTTPScriptSnippets(snippetWorkspace, {
+      owns: () =>
+        ownsSnippets() &&
+        (snippetStage !== "after" ||
+          snippetWorkspace.closest("#http-post-advanced")?.open === true),
+      toggle: (folded) =>
+        httpSnippetEditors.set(snippetOwner, {
+          ...httpSnippetEditors.get(snippetOwner),
+          [snippetStage]: folded,
+        }),
+      onError: (message) => toast(message),
+    });
   on("#script-code", "input", (_, element) => {
-    if (preWorkspace && !ownsPre()) return;
+    if ((preWorkspace && !ownsPre()) || (snippetWorkspace && !ownsSnippets()))
+      return;
     request()[param + "Script"] = element.value;
     mark();
   });
