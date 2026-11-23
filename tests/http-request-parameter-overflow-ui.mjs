@@ -185,17 +185,30 @@ try {
   await menu.waitFor({ state: "hidden" });
   assert.equal(await tab("extract").getAttribute("aria-pressed"), "true");
   assert.equal(await assertFull("extract"), true);
-  await trigger.press("Enter");
-  await menu.waitFor();
-  const hiddenBefore = await actualKeys();
+  const openAtTrailingEdge = async () => {
+    // The earlier tab can widen when its count changes. Hold the trailing
+    // edge, not a fixed scrollLeft, so the clipped set stays comparable.
+    await strip.evaluate((node) => {
+      node.scrollLeft = node.scrollWidth;
+    });
+    assert.equal(await assertFull("extract"), true);
+    await trigger.press("Enter");
+    await menu.waitFor();
+    const measured = await expectedKeys();
+    assert.deepEqual(await actualKeys(), measured);
+    assert(
+      measured.includes("path"),
+      "Path remains clipped at the leading edge",
+    );
+    return measured;
+  };
+  const hiddenBefore = await openAtTrailingEdge();
   const originalPath = await menuItem("Path").elementHandle();
   await menuItem("Path").press("Escape");
   await menu.waitFor({ state: "hidden" });
   await url.fill("{{visual-fixture-base}}/draft/{revision}");
   assert.equal(await tab("path").textContent(), "Path (1)");
-  await trigger.press("Enter");
-  await menu.waitFor();
-  assert.deepEqual(await actualKeys(), hiddenBefore);
+  assert.deepEqual(await openAtTrailingEdge(), hiddenBefore);
   assert.equal(
     await menuItem("Path (1)").evaluate(
       (node, before) => node === before,
@@ -208,9 +221,7 @@ try {
   await menuItem("Path (1)").press("Escape");
   await menu.waitFor({ state: "hidden" });
   await url.fill("{{visual-fixture-base}}/draft");
-  await trigger.press("Enter");
-  await menu.waitFor();
-  assert.deepEqual(await actualKeys(), hiddenBefore);
+  assert.deepEqual(await openAtTrailingEdge(), hiddenBefore);
   assert.equal(await menuItem("Path").count(), 1);
   await menuItem("Body (1)").press("Enter");
   await menu.waitFor({ state: "hidden" });
