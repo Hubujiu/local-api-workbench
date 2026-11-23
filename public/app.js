@@ -5901,12 +5901,20 @@ function bind() {
       $(`[data-debug-pair-name="${key}"]`)?.focus();
       return;
     }
+    const focusDebugPath =
+      key === "path" &&
+      page === "apis" &&
+      mode === "debug" &&
+      param === "path" &&
+      usesDesignPathDraft(project, request());
     const index = request()[key].length;
     request()[key].push({ key: "", value: "", enabled: true });
     mark();
     render();
     if (mode === "design" || (key === "form" && $(debugFormEditor)))
       $(`[data-pair="${key}:${index}:key"]`)?.focus();
+    else if (focusDebugPath)
+      $(`.debug-path-pairs [data-pair="path:${index}:key"]`)?.focus();
   });
   onPair("[data-remove-pair]", "click", (_, e) => {
     if (staleDebugFormControl(e)) return;
