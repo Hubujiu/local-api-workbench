@@ -7396,3 +7396,34 @@ body.dark .http-response-header-count {
     width: 100%;
   }
 }
+
+.debug-literal-query-origin {
+  margin-block: 0 8px;
+  min-width: 0;
+}
+.debug-literal-query-origin[hidden] {
+  display: none;
+}
+.debug-literal-query-origin > :is(h3, p) {
+  margin: 4px 0;
+}
+.debug-literal-query-origin > h3 {
+  font-size: 12px;
+  font-weight: 600;
+}
+.debug-literal-query-table {
+  width: 100%;
+  table-layout: fixed;
+}
+.debug-literal-query-table td {
+  overflow-wrap: anywhere;
+}
+.debug-literal-query-table td input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font-family: var(--mono, monospace);
+}
+.debug-literal-query-table td input[aria-invalid="true"] {
+  border-color: var(--red);
+}

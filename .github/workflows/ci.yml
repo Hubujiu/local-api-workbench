@@ -131,6 +131,9 @@ jobs:
       - run: node tests/http-debug-cookie-ui.mjs
         env:
           HTTP_DEBUG_COOKIE_EVIDENCE: /tmp/local-api-http-debug-cookie
+      - run: node tests/debug-url-query-ui.mjs
+        env:
+          DEBUG_URL_QUERY_EVIDENCE: /tmp/local-api-debug-url-query
       - run: node tests/http-debug-path-ui.mjs
         env:
           HTTP_DEBUG_PATH_EVIDENCE: /tmp/local-api-http-debug-path
@@ -250,6 +253,7 @@ jobs:
             /tmp/local-api-design-pair-composer/design-pair-*.png
             /tmp/local-api-http-design-path/design-path-*.png
             /tmp/local-api-http-debug-path/debug-path-*.png
+            /tmp/local-api-debug-url-query/debug-url-query-*.png
             /tmp/local-api-http-debug-cookie/debug-cookie-*.png
             /tmp/local-api-http-debug-header/debug-header-*.png
             /tmp/local-api-design-query-metadata/design-query-*.png

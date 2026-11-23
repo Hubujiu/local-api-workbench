@@ -141,6 +141,7 @@ import {
   debugQueryEqualityLabel,
   ownsDebugPairComposer,
 } from "./debug-pair-composer.js";
+import { bindDebugURLQuery, debugURLQueryContents } from "./debug-url-query.js";
 import {
   canComposeDesignPair,
   designPairComposer,
@@ -2466,6 +2467,15 @@ function paramPanel(r, param, design = false) {
       (param === "headers"
         ? `<div class="header-common-parameters"><button type="button" class="ghost" data-page="settings" data-settings-target="settings-global-parameters" title="管理项目及目录公共请求参数">${lineIcon("⚙")}公共参数（Header）</button></div>`
         : "") +
+      (!design &&
+      mode === "debug" &&
+      param === "query" &&
+      r.graphqlEditorVersion !== 1
+        ? (() => {
+            const contents = debugURLQueryContents(project, r, esc);
+            return `<section class="debug-literal-query-origin" ${contents ? "" : "hidden"}>${contents}</section>`;
+          })()
+        : "") +
       pairs(
         r[param],
         param,
@@ -3726,6 +3736,30 @@ function bind() {
       }
     },
   );
+  const urlQueryRegion = $(".debug-literal-query-origin");
+  if (urlQueryRegion) {
+    const urlField = $("#url");
+    const refreshURLQuery = bindDebugURLQuery(urlQueryRegion, {
+      project: pathProject,
+      request: pathRequest,
+      urlField,
+      owns: () =>
+        urlQueryRegion.isConnected &&
+        urlField.isConnected &&
+        project === pathProject &&
+        request() === pathRequest &&
+        page === "apis" &&
+        mode === "debug" &&
+        param === "query" &&
+        !workspaceDocument(),
+      esc,
+      changed: mark,
+    });
+    on("#url", "input", (event) => {
+      if (!event.isComposing && !composingPathURL) refreshURLQuery();
+    });
+    on("#url", "compositionend", refreshURLQuery);
+  }
   on("#method", "change", (_, element) => {
     if (designResponseSettingsDrafts.get(request())) {
       element.value = request().method;
