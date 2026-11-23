@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { normalizeRequest } from "../src/core.mjs";
 import { createApp } from "../src/server.mjs";
+import { isMockTransportRoute } from "./helpers/mock-transport-route.mjs";
 
 const { chromium } = createRequire(import.meta.url)(
   process.env.PLAYWRIGHT_PACKAGE || "playwright",
@@ -52,6 +53,10 @@ try {
   );
   await app.store.save(owner);
   const baseline = await app.store.get(owner.id);
+  assert.deepEqual(
+    baseline.requests.map(({ id }) => id),
+    [a.id, b.id, "folder-fixture"],
+  );
   browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || undefined,
     headless: true,
@@ -71,20 +76,26 @@ try {
     errors = [];
   let allowSave = false;
   page.on("pageerror", (error) => errors.push(error.name));
+  page.on("response", (response) =>
+    recordStartup(response.url(), response.status()),
+  );
+  page.on("requestfailed", (request) =>
+    recordStartup(request.url(), "blocked or failed"),
+  );
   await page.route("**/*", (route) => {
     const req = route.request(),
       dest = new URL(req.url());
     if (
       dest.origin === origin &&
       req.method() === "GET" &&
-      !dest.pathname.startsWith("/mock")
+      !isMockTransportRoute(dest.pathname)
     )
       return route.continue();
     if (
       allowSave &&
       !writes.length &&
       dest.origin === origin &&
-      dest.pathname === "/api/projects/" + owner.id &&
+      dest.pathname === ownerPath &&
       req.method() === "PUT"
     ) {
       writes.push(req.method());
@@ -122,7 +133,25 @@ try {
     await form.waitFor();
     assert.equal(await active(name), true);
   };
-  await page.goto(app.launchUrl);
+  try {
+    const initial = page.locator(`.sidebar [data-request="${a.id}"]`);
+    await page.goto(app.launchUrl);
+    await initial.waitFor({ state: "visible", timeout: 10000 });
+    assert.equal(startupTrace.get("/mock-target.js"), 200);
+  } catch {
+    const startupError = await page
+      .getByRole("heading", { name: "无法启动工作台", exact: true })
+      .isVisible()
+      .catch(() => false);
+    throw Error(
+      "Workbench startup did not expose the seeded request: " +
+        JSON.stringify({
+          responses: Object.fromEntries(startupTrace),
+          startupError,
+          pageErrors: errors,
+        }),
+    );
+  }
   await pick(a);
   await page.locator('[data-mode="debug"]').click();
   await page.locator('.param-tabs [data-param="body"]').click();
