@@ -2216,7 +2216,7 @@ function editor(r) {
       "",
     )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button>${requestCurlAction(mode === "debug")}<button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法"${r.graphqlEditorVersion === 1 ? " disabled" : ""}>${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : httpRequestActions({ debug: mode === "debug", busy, cancel: busy && mode !== "cases" && !caseCancellationOwner(), dirty })}</div>${
     mode === "debug"
-      ? `${requestParameterTabs(r, param)}${httpLayout ? requestParameterOverflowHTML() : ""}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" && r.bodyType !== "binary" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded", "binary"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response${responseTab === "body" && isPopulatedHTTPResponse(response) ? " http-success-response-active" : ""}"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length)}<div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div>${httpLayout ? httpResponseLayoutHTML(!busy && !response && responseTab === "body") : ""}</div>`
+      ? `${requestParameterTabs(r, param, usesDesignPathDraft(project, r))}${httpLayout ? requestParameterOverflowHTML() : ""}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" && r.bodyType !== "binary" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded", "binary"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response${responseTab === "body" && isPopulatedHTTPResponse(response) ? " http-success-response-active" : ""}"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length)}<div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div>${httpLayout ? httpResponseLayoutHTML(!busy && !response && responseTab === "body") : ""}</div>`
       : modePanel(r)
   }</section>`;
 }
@@ -2380,11 +2380,16 @@ function bodyParameterHelper(r, tabbed) {
   return `<aside id="body-parameter-helper" class="parameter-helper${tabbed ? " raw-helper-open" : ""}">${contents}</aside>`;
 }
 function paramPanel(r, param, design = false) {
-  if (design && param === "path" && usesDesignPathDraft(project, r))
+  if (
+    (design || mode === "debug") &&
+    param === "path" &&
+    usesDesignPathDraft(project, r)
+  )
     return designPathTable(
       r.path,
       (row) => designPathDrafts.isLinked(project, r, row),
       esc,
+      { debug: !design },
     );
   if (r.graphqlEditorVersion === 1 && param === "graphql" && !design)
     return graphqlWorkspaceHTML(r, graphqlDrafts, esc, project.id);
@@ -3449,10 +3454,13 @@ function bind() {
   on("#save,#save-project", "click", save);
   const pathProject = project;
   const pathRequest = request();
+  const pathMode = mode;
+  const inPathDesign = pathMode === "design";
   const ownsPathURL = (element) =>
     element.isConnected &&
     page === "apis" &&
-    mode === "design" &&
+    mode === pathMode &&
+    (inPathDesign || pathMode === "debug") &&
     !workspaceDocument() &&
     project === pathProject &&
     request() === pathRequest &&
@@ -3460,10 +3468,15 @@ function bind() {
   const updatePathFromURL = (element) => {
     if (!ownsPathURL(element) || !designPathDrafts.sync(project, pathRequest))
       return;
-    $("#design-tab-path").textContent = designPathTabLabel(pathRequest);
-    if (designParameter !== "path") return;
-    const surface = $("#design-parameter-panel");
-    surface.innerHTML = paramPanel(pathRequest, "path", true);
+    const tab = $(
+      inPathDesign ? "#design-tab-path" : '.param-tabs [data-param="path"]',
+    );
+    tab.textContent = designPathTabLabel(pathRequest, { debug: !inPathDesign });
+    if ((inPathDesign ? designParameter : param) !== "path") return;
+    const surface = $(
+      inPathDesign ? "#design-parameter-panel" : ".request-panel",
+    );
+    surface.innerHTML = paramPanel(pathRequest, "path", inPathDesign);
     for (const [selector, event, fn] of pathBindings)
       on(selector, event, fn, surface);
   };
@@ -5888,12 +5901,20 @@ function bind() {
       $(`[data-debug-pair-name="${key}"]`)?.focus();
       return;
     }
+    const focusDebugPath =
+      key === "path" &&
+      page === "apis" &&
+      mode === "debug" &&
+      param === "path" &&
+      usesDesignPathDraft(project, request());
     const index = request()[key].length;
     request()[key].push({ key: "", value: "", enabled: true });
     mark();
     render();
     if (mode === "design" || (key === "form" && $(debugFormEditor)))
       $(`[data-pair="${key}:${index}:key"]`)?.focus();
+    else if (focusDebugPath)
+      $(`.debug-path-pairs [data-pair="path:${index}:key"]`)?.focus();
   });
   onPair("[data-remove-pair]", "click", (_, e) => {
     if (staleDebugFormControl(e)) return;

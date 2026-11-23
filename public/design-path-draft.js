@@ -104,32 +104,39 @@ export function createDesignPathDrafts() {
   };
 }
 
-export function designPathTabLabel(request) {
-  const count = request.path.filter(
+export function designPathTabLabel(request, { debug = false } = {}) {
+  const count = (request.path || []).filter(
     (row) => typeof row.key === "string" && row.key.trim(),
   ).length;
-  return count ? `Path(${count})` : "Path";
+  return count ? `Path${debug ? " " : ""}(${count})` : "Path";
 }
 
-export function designPathTable(rows, linked, esc) {
-  return `<table class="pairs-table request-pairs-table design-path-pairs" aria-label="路径参数"><colgroup><col span="3"></colgroup><thead><tr><th scope="col">参数名</th><th scope="col">参数值</th><th scope="col">描述</th></tr></thead><tbody>${rows
+export function designPathTable(rows, linked, esc, { debug = false } = {}) {
+  return `<table class="pairs-table request-pairs-table design-path-pairs${debug ? " debug-path-pairs" : ""}" aria-label="路径参数"><colgroup><col span="3"></colgroup><thead><tr><th scope="col">参数名</th><th scope="col">参数值</th><th scope="col">描述</th></tr></thead><tbody>${rows
     .map((row, i) => {
       const isLinked = linked(row);
       const id = "path:" + i;
       const name = `<input data-pair="${id}:key" aria-label="路径参数名" placeholder="参数名" value="${esc(row.key)}"${isLinked ? " readonly" : ""}>`;
       const enabled = `<input type="checkbox" data-pair-enabled="${id}" aria-label="启用参数"${row.enabled === false ? "" : " checked"}>`;
-      const metadata =
-        isLinked && row.schema?.type === "string" && row.required === true
-          ? '<span class="design-path-type">string · 必填</span>'
-          : "";
+      const hasMetadata =
+        isLinked && row.schema?.type === "string" && row.required === true;
+      const metadata = hasMetadata
+        ? '<span class="design-path-type">' +
+          (debug ? "string" : "string · 必填") +
+          "</span>"
+        : "";
       const value =
         row.type === "file"
           ? '<span class="muted">文件数据未作为文本显示。</span>'
           : `<input data-pair="${id}:value" aria-label="路径参数值" placeholder="参数值 / {{变量}}" value="${esc(row.value)}">`;
+      const valueCell =
+        debug && hasMetadata
+          ? `<div class="debug-path-value"><span class="debug-path-required" role="img" aria-label="必填">*</span>${value}</div>`
+          : value;
       const actions = isLinked
         ? ""
         : `<div class="pair-row-actions"><button type="button" data-dynamic-pair="${id}">${row.dynamic ? "动态✓" : "动态"}</button><button type="button" data-dictionary-pair="${id}">字典</button><button type="button" data-define-pair="${id}" title="参数类型、必填与说明">定义</button><button type="button" data-remove-pair="${id}" aria-label="删除参数">×</button></div>`;
-      return `<tr${isLinked ? " data-design-path-linked" : ""}><td><div class="design-path-name">${isLinked ? "" : enabled}${name}${metadata}</div></td><td>${value}</td><td class="pair-description">${esc(row.description || "")}${actions}</td></tr>`;
+      return `<tr${isLinked ? " data-design-path-linked" : ""}><td><div class="design-path-name">${isLinked ? "" : enabled}${name}${metadata}</div></td><td>${valueCell}</td><td class="pair-description">${esc(row.description || "")}${actions}</td></tr>`;
     })
     .join(
       "",
