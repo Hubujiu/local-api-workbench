@@ -279,12 +279,55 @@ try {
   assert.equal(querySurface.borderBottomWidth, "0px");
   near(querySurface.bottom, 651, 1);
   near(queryHead.value, 712, 3);
+  const queryMarks = () =>
+    panel.locator(".design-pairs-query-empty").evaluate((table) => {
+      const control = (key) => {
+        const input = table.querySelector(
+          `[data-design-query-draft-enabled="${key}"]`,
+        );
+        const { x, y, width, height } = input.getBoundingClientRect();
+        const { appearance, backgroundImage } = getComputedStyle(input);
+        return { x, y, width, height, appearance, backgroundImage };
+      };
+      const type = table.querySelector("[data-design-query-draft-type]");
+      const ink = document.createRange();
+      ink.selectNodeContents(type);
+      return {
+        head: control("header"),
+        row: control("row"),
+        typeStart: ink.getBoundingClientRect().x,
+        typeFont: getComputedStyle(type).fontSize,
+      };
+    });
+  const desktopQueryMarks = await queryMarks();
+  console.log("DESIGN_QUERY_EMPTY_MARKS", JSON.stringify(desktopQueryMarks));
+  for (const [mark, y] of [
+    [desktopQueryMarks.head, 588],
+    [desktopQueryMarks.row, 624],
+  ]) {
+    assert.equal(mark.width, 16);
+    assert.equal(mark.height, 16);
+    near(mark.x, 392, 2);
+    near(mark.y, y, 2);
+  }
+  assert.equal(desktopQueryMarks.head.appearance, "auto");
+  assert.equal(desktopQueryMarks.row.appearance, "none");
+  assert.match(desktopQueryMarks.row.backgroundImage, /^url/);
+  near(desktopQueryMarks.typeStart, 615, 3);
+  assert.equal(desktopQueryMarks.typeFont, "14px");
   await tab("Query").blur();
   await capture("query-empty-desktop-neutral");
+  await page.emulateMedia({ forcedColors: "active" });
+  const forcedQueryMarks = await queryMarks();
+  assert.equal(forcedQueryMarks.head.appearance, "auto");
+  assert.equal(forcedQueryMarks.row.appearance, "auto");
+  assert.equal(forcedQueryMarks.row.backgroundImage, "none");
+  await page.emulateMedia({ forcedColors: "none" });
   await page.locator("#theme").press("Enter");
   const darkSurface = await emptySurface();
   assert.equal(darkSurface.borderCollapse, "collapse");
   assert.equal(darkSurface.fontSize, "12px");
+  assert.equal((await queryMarks()).row.appearance, "auto");
   await page.locator("#theme").press("Enter");
   const equals = panel.getByRole("checkbox", {
     name: "空值 Query 参数添加等号",
@@ -434,6 +477,7 @@ try {
   const narrowEmpty = await emptySurface();
   assert.equal(narrowEmpty.borderCollapse, "collapse");
   assert.equal(narrowEmpty.fontSize, "12px");
+  assert.equal((await queryMarks()).row.appearance, "auto");
   await page.locator("#theme").press("Enter");
   await chooseInteger();
   await draftHeader.press("Space");
