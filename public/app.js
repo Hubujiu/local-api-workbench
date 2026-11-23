@@ -112,6 +112,15 @@ import {
 } from "./http-post-actions.js";
 import { bindHTTPPreActions, httpPreActionsHTML } from "./http-pre-actions.js";
 import {
+  addHTTPPreWait,
+  createHTTPPreWaitDrafts,
+  httpPreWaitHTML,
+  isHTTPPreWait,
+  supportsHTTPPreWait,
+  validateHTTPPreWaits,
+  waitDraftError,
+} from "./http-pre-wait.js";
+import {
   debugHeaderNameListHTML,
   debugPairSelection,
   debugPairComposer,
@@ -551,6 +560,7 @@ let releaseHTTPResponseLayout,
   releaseHTTPPostActions,
   releaseHTTPPreActions;
 const httpPreEditors = new WeakMap();
+const httpPreWaitDrafts = createHTTPPreWaitDrafts();
 let httpPreOwner;
 const httpPostAdvanced = new Set();
 const httpPostAdvancedKey = (r) => JSON.stringify([project?.id, r.id]);
@@ -1313,6 +1323,7 @@ async function save() {
   if (project) projectImports.assertCanSave(project.id);
   if (!project) return;
   if (saving) throw Error("保存尚未完成，请等待");
+  if (httpPreWaitDrafts.pending(project.requests)) throw Error(waitDraftError);
   if (changedProvisionalQuery(provisionalQuery.read(project, request())))
     throw Error(
       "待命名 Query 参数选项未保存：请返回设计 Query 填写参数名，或重置待命名选项。",
@@ -2539,9 +2550,27 @@ function paramPanel(r, param, design = false) {
     const scriptControls = `<div class="script-mode-controls"><label>脚本兼容模式<select id="script-dialect">${scriptDialectOptions(r.scriptDialect)}</select></label><label>URL脚本模式<select id="script-url-mode">${scriptURLModeOptions(r.scriptURLMode)}</select></label></div><p class="script-actions">${preWorkspace ? "" : '<button id="expand-script" aria-haspopup="dialog">展开脚本编辑器</button> '}<button id="edit-operations">声明式操作（高级）</button> <button id="add-db-operation">添加数据库查询</button></p>`;
     const inlineScript = `<textarea id="script-code" class="full-code" aria-label="接口脚本" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea>`;
     const scriptHelp = `<p class="muted">${scriptDialectNotice}</p><label class="notice"><input id="inherit-shared-scripts" type="checkbox" ${r.inheritSharedScripts !== false ? "checked" : ""}>调试继承项目/当前目录脚本；执行计划不自动继承。</label><details class="notice script-policy"><summary>JavaScript 沙箱 · 无文件访问 · 250ms计算 / 2s总截止</summary><p>JavaScript 在独立 QuickJS 沙箱中执行，无文件/Node或任意模块访问。支持Promise/await、有界定时器及pm.sendRequest(config[, callback]) HTTP子请求（最多10次/并发4次、总计仍限2秒），以及 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test/Chai断言、CryptoJS（含受限安全随机数）、lodash（_）、moment、uuid、JSON5（输入/输出各64KiB）、有界 csv2array(text) / xml2Json(text) 和 console.log；累计250ms脚本运行预算（墙钟时间，不含HTTP等待）、2秒worker总截止、16MiB VM 内存限制。前置 getFinalRequestRawBody() 支持至多64KiB的 raw/JSON正文及已有变量替换，写回后避免发送时重复替换；暂不支持表单和声明式动态正文。后置脚本可用 apt.visualizer.set(template, data) 生成隔离的静态表格/列表；数据库操作须单独授权会话连接。</p><p>表单支持 pm.request.body.update 和 urlencoded/formdata 集合；one/all/each 的文本项可赋值或 update。最多1000项，单值64KiB、文本合计256KiB；文件仅提供已选择的元数据，不接受路径或新增文件。后置 setBody/setCode 仅生成独立脚本视图，不改写网络证据。</p></details>`;
-    const configured = r[param]?.length
-      ? `<details class="operation-summary" open><summary>${r[param].length} 条声明式操作（先于本阶段 JavaScript）</summary>${r[param].map((operation, index) => `<div class="operation-card" data-operation-index="${index}"><div class="row"><strong class="grow">${index + 1}. ${esc(operation.name || operation.type)} · ${operation.type === "database" ? "数据库只读" : esc(operation.type)}${operation.enabled === false && operation.type === "database" ? "（停用）" : ""}</strong>${operation.type === "database" ? `<button data-edit-db-operation="${index}">编辑 / 重新绑定</button><button data-toggle-db-operation="${index}" title="启停查询不会清除已有运行时变量">${operation.enabled === false ? "启用" : "停用"}</button>` : ""}<button data-move-operation="${index}:-1" ${index === 0 ? "disabled" : ""}>上移</button><button data-move-operation="${index}:1" ${index === r[param].length - 1 ? "disabled" : ""}>下移</button><button data-remove-operation="${index}">移除</button></div><pre>${esc(operation.type === "database" ? operation.sql : JSON.stringify(operation))}</pre></div>`).join("")}</details>`
-      : "";
+    const operations = r[param] || [];
+    const hasWaits =
+      preWorkspace && supportsHTTPPreWait(r) && operations.some(isHTTPPreWait);
+    const cards = operations
+      .map((operation, index) =>
+        hasWaits && isHTTPPreWait(operation)
+          ? httpPreWaitHTML(
+              operation,
+              index,
+              operations.length,
+              httpPreWaitDrafts.read(operation),
+              esc,
+            )
+          : `<div class="operation-card" data-operation-index="${index}"><div class="row"><strong class="grow">${index + 1}. ${esc(operation.name || operation.type)} · ${operation.type === "database" ? "数据库只读" : esc(operation.type)}${operation.enabled === false && operation.type === "database" ? "（停用）" : ""}</strong>${operation.type === "database" ? `<button data-edit-db-operation="${index}">编辑 / 重新绑定</button><button data-toggle-db-operation="${index}" title="启停查询不会清除已有运行时变量">${operation.enabled === false ? "启用" : "停用"}</button>` : ""}<button data-move-operation="${index}:-1" ${index === 0 ? "disabled" : ""}>上移</button><button data-move-operation="${index}:1" ${index === r[param].length - 1 ? "disabled" : ""}>下移</button><button data-remove-operation="${index}">移除</button></div><pre>${esc(operation.type === "database" ? operation.sql : JSON.stringify(operation))}</pre></div>`,
+      )
+      .join("");
+    const configured = !operations.length
+      ? ""
+      : hasWaits
+        ? `<div class="http-pre-operation-list" aria-label="声明式前置操作">${cards}<p class="http-pre-safety">等待仅支持普通 HTTP 手动调试；计划、用例和压测不执行此定义。</p></div>`
+        : `<details class="operation-summary" open><summary>${operations.length} 条声明式操作（先于本阶段 JavaScript）</summary>${cards}</details>`;
     if (preWorkspace) {
       const editor = httpPreEditors.get(r);
       const hasScript = Boolean(r.beforeScript);
@@ -2551,6 +2580,7 @@ function paramPanel(r, param, design = false) {
         script: inlineScript,
         scriptOpen: editor?.scriptOpen ?? hasScript,
         advancedOpen: editor?.advancedOpen,
+        canWait: supportsHTTPPreWait(r),
         hasScript,
       });
     }
@@ -2973,6 +3003,7 @@ function editRules(ownsWorkspace) {
         throw Error("接口或阶段已切换，请重新打开操作编辑器");
       const value = JSON.parse($("#modal-json").value);
       if (!Array.isArray(value)) throw Error("必须是数组");
+      if (ownsWorkspace && stage === "before") validateHTTPPreWaits(r, value);
       r[ownsWorkspace ? stage : param] = value;
       mark();
       render();
@@ -3019,6 +3050,18 @@ function bind() {
     mode === "debug" &&
     param === "before";
   const stalePre = () => preWorkspace && !ownsPre();
+  const waitOps = preWorkspace ? preRequest?.before : undefined;
+  const waitRows = waitOps ? [...waitOps] : [];
+  const ownedWait = (element, index) =>
+    ownsPre() &&
+    element.isConnected &&
+    supportsHTTPPreWait(preRequest) &&
+    preRequest.before === waitOps &&
+    waitOps?.[index] === waitRows[index] &&
+    isHTTPPreWait(waitRows[index])
+      ? waitRows[index]
+      : null;
+
   const planEditor = $(".plans-page .plan-editor");
   if (planEditor)
     bindPlanInspection(
@@ -5027,6 +5070,10 @@ function bind() {
   on("#script-url-mode", "change", (_, element) => {
     if (stalePre()) return;
     const previous = request().scriptURLMode || "string";
+    if (element.value === "sdk" && request().before?.some(isHTTPPreWait)) {
+      element.value = previous;
+      throw Error("请先删除前置等待，再切换 SDK URL 模式");
+    }
     if (!confirm(scriptURLModeNotice + " 确认切换？")) {
       element.value = previous;
       return;
@@ -6222,6 +6269,44 @@ function bind() {
       render();
       $("#http-pre-add")?.focus({ preventScroll: true });
     });
+    const updateWaitError = (element, operation, index) => {
+      const draft = httpPreWaitDrafts.read(operation);
+      const issue = $(`#http-pre-wait-error-${index}`);
+      element.setAttribute("aria-invalid", String(Boolean(draft)));
+      issue.textContent = draft?.message || "";
+      issue.hidden = !draft;
+    };
+    on("[data-pre-wait-ms]", "input", (_, element) => {
+      const index = Number(element.dataset.preWaitMs);
+      const operation = ownedWait(element, index);
+      if (!operation) return;
+      httpPreWaitDrafts.edit(preRequest, operation, element.value);
+      updateWaitError(element, operation, index);
+      mark();
+    });
+    on("[data-pre-wait-ms]", "keydown", (event, element) => {
+      if (event.key !== "Escape") return;
+      const index = Number(element.dataset.preWaitMs);
+      const operation = ownedWait(element, index);
+      if (!operation || !httpPreWaitDrafts.clear(operation)) return;
+      element.value = String(operation.milliseconds);
+      updateWaitError(element, operation, index);
+      event.preventDefault();
+    });
+    on("[data-pre-wait-toggle]", "change", (_, element) => {
+      const operation = ownedWait(
+        element,
+        Number(element.dataset.preWaitToggle),
+      );
+      if (!operation) return;
+      try {
+        httpPreWaitDrafts.toggle(preRequest, operation, element.checked);
+      } catch (error) {
+        element.checked = operation.enabled;
+        throw error;
+      }
+      mark();
+    });
     releaseHTTPPreActions = bindHTTPPreActions(preWorkspace, {
       choose(key) {
         if (!ownsPre()) return;
@@ -6229,6 +6314,11 @@ function bind() {
           updatePre({ scriptOpen: true });
           render();
           $("#script-code")?.focus({ preventScroll: true });
+        } else if (key === "wait") {
+          const index = addHTTPPreWait(preRequest);
+          mark();
+          render();
+          $(`[data-pre-wait-ms="${index}"]`)?.focus({ preventScroll: true });
         } else if (key === "database") {
           $("#http-pre-add")?.focus({ preventScroll: true });
           databaseOperationDialog(-1, ownsPre).catch((error) =>
@@ -6352,6 +6442,8 @@ function bind() {
   });
   on("#edit-operations", "click", () => {
     if (stalePre()) return;
+    if (preWorkspace && httpPreWaitDrafts.pending([preRequest]))
+      throw Error(waitDraftError);
     editRules(preWorkspace ? ownsPre : undefined);
   });
   on("#add-assertion", "click", () => {
@@ -7017,15 +7109,26 @@ function bind() {
     collect();
     const index = Number(element.dataset.removeOperation),
       operations = request()[param];
+    const operation = operations?.[index];
+    const wait = Boolean(element.closest("[data-pre-wait-row]"));
+    if (wait && !ownedWait(element, index)) return;
     if (
-      !operations?.[index] ||
-      !confirm("移除此声明式操作？不会修改数据库或已保存的计划快照。") ||
-      stalePre()
+      !operation ||
+      !confirm(
+        wait
+          ? "删除此请求的前置等待？"
+          : "移除此声明式操作？不会修改数据库或已保存的计划快照。",
+      ) ||
+      stalePre() ||
+      (wait &&
+        (request().before !== operations || operations[index] !== operation))
     )
       return;
     operations.splice(index, 1);
+    if (wait) httpPreWaitDrafts.clear(operation);
     mark();
     render();
+    if (wait) $("#http-pre-add")?.focus({ preventScroll: true });
   });
   on("[data-move-operation]", "click", (_, element) => {
     if (stalePre()) return;
@@ -7033,7 +7136,9 @@ function bind() {
     const [index, delta] = element.dataset.moveOperation.split(":").map(Number),
       operations = request()[param],
       next = index + delta;
+    const wait = Boolean(element.closest("[data-pre-wait-row]"));
     if (
+      (wait && !ownedWait(element, index)) ||
       !operations?.[index] ||
       next < 0 ||
       next >= operations.length ||
@@ -7046,6 +7151,12 @@ function bind() {
     ];
     mark();
     render();
+    if (wait) {
+      const again = $(`[data-move-operation="${next}:${delta}"]`);
+      (again?.disabled ? $(`[data-pre-wait-ms="${next}"]`) : again)?.focus({
+        preventScroll: true,
+      });
+    }
   });
   on("[data-toggle-db-operation]", "click", (_, element) => {
     if (stalePre()) return;
@@ -8139,6 +8250,7 @@ function bind() {
   });
   on("#load-run", "click", async () => {
     assertExecutionReady();
+    if (httpPreWaitDrafts.pending([request()])) throw Error(waitDraftError);
     collect();
     const count = Number($("#load-count").value),
       concurrency = Number($("#load-concurrency").value),
@@ -8202,13 +8314,15 @@ function bind() {
       "新建执行计划",
       '<label>计划名称</label><input id="plan-name" class="${plan.provenance?.fields?.name==="ai"?"ai-value":""}" value="业务流程验证"><p class="muted">保存当前接口快照，后续接口变更不会影响计划。</p>',
       async () => {
+        const source = request();
+        const steps = source
+          ? [{ request: snapshotInterfaceForPlan(source) }]
+          : [];
         page = "plans";
         await savePlan({
           name: $("#plan-name").value,
           environmentId: env(),
-          steps: request()
-            ? [{ request: snapshotInterfaceForPlan(request()) }]
-            : [],
+          steps,
         });
       },
     );
@@ -9188,6 +9302,7 @@ function editDictionary(index) {
 }
 async function send() {
   assertExecutionReady();
+  if (httpPreWaitDrafts.pending([request()])) throw Error(waitDraftError);
   if (graphqlDrafts.pending(request())) throw Error(unappliedGraphQL);
   collect();
   const targetId = current,

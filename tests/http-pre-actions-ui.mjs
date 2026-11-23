@@ -140,6 +140,7 @@ try {
   assert.deepEqual(await menu.getByRole("menuitem").allTextContents(), [
     "自定义脚本",
     "数据库",
+    "等待",
   ]);
   assert.equal(await active(chooser("自定义脚本")), true);
   const popup = await menu.boundingBox();
@@ -147,7 +148,7 @@ try {
   near(popup.x, 749);
   near(popup.y, 285);
   near(popup.width, 218);
-  near(popup.height, 80);
+  near(popup.height, 114);
   await capture("menu");
   await chooser("自定义脚本").press("ArrowDown");
   assert.equal(await active(chooser("数据库")), true);
@@ -283,7 +284,7 @@ try {
     "Reset prior empty editor on owner switch",
   );
 
-  await trigger.press("ArrowUp");
+  await trigger.press("ArrowDown");
   await chooser("数据库").press("Enter");
   await page
     .locator("#toast")
@@ -293,7 +294,7 @@ try {
   assert.equal(await page.locator("#dialog[open]").count(), 0);
   assert.equal(await savedText(), "✓ 已保存");
   dbMode = "authorized";
-  await trigger.press("ArrowUp");
+  await trigger.press("ArrowDown");
   await chooser("数据库").press("Enter");
   const dbDialog = page.getByRole("dialog", { name: "添加前置数据库查询" });
   await dbDialog.waitFor();
@@ -307,7 +308,7 @@ try {
   const started = new Promise((resolve) => {
     dbStarted = resolve;
   });
-  await trigger.press("ArrowUp");
+  await trigger.press("ArrowDown");
   await chooser("数据库").press("Enter");
   await started;
   await pick(existing);

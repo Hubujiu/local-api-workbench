@@ -74,6 +74,9 @@ jobs:
           node-version: "24.22.3"
       - run: npm install --no-save --ignore-scripts playwright@1.64.1
       - run: node tests/curl-http2.mjs
+      - run: node tests/http-pre-wait-ui.mjs
+        env:
+          HTTP_PRE_WAIT_EVIDENCE: /tmp/local-api-http-pre-wait
       - run: node tests/http-pre-actions-ui.mjs
         env:
           HTTP_PRE_ACTIONS_EVIDENCE: /tmp/local-api-http-pre-actions
@@ -225,6 +228,7 @@ jobs:
             /tmp/local-api-http-request-overflow/http-request-overflow-*.png
             /tmp/local-api-http-post-actions/http-post-actions-*.png
             /tmp/local-api-http-pre-actions/http-pre-actions-*.png
+            /tmp/local-api-http-pre-wait/http-pre-wait-*.png
             /tmp/local-api-plan-inspection/plan-inspection-*.png
             /tmp/local-api-http-request-auth/http-request-auth-*.png
             /tmp/local-api-design-pair-composer/design-pair-*.png

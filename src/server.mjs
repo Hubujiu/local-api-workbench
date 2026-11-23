@@ -104,6 +104,11 @@ import {
   resolveDynamicValue,
   resolveDynamicRequest,
 } from "./dynamic-values.mjs";
+import {
+  manualHTTPPreWait,
+  rejectHTTPPreWait,
+  validateHTTPPreWait,
+} from "./http-pre-wait.mjs";
 import { previewFunction } from "./custom-functions.mjs";
 import { parseErrorCodeList } from "./error-codes.mjs";
 import { sampleProjectSchema, schemaMockResponse } from "./mock-fields.mjs";
@@ -2462,6 +2467,7 @@ export async function createApp({
             const data = await body(req);
             if (action === "code-generation")
               assertCodeTarget(data.target, data.client);
+            rejectHTTPPreWait(data.request, "cURL／代码导出");
             const inheritedRequest = resolveNativeInheritance(p, data.request);
             const exportRequest =
               inheritedRequest?.scriptURLMode === "sdk" ||
@@ -2506,6 +2512,7 @@ export async function createApp({
             const b = await body(req),
               { controller, runId } = claimRun(b.runId);
             try {
+              validateHTTPPreWait(b.request);
               const context = debugEnvironment(
                 p,
                 b.environmentId,
@@ -2524,15 +2531,19 @@ export async function createApp({
                 request.postmanCollectionId,
               );
               const single = await runPlan(
-                snapshotPlan({
-                  name: request.name,
-                  functions: b.functions || p.settings?.functions || [],
-                  steps: [{ request }],
-                }),
+                snapshotPlan(
+                  {
+                    name: request.name,
+                    functions: b.functions || p.settings?.functions || [],
+                    steps: [{ request }],
+                  },
+                  { preWaitAdmission: manualHTTPPreWait },
+                ),
                 env,
                 executeRequest,
                 {
                   ...scoped,
+                  preWaitAdmission: manualHTTPPreWait,
                   databaseQuery: (operation, signal) =>
                     databaseSessions.query(p.id, operation, signal),
                   cookieSession: projectCookieSession(
