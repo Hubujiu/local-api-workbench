@@ -1,3 +1,4 @@
+import { revealDebugPreSettings } from "./helpers/http-pre-actions-ui.mjs";
 import { openProjectCreateUI } from "./helpers/open-project-create-ui.mjs";
 import { pickProjectUI } from "./helpers/pick-project-ui.mjs";
 import { revealDebugPostSettings } from "./helpers/http-post-actions-ui.mjs";
@@ -1610,6 +1611,7 @@ try {
   for (const phase of ["before", "after"]) {
     await page.locator(`[data-param="${phase}"]`).click();
     if (phase === "after") await revealDebugPostSettings(page);
+    else await revealDebugPreSettings(page);
     awsSavedScripts[phase] = await page.locator("#script-code").inputValue();
     await page.locator("#script-code").fill("");
   }
@@ -1660,6 +1662,7 @@ try {
   for (const phase of ["before", "after"]) {
     await page.locator(`[data-param="${phase}"]`).click();
     if (phase === "after") await revealDebugPostSettings(page);
+    else await revealDebugPreSettings(page);
     await page.locator("#script-code").fill(awsSavedScripts[phase]);
   }
   await page.locator('[data-param="auth"]').click();
@@ -4519,6 +4522,7 @@ try {
   await page.getByRole("button", { name: "新建接口", exact: true }).click();
   await page.locator("#url").fill(fixtureURL + "/global-parameters");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator("#add-db-operation").click();
   await page
     .locator("#operation-db-sql")
@@ -4654,6 +4658,7 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator('.rail [data-page="apis"]').click();
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator('[data-edit-db-operation="0"]').click();
   assert.equal(await page.locator("#operation-db-connection").inputValue(), "");
   await page.locator("#dialog-save").click();
@@ -4672,6 +4677,7 @@ try {
   assert.equal((await (await reboundReply).json()).outcome, "passed");
 
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator("#edit-operations").click();
   await page.locator("#modal-json").fill("[]");
   await page.locator("#dialog-save").click();
@@ -5141,6 +5147,7 @@ try {
   );
   await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator("#inherit-shared-scripts").uncheck();
   const noScriptReply = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
@@ -5631,6 +5638,7 @@ try {
     .locator("#url")
     .fill("{{browser?host#part}}/script-form-body?drop=1#{{browser#fragment}}");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   page.once("dialog", (dialog) => dialog.accept());
   await page.locator("#script-dialect").selectOption("apipost8");
   await page
@@ -5642,6 +5650,7 @@ try {
   for (const stage of ["after", "before"]) {
     await page.locator(`[data-param="${stage}"]`).click();
     if (stage === "after") await revealDebugPostSettings(page);
+    else await revealDebugPreSettings(page);
     const visibleCodeHeight = await page
       .locator("#script-code")
       .evaluate((input) => {
@@ -5739,6 +5748,7 @@ try {
   await page.keyboard.press("Escape");
   assert.equal(await page.locator("#script-code").inputValue(), "");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   assert.equal(
     await page.locator("#script-code").inputValue(),
     expandedFormScript,
@@ -6065,6 +6075,7 @@ try {
   await page.locator('[data-debug-pair-name="query"]').fill("table");
   await page.locator('[data-pair="query:0:value"]').fill("a+b");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   page.once("dialog", (dialog) => dialog.dismiss());
   await page.locator("#script-url-mode").selectOption("sdk");
   assert.equal(await page.locator("#script-url-mode").inputValue(), "string");
@@ -6170,6 +6181,7 @@ try {
   await page.locator("#dialog").waitFor({ state: "hidden" });
   // Export the definition without executing its earlier mutation script.
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator("#script-code").fill("");
   await page.locator("#url").fill(fixtureURL + "/sdk-url/42?raw=%2f+&x=1&x=2");
   await page.locator("#curl").click();
@@ -6189,6 +6201,7 @@ try {
   await page.locator("#raw-format").selectOption("raw");
   await page.locator("#body-code").fill("{{payload}}");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page
     .locator("#script-code")
     .fill(
@@ -6262,6 +6275,7 @@ try {
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-openapi-url-query.png" });
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   page.once("dialog", (dialog) => dialog.accept());
   await page.locator("#script-url-mode").selectOption("sdk");
   await saveAndWait();

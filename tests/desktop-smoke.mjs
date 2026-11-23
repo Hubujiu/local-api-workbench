@@ -1,3 +1,4 @@
+import { revealDebugPreSettings } from "./helpers/http-pre-actions-ui.mjs";
 import { revealDebugPostSettings } from "./helpers/http-post-actions-ui.mjs";
 import {
   observeDesktopProcess,
@@ -304,6 +305,7 @@ try {
       "pm.test('packaged-sdk-url',()=>{pm.expect(typeof pm.request.url).to.equal('object');pm.expect(pm.request.url.query.get('packaged-sdk')).to.equal('one&two');});",
     );
   await window.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(window);
   const sdkOriginalBefore = await window.locator("#script-code").inputValue();
   await window
     .locator("#script-code")
@@ -347,6 +349,7 @@ try {
   await window.locator("#raw-format").selectOption("raw");
   await window.locator("#body-code").fill("{{payload}}");
   await window.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(window);
   await window
     .locator("#script-code")
     .fill(
