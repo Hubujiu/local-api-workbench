@@ -9,8 +9,10 @@ const slice = (a, b) =>
   source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 const helper = slice("function previewDraftOwner()", "function modal(");
 const handlers =
-  slice('  on("#import-parameter-dictionary",', '  on("[data-dynamic-pair]",') +
-  slice('  on("#bulk-error-codes",', '  on("#mock-builtins",');
+  slice(
+    '  on("#import-parameter-dictionary",',
+    '  onPair("[data-dynamic-pair]",',
+  ) + slice('  on("#bulk-error-codes",', '  on("#mock-builtins",');
 function harness(kind) {
   const build = new Function(
     "kind",
