@@ -15,9 +15,22 @@ export function httpPostActionsHTML({ configured, advanced, open, hasScript }) {
 }
 
 export function bindHTTPPostActions(panel, { choose, onError }) {
-  const trigger = panel.querySelector("#http-post-add");
-  const menu = panel.querySelector("#http-post-menu");
-  const options = [...menu.querySelectorAll("[data-post-action]")];
+  return bindHTTPActionMenu(panel, {
+    triggerSelector: "#http-post-add",
+    menuSelector: "#http-post-menu",
+    actionAttribute: "data-post-action",
+    choose,
+    onError,
+  });
+}
+
+export function bindHTTPActionMenu(
+  panel,
+  { triggerSelector, menuSelector, actionAttribute, choose, onError },
+) {
+  const trigger = panel.querySelector(triggerSelector);
+  const menu = panel.querySelector(menuSelector);
+  const options = [...menu.querySelectorAll("[" + actionAttribute + "]")];
   const doc = panel.ownerDocument;
   const win = doc.defaultView;
   const controller = new AbortController();
@@ -66,7 +79,7 @@ export function bindHTTPPostActions(panel, { choose, onError }) {
       if (!opened() || !panel.isConnected) return;
       close(false);
       try {
-        choose(option.dataset.postAction);
+        choose(option.getAttribute(actionAttribute));
       } catch (error) {
         focus(trigger);
         onError(error);

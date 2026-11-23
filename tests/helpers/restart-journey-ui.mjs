@@ -1,3 +1,4 @@
+import { revealDebugPreSettings } from "./http-pre-actions-ui.mjs";
 import { revealDebugPostSettings } from "./http-post-actions-ui.mjs";
 import { openProjectCreateUI } from "./open-project-create-ui.mjs";
 import assert from "node:assert/strict";
@@ -214,6 +215,7 @@ export async function exerciseRestartJourney({
   mark("authorize-database");
   await grant("Journey first grant");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator("#add-db-operation").click();
   await page.locator("#operation-db-sql").fill("SELECT value FROM fixture");
   await page.locator("#operation-db-path").fill("$.rows[0].value");
@@ -331,6 +333,7 @@ export async function exerciseRestartJourney({
   mark("regrant-and-rebind");
   await grant("Journey replacement grant");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator('[data-edit-db-operation="0"]').click();
   await page.locator("#dialog").waitFor({ state: "visible" });
   assert.equal(await page.locator("#operation-db-connection").inputValue(), "");
