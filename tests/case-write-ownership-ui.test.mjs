@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createDebugExampleDrafts } from "../public/http-debug-examples.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createProjectImportGuard } from "../public/project-import-guard.js";
@@ -35,6 +36,7 @@ function harness({ initial = fixture(), hooks = {} } = {}) {
     "api",
     "projectImports",
     "nativeRequestLifecycle",
+    "debugExampleDrafts",
     `
  let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
@@ -53,7 +55,7 @@ function harness({ initial = fixture(), hooks = {} } = {}) {
  `,
   );
   return {
-    ...create(initial, hooks, api, guard, native),
+    ...create(initial, hooks, api, guard, native, createDebugExampleDrafts()),
     calls,
     guard,
     native,

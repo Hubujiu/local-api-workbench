@@ -135,6 +135,9 @@ jobs:
         env:
           HTTP_DEBUG_PATH_EVIDENCE: /tmp/local-api-http-debug-path
       - run: node tests/http-debug-body-empty-ui.mjs
+      - run: node tests/http-debug-examples-ui.mjs
+        env:
+          HTTP_DEBUG_EXAMPLE_EVIDENCE: /tmp/local-api-http-debug-example
       - run: node tests/http-success-response-ui.mjs
         env:
           HTTP_SUCCESS_RESPONSE_EVIDENCE: /tmp/local-api-http-success-response
@@ -228,6 +231,7 @@ jobs:
             /tmp/local-api-design-response-example-inline/design-response-example-*.png
             /tmp/local-api-design-response-header-inline/design-response-header-*.png
             /tmp/local-api-design-response-settings-inline/design-response-settings-*.png
+            /tmp/local-api-http-debug-example/http-debug-example-*.png
             /tmp/local-api-http-success-response/response-*-workbench.png
             /tmp/local-api-http-response-headers/http-response-headers-*.png
             /tmp/local-api-http-response-layout/http-response-layout-*.png

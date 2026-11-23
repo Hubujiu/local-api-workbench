@@ -321,6 +321,13 @@ import { assertionCounts } from "./assertion-state.js";
 import { createScriptDraft, applyScriptDraft } from "./script-draft.js";
 import { mockURL, mockDebugTarget } from "./mock-target.js";
 import { editResponseExample } from "./response-example.js";
+import {
+  createDebugExampleDrafts,
+  debugExampleChoices,
+  debugExamplesHTML,
+  editableDebugExample,
+  prepareDebugExampleMetadata,
+} from "./http-debug-examples.js";
 import { applySelectedFormFile } from "./form-file-selection.js";
 import {
   binaryBodyHTML,
@@ -453,6 +460,8 @@ const $ = (s) => document.querySelector(s),
     );
 const uid = () => crypto.randomUUID();
 const responses = new Map();
+const debugExampleSelections = new WeakMap();
+const debugExampleDrafts = createDebugExampleDrafts();
 const graphqlResponseFence = createGraphQLResponseFence();
 const openDesignDescriptions = new WeakMap();
 const designPathDrafts = createDesignPathDrafts();
@@ -1332,6 +1341,8 @@ async function save() {
   if (project) projectImports.assertCanSave(project.id);
   if (!project) return;
   if (saving) throw Error("保存尚未完成，请等待");
+  if (debugExampleDrafts.pending(project.requests))
+    throw Error("请修正或撤回无效的响应示例正文后再保存");
   if (httpPreWaitDrafts.pending(project.requests)) throw Error(waitDraftError);
   if (changedProvisionalQuery(provisionalQuery.read(project, request())))
     throw Error(
@@ -1551,6 +1562,8 @@ async function openProject(
   )
     return false;
   if (busy || saving) throw Error("请先结束当前请求或保存，再切换项目");
+  if (project && debugExampleDrafts.pending(project.requests))
+    throw Error("请先修正或撤回无效的响应示例正文，再切换或重新加载项目");
   if (
     project?.requests?.some((r) => r.graphqlEditorVersion === 1) &&
     graphqlDrafts.hasProject(project)
@@ -2249,7 +2262,7 @@ function editor(r) {
       "",
     )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button>${requestCurlAction(mode === "debug")}<button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法"${r.graphqlEditorVersion === 1 ? " disabled" : ""}>${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : httpRequestActions({ debug: mode === "debug", busy, cancel: busy && mode !== "cases" && !caseCancellationOwner(), dirty })}</div>${
     mode === "debug"
-      ? `${requestParameterTabs(r, param, usesDesignPathDraft(project, r))}${httpLayout ? requestParameterOverflowHTML() : ""}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" && r.bodyType !== "binary" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded", "binary"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response${responseTab === "body" && isPopulatedHTTPResponse(response) ? " http-success-response-active" : ""}"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length, responseHeaders?.length)}<div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent(responseHeaders)}</div>${httpLayout ? httpResponseLayoutHTML(!busy && !response && responseTab === "body") : ""}</div>`
+      ? `${requestParameterTabs(r, param, usesDesignPathDraft(project, r))}${httpLayout ? requestParameterOverflowHTML() : ""}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" && r.bodyType !== "binary" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded", "binary"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response${responseTab === "body" && isPopulatedHTTPResponse(response) ? " http-success-response-active" : ""}"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length, responseHeaders?.length)}<div class="metrics">${response && !(httpLayout && responseTab === "examples") ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent(responseHeaders)}</div>${httpLayout ? httpResponseLayoutHTML(!busy && !response && responseTab === "body") : ""}</div>`
       : modePanel(r)
   }</section>`;
 }
@@ -2632,7 +2645,20 @@ function paramPanel(r, param, design = false) {
   return `<div class="notice">${descriptions[param]}</div><pre>${esc(JSON.stringify(r[param], null, 2))}</pre><button id="edit-operations">编辑${param === "assertions" ? "断言" : param === "extract" ? "提取规则" : "操作"}</button>`;
 }
 function responseContent(responseHeaders) {
-  if (responseTab === "examples")
+  if (responseTab === "examples") {
+    const r = request();
+    if (
+      page === "apis" &&
+      mode === "debug" &&
+      r.graphqlEditorVersion !== 1 &&
+      r.graphqlVariableTemplate === undefined
+    )
+      return debugExamplesHTML(
+        r,
+        debugExampleSelections.get(r),
+        debugExampleDrafts,
+        esc,
+      );
     return (
       request()
         .examples.map(
@@ -2641,6 +2667,7 @@ function responseContent(responseHeaders) {
         )
         .join("") || '<div class="empty"><p>在 Mock 页添加响应示例</p></div>'
     );
+  }
   if (!response) {
     const data = !busy && unsentResponseData(responseTab);
     return (
@@ -3325,6 +3352,8 @@ function bind() {
   ) => {
     const owner = project;
     if (graphqlDrafts.hasProject(owner)) throw Error(unappliedGraphQL);
+    if (debugExampleDrafts.pending(owner.requests))
+      throw Error("请先修正或撤回无效的响应示例正文，再切换或重新加载项目");
     const responseDraftNotice = designResponseSettingsDrafts.notice(owner);
     if (responseDraftNotice) throw Error(responseDraftNotice);
     const opening = projectOpenRequestSequence,
@@ -3486,6 +3515,8 @@ function bind() {
   );
   on("#project-menu-create", "click", (_, button) => {
     if (!button.isConnected || $("#dialog").open || busy || saving) return;
+    if (project && debugExampleDrafts.pending(project.requests))
+      throw Error("请先修正或撤回无效的响应示例正文，再新建项目");
     const owner = project,
       view = page,
       requestId = current,
@@ -4081,6 +4112,10 @@ function bind() {
       on("#design-inline-example-body", "scroll", drawLine);
       on("#design-inline-example-body", "input", () => {
         if (!ownsBody()) return;
+        if (debugExampleDrafts.read(target.example)) {
+          body.value = visible;
+          debugExampleDrafts.assertReplaceable(target.example);
+        }
         const pending = designResponseSettingsDrafts.get(r);
         if (!pending && !unchangedResponseDefinitions(raw.value, r.responses)) {
           reset();
@@ -4137,6 +4172,7 @@ function bind() {
           saving
         )
           throw Error("响应示例或 JSON 草稿已变化，请取消后再编辑。");
+        debugExampleDrafts.assertReplaceable(target.example);
         const next = prepareDesignExampleBody(
           draft.definition,
           media,
@@ -5509,6 +5545,9 @@ function bind() {
     responseTab = e.dataset.response;
     render();
   });
+  const debugExamplePane = $(".http-debug-examples");
+  if (debugExamplePane) bindDebugExamples(debugExamplePane, project, request());
+
   on("#body-code", "input", (_, element) => {
     if ($("#code-highlight"))
       $("#code-highlight").innerHTML = highlightJSON(element.value) + "\n";
@@ -7798,26 +7837,39 @@ function bind() {
     );
   });
   on("#add-example", "click", () => editExample());
+  const mockExampleOwner = project;
+  const mockExampleRequest = request();
+  const ownsMockExample = (element) =>
+    element.isConnected &&
+    page === "apis" &&
+    mode === "mock" &&
+    project === mockExampleOwner &&
+    request() === mockExampleRequest;
   on("[data-delete-example]", "click", (_, element) => {
-    const examples = request().examples,
-      index = Number(element.dataset.deleteExample);
-    if (!Number.isInteger(index) || index < 0 || index >= examples.length)
-      throw Error("响应示例不存在");
+    if (!ownsMockExample(element)) return;
+    const examples = mockExampleRequest.examples,
+      index = Number(element.dataset.deleteExample),
+      row = examples[index];
+    if (!Number.isInteger(index) || !row) throw Error("响应示例不存在");
     if (
       !confirm(
         "移除响应示例 " +
-          JSON.stringify(examples[index].name || "未命名") +
-          "？",
+          JSON.stringify(row.name || "未命名") +
+          (debugExampleDrafts.read(row)
+            ? "？该示例未完成的正文草稿也将丢弃。"
+            : "？"),
       )
     )
       return;
+    if (!ownsMockExample(element) || examples[index] !== row) return;
     examples.splice(index, 1);
+    debugExampleDrafts.clear(row);
     mark();
     render();
   });
-  on("[data-edit-example]", "click", (_, e) =>
-    editExample(Number(e.dataset.editExample)),
-  );
+  on("[data-edit-example]", "click", (_, e) => {
+    if (ownsMockExample(e)) editExample(Number(e.dataset.editExample));
+  });
   async function useMock(index) {
     if (saving) throw Error("正在保存，请完成后再切换Mock调试");
     collect();
@@ -9035,6 +9087,8 @@ function bindTree() {
         const remove = $("#folder-remove").checked,
           name = $("#folder-name").value.trim();
         if (!remove && !name) throw Error("名称不能为空");
+        if (debugExampleDrafts.pending(project.requests))
+          throw Error("请先修正或撤回无效的响应示例正文，再修改目录");
         const changed = moveFolderTree(project, old, remove ? null : name);
         const serviceId = $("#folder-service").value;
         if (!remove) {
@@ -9077,9 +9131,177 @@ function bindTree() {
     render();
   });
 }
+function bindDebugExamples(pane, owner, target) {
+  const examples = target.examples;
+  const { choices, current } = debugExampleChoices(
+    target,
+    debugExampleSelections.get(target),
+  );
+  const row = current?.row;
+  const owns = () =>
+    pane.isConnected &&
+    project === owner &&
+    request() === target &&
+    page === "apis" &&
+    mode === "debug" &&
+    responseTab === "examples" &&
+    target.examples === examples &&
+    (!row || examples[Number(current.key)] === row);
+  const focus = (selector) => $(selector)?.focus({ preventScroll: true });
+  on(
+    "[data-debug-example-choice]",
+    "click",
+    (_, button) => {
+      if (!owns()) return;
+      const choice = choices.find(
+        ({ key }) => key === button.dataset.debugExampleChoice,
+      );
+      if (!choice) return;
+      debugExampleSelections.set(target, choice.row || choice.key);
+      render();
+      focus(`[data-debug-example-choice="${choice.key}"]`);
+    },
+    pane,
+  );
+  const body = pane.querySelector("#debug-example-body");
+  const error = pane.querySelector("#debug-example-error");
+  const notice = () => {
+    const invalid = debugExampleDrafts.read(row);
+    body.setAttribute("aria-invalid", String(Boolean(invalid)));
+    error.hidden = !invalid;
+    error.textContent = invalid?.message || "";
+  };
+  on(
+    "#debug-example-body",
+    "input",
+    () => {
+      if (!owns() || !editableDebugExample(target, row)) return;
+      debugExampleDrafts.edit(target, row, body.value);
+      notice();
+      mark();
+    },
+    pane,
+  );
+  on(
+    "#debug-example-body",
+    "keydown",
+    (event) => {
+      if (event.key !== "Escape" || !owns() || !debugExampleDrafts.clear(row))
+        return;
+      body.value = row.body;
+      notice();
+      event.preventDefault();
+    },
+    pane,
+  );
+  const form = pane.querySelector("#debug-example-settings");
+  if (!form) return;
+  const name = form.querySelector("#debug-example-name");
+  const status = form.querySelector("#debug-example-status");
+  let action, anchor;
+  const place = () => {
+    const box = anchor.getBoundingClientRect();
+    const width = form.getBoundingClientRect().width;
+    const height = form.getBoundingClientRect().height;
+    form.style.left =
+      Math.max(
+        8,
+        Math.min(box.left, document.documentElement.clientWidth - width - 8),
+      ) + "px";
+    form.style.top =
+      (box.bottom + height + 13 <= window.innerHeight
+        ? box.bottom + 5
+        : Math.max(8, box.top - height - 5)) + "px";
+  };
+  const close = () => {
+    if (form.matches(":popover-open")) form.hidePopover();
+    anchor?.focus({ preventScroll: true });
+  };
+  on(
+    "#debug-example-edit, #debug-example-add",
+    "click",
+    (_, button) => {
+      if (!owns()) return;
+      anchor = button;
+      action = button.id === "debug-example-edit" ? "edit" : "add";
+      name.value = action === "edit" ? current.name : "";
+      status.value = String(
+        action === "edit" ? (row?.status ?? current.status) : 200,
+      );
+      form.showPopover();
+      button.setAttribute("aria-expanded", "true");
+      place();
+      name.focus();
+    },
+    pane,
+  );
+  on(
+    "#debug-example-settings",
+    "toggle",
+    () => {
+      if (!form.matches(":popover-open"))
+        anchor?.setAttribute("aria-expanded", "false");
+    },
+    pane,
+  );
+  on(
+    "#debug-example-cancel",
+    "click",
+    () => {
+      if (owns()) close();
+    },
+    pane,
+  );
+  on(
+    "#debug-example-settings",
+    "keydown",
+    (event) => {
+      if (event.key !== "Escape" || !owns()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    },
+    pane,
+  );
+  on(
+    "#debug-example-settings",
+    "submit",
+    (event) => {
+      event.preventDefault();
+      if (!owns() || !form.matches(":popover-open")) return;
+      const existing = action === "edit" ? row : undefined;
+      const next = prepareDebugExampleMetadata(
+        target,
+        existing,
+        name.value,
+        status.value,
+      );
+      if (existing) {
+        existing.name = next.name;
+        existing.status = next.status;
+      } else {
+        examples.push(next);
+        if (action === "edit") debugExampleSelections.set(target, next);
+        else if (current)
+          debugExampleSelections.set(target, current.row || current.key);
+      }
+      const focusReturn =
+        action === "edit" ? "#debug-example-edit" : "#debug-example-add";
+      form.hidePopover();
+      mark();
+      render();
+      focus(focusReturn);
+    },
+    pane,
+  );
+}
+
 function editExample(index, designScope) {
+  const owner = project;
+  const expectedMode = mode;
   const r = request(),
-    ex = r.examples[index] || {
+    original = r.examples[index],
+    ex = original || {
       name: designScope ? "响应示例" : "成功响应",
       status: designScope ? Number(designScope.definition.status) : 200,
       body: designScope ? "{}" : '{\n  "success": true\n}',
@@ -9087,10 +9309,20 @@ function editExample(index, designScope) {
         ? { headers: { "content-type": designScope.media } }
         : {}),
     };
+  debugExampleDrafts.assertReplaceable(original);
   modal(
     "响应示例",
     `<div class="example-settings"><label>名称<input id="ex-name" value="${esc(ex.name)}"></label><label>状态码<input id="ex-status" type="number" value="${esc(ex.status)}" ${designScope ? "readonly" : ""}></label><label>延迟（ms）<input id="ex-delay" type="number" min="0" max="5000" value="${esc(ex.delayMs ?? 0)}"></label></div><p class="muted">100–199 仅作为文档示例；204/205/304 不发送正文。延迟范围 0–5000ms。</p><label>响应内容（允许为空）</label><textarea id="ex-body">${esc(ex.body)}</textarea><label>响应头（JSON对象，禁止传输/隔离控制头）</label><textarea id="ex-headers">${esc(JSON.stringify(ex.headers ?? {}, null, 2))}</textarea>`,
     () => {
+      if (
+        project !== owner ||
+        request() !== r ||
+        mode !== expectedMode ||
+        page !== "apis" ||
+        (index !== undefined && r.examples[index] !== original)
+      )
+        throw Error("响应示例草稿已变化，请重新打开");
+      debugExampleDrafts.assertReplaceable(original);
       const val = editResponseExample(ex, {
         name: $("#ex-name").value,
         status: Number($("#ex-status").value),
