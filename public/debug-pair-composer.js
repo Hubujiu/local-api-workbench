@@ -1,9 +1,11 @@
-export function ownsDebugPairComposer(kind, page, mode, parameter) {
+export function ownsDebugPairComposer(kind, page, mode, parameter, request) {
   return (
     page === "apis" &&
     mode === "debug" &&
     kind === parameter &&
-    (kind === "headers" || kind === "query")
+    (kind === "headers" ||
+      kind === "query" ||
+      (kind === "cookies" && request?.graphqlEditorVersion !== 1))
   );
 }
 
@@ -12,7 +14,18 @@ export function debugPairFromKey(key) {
   return { key, value: "", enabled: true };
 }
 
+export function debugCookieSelection(rows) {
+  const enabled = rows.filter((row) => row.enabled !== false).length;
+  return {
+    checked: enabled === rows.length,
+    indeterminate: enabled > 0 && enabled < rows.length,
+    disabled: rows.length === 0,
+  };
+}
+
 export function debugPairComposer(kind, empty) {
+  if (kind === "cookies")
+    return '<tr class="debug-pair-composer"><td><div class="debug-cookie-name"><input type="checkbox" data-debug-cookie-next checked aria-label="启用新 Cookie 参数"><input type="text" data-debug-pair-name="cookies" aria-label="新 Cookie 参数名" autocomplete="off" spellcheck="false"></div></td><td></td><td><button type="button" class="ghost debug-pair-dictionary" data-debug-pair-dictionary="cookies" title="从字典添加参数">字典</button></td></tr>';
   const label = kind === "headers" ? "Header" : "Query";
   const add = `<button type="button" class="ghost" data-add-pair="${kind}" aria-label="添加${label}参数" title="添加参数">＋</button>`;
   const input = `<input type="text" data-debug-pair-name="${kind}" aria-label="新${label}参数名" autocomplete="off" spellcheck="false">`;

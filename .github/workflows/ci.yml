@@ -116,6 +116,9 @@ jobs:
         env:
           DESIGN_DESCRIPTION_SCROLL_EVIDENCE: /tmp/local-api-http-design-description-scroll
       - run: node tests/debug-pair-composer-ui.mjs
+      - run: node tests/http-debug-cookie-ui.mjs
+        env:
+          HTTP_DEBUG_COOKIE_EVIDENCE: /tmp/local-api-http-debug-cookie
       - run: node tests/http-debug-path-ui.mjs
         env:
           HTTP_DEBUG_PATH_EVIDENCE: /tmp/local-api-http-debug-path
@@ -220,6 +223,7 @@ jobs:
             /tmp/local-api-design-pair-composer/design-pair-*.png
             /tmp/local-api-http-design-path/design-path-*.png
             /tmp/local-api-http-debug-path/debug-path-*.png
+            /tmp/local-api-http-debug-cookie/debug-cookie-*.png
             /tmp/local-api-design-query-metadata/design-query-*.png
             /tmp/local-api-http-design-description-scroll/design-description-*.png
             /tmp/local-api-graphql-named-workspace/named-workbench-*.png
