@@ -120,6 +120,9 @@ jobs:
       - run: node tests/binary-body-editor-ui.mjs
       - run: node tests/http-debug-body-raw-ui.mjs
       - run: node tests/plan-step-picker-ui.mjs
+      - run: node tests/plan-inspection-ui.mjs
+        env:
+          PLAN_INSPECTION_EVIDENCE: /tmp/local-api-plan-inspection
       - run: node tests/api-sidebar-tree-ui.mjs
       - run: node tests/api-create-menu-ui.mjs
       - run: node tests/graphql-workspace-ui.mjs
@@ -203,6 +206,7 @@ jobs:
             /tmp/local-api-http-split-body/http-split-body-*.png
             /tmp/local-api-http-request-overflow/http-request-overflow-*.png
             /tmp/local-api-http-post-actions/http-post-actions-*.png
+            /tmp/local-api-plan-inspection/plan-inspection-*.png
             /tmp/local-api-design-pair-composer/design-pair-*.png
             /tmp/local-api-design-query-metadata/design-query-*.png
             /tmp/local-api-http-design-description-scroll/design-description-*.png
