@@ -3,8 +3,10 @@ import test from "node:test";
 import {
   createDesignPathDrafts,
   designPathNames,
+  designPathTable,
   usesDesignPathDraft,
 } from "../public/design-path-draft.js";
+import { requestParameterTabs } from "../public/http-request-parameter-tabs.js";
 import { serializeRequestPath } from "../src/path-serialization.mjs";
 import { exportOpenAPI, normalizeRequest } from "../src/core.mjs";
 
@@ -124,4 +126,33 @@ test("guards compatibility-owned path definitions and exports plain rows using t
       },
     ],
   );
+});
+
+test("Debug Path displays the same real row metadata and counts named rows only in the ordinary projection", () => {
+  const request = {
+    url: "/{id}",
+    path: [{ key: "", value: "manual" }],
+    bodyType: "none",
+  };
+  const owner = { configRevision: 1 };
+  const drafts = createDesignPathDrafts();
+  drafts.sync(owner, request);
+  const render = (debug) =>
+    designPathTable(
+      request.path,
+      (row) => drafts.isLinked(owner, request, row),
+      String,
+      { debug },
+    );
+  assert.match(render(true), /debug-path-pairs/);
+  assert.match(render(true), /data-pair="path:1:key"[^>]*readonly/);
+  assert.match(render(true), /role="img" aria-label="必填"[^>]*>\*/);
+  assert.match(render(true), /data-remove-pair="path:0"/);
+  assert.doesNotMatch(render(true), /data-remove-pair="path:1"/);
+  assert.doesNotMatch(render(false), /debug-path-/);
+  assert.match(
+    requestParameterTabs(request, "path", true),
+    />Path \(1\)<\/button>/,
+  );
+  assert.match(requestParameterTabs(request, "path"), />Path \(2\)<\/button>/);
 });

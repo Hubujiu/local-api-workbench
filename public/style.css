@@ -6719,45 +6719,51 @@ body.dark .design-parameter-panel [data-query-type-color="boolean"] {
   }
 }
 
-.design-parameter-panel .design-path-pairs {
+:is(.design-parameter-panel, .request-panel) .design-path-pairs {
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
 }
-.design-parameter-panel .design-path-pairs col {
+:is(.design-parameter-panel, .request-panel) .design-path-pairs col {
   width: 33.333%;
 }
-.design-parameter-panel .design-path-pairs thead th {
+:is(.design-parameter-panel, .request-panel) .design-path-pairs thead th {
   height: 35px;
   border-inline-end: 0;
   padding-inline: 10px;
 }
-.design-parameter-panel .design-path-pairs td {
+:is(.design-parameter-panel, .request-panel) .design-path-pairs td {
   height: 36px;
   overflow-wrap: anywhere;
 }
-.design-parameter-panel .design-path-name {
+:is(.design-parameter-panel, .request-panel) .design-path-name {
   display: flex;
   align-items: center;
   min-width: 0;
   gap: 4px;
 }
-.design-parameter-panel .design-path-name input[readonly] {
+:is(.design-parameter-panel, .request-panel) .design-path-name input[readonly] {
   background: var(--panel);
 }
-.design-parameter-panel .design-path-name input[type="checkbox"] {
+:is(.design-parameter-panel, .request-panel)
+  .design-path-name
+  input[type="checkbox"] {
   flex: none;
 }
-.design-parameter-panel .design-path-type {
+:is(.design-parameter-panel, .request-panel) .design-path-type {
   margin-inline-end: 4px;
   flex: none;
   font-size: calc(12 * var(--app-type-unit));
 }
-.design-parameter-panel .design-path-pairs .pair-row-actions {
+:is(.design-parameter-panel, .request-panel)
+  .design-path-pairs
+  .pair-row-actions {
   flex-wrap: wrap;
 }
 @media (max-width: 760px) {
-  .design-parameter-panel .design-path-pairs .pair-description {
+  :is(.design-parameter-panel, .request-panel)
+    .design-path-pairs
+    .pair-description {
     /* Path uses this cell for real editing controls as well as description. */
     display: table-cell;
     overflow: visible;
@@ -6765,7 +6771,41 @@ body.dark .design-parameter-panel [data-query-type-color="boolean"] {
   }
 }
 @media (max-width: 650px) {
-  .design-parameter-panel .design-path-name {
+  :is(.design-parameter-panel, .request-panel) .design-path-name {
     flex-wrap: wrap;
   }
+}
+
+.request-panel > .debug-path-pairs {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.request-panel > .debug-path-pairs thead th {
+  color: var(--muted);
+  font-weight: 400;
+  background: transparent;
+}
+.request-panel > .debug-path-pairs .design-path-type {
+  color: #995113;
+}
+body.dark .request-panel > .debug-path-pairs .design-path-type {
+  color: #efb870;
+}
+.debug-path-pairs .debug-path-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.debug-path-pairs .debug-path-required {
+  display: grid;
+  place-items: center;
+  flex: 0 0 16px;
+  min-height: 16px;
+  background: var(--panel);
+  color: var(--accent-text, var(--accent));
+  border-radius: 3px;
+}
+.debug-path-pairs .debug-path-value input {
+  min-width: 0;
 }
