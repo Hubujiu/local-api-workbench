@@ -6756,6 +6756,14 @@ body.dark .design-parameter-panel [data-query-type-color="boolean"] {
 .design-parameter-panel .design-path-pairs .pair-row-actions {
   flex-wrap: wrap;
 }
+@media (max-width: 760px) {
+  .design-parameter-panel .design-path-pairs .pair-description {
+    /* Path uses this cell for real editing controls as well as description. */
+    display: table-cell;
+    overflow: visible;
+    white-space: normal;
+  }
+}
 @media (max-width: 650px) {
   .design-parameter-panel .design-path-name {
     flex-wrap: wrap;

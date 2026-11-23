@@ -220,7 +220,28 @@ try {
     true,
   );
   await manual.fill("manual");
-  await table.getByRole("button", { name: "删除参数" }).last().press("Enter");
+  const manualRow = table.getByRole("row").filter({
+    has: page.locator('[data-pair="path:2:key"]'),
+  });
+  assert.equal(
+    await manualRow.getByRole("textbox", { name: "路径参数名" }).inputValue(),
+    "manual",
+  );
+  const removeManual = manualRow.getByRole("button", { name: "删除参数" });
+  assert.equal(await removeManual.isVisible(), true);
+  await removeManual.focus();
+  assert.equal(
+    await removeManual.evaluate(
+      (element) => element === document.activeElement,
+    ),
+    true,
+  );
+  const removeBox = await removeManual.boundingBox();
+  assert(
+    removeBox.x >= 0 && removeBox.x + removeBox.width <= 430,
+    JSON.stringify(removeBox),
+  );
+  await removeManual.press("Enter");
   assert.equal(await names.count(), 2);
   assert.equal(
     await page.evaluate(() => document.documentElement.scrollWidth),
