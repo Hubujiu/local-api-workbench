@@ -18,6 +18,10 @@ try {
   app = await createApp({ root, port: 0 });
   let project = await app.store.create("Inspection fixture");
   const plain = project.environments[0];
+  plain.variables = {};
+  plain.variableDefinitions = {};
+  project.globalVariables = {};
+  project.globalVariableDefinitions = {};
   const lab = {
     id: "lab",
     name: "本地检查环境",
@@ -89,6 +93,15 @@ try {
   await app.store.save(project);
   project = await app.store.get(project.id);
   const baseline = structuredClone(project);
+  const storedEmptyPlan = baseline.plans.find(({ id }) => id === empty.id);
+  assert.equal(storedEmptyPlan.environmentId, plain.id);
+  const storedEmptyEnvironment = baseline.environments.find(
+    ({ id }) => id === storedEmptyPlan.environmentId,
+  );
+  assert.deepEqual(storedEmptyEnvironment.variables, {});
+  assert.deepEqual(storedEmptyEnvironment.variableDefinitions ?? {}, {});
+  assert.deepEqual(baseline.globalVariables, {});
+  assert.deepEqual(baseline.globalVariableDefinitions ?? {}, {});
 
   browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || undefined,
