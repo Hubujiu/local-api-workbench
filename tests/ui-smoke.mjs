@@ -5858,8 +5858,7 @@ try {
   await page.screenshot({ path: "/tmp/local-api-query-equals.png" });
   await page.locator('[data-param="cookies"]').click();
   await page.locator("#cookie-encoding").selectOption("apipost");
-  await page.locator('[data-add-pair="cookies"]').click();
-  await page.locator('[data-pair="cookies:0:key"]').fill("中文");
+  await page.getByRole("textbox", { name: "新 Cookie 参数名" }).fill("中文");
   await page.locator('[data-pair="cookies:0:value"]').fill("空 格+");
   await saveAndWait();
   await page.reload();
