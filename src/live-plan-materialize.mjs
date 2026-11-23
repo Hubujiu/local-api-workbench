@@ -1,4 +1,5 @@
 import { snapshotPlan } from "./core.mjs";
+import { rejectHTTPPreWait } from "./http-pre-wait.mjs";
 import { activeGraphQLRequest } from "../public/graphql-named-queries.js";
 import { freezeServiceBinding } from "./environments.mjs";
 import { liveRequestId } from "./live-plan-reference.mjs";
@@ -80,6 +81,8 @@ export function materializeLivePlan(
     const matches = (detached.requests || []).filter((item) => item.id === id);
     if (matches.length !== 1 || matches[0].deletedAt)
       throw Error("实时计划引用的接口不存在、已删除或不唯一");
+    // Do not silently lose manual-only Wait when projecting template tasks.
+    rejectHTTPPreWait(matches[0], "实时执行计划");
     // Authoring variants are neither frozen nor charged against execution bytes.
     const source = structuredClone(activeGraphQLRequest(matches[0]));
     const template = step.request;
