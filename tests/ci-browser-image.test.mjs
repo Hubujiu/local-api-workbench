@@ -32,7 +32,7 @@ test("browser CI pins the official browser image and matching npm package withou
       /playwright install|ci-ubuntu-mirror/.test(command),
     ),
   );
-  assert.equal(browser["timeout-minutes"], 10);
+  assert.equal(browser["timeout-minutes"], 15);
   assert.deepEqual(workflow.permissions, { contents: "read" });
   assert.equal(
     browser.steps.find((step) => step.uses === "actions/upload-artifact@v4")
