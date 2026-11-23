@@ -1629,7 +1629,6 @@ try {
     .locator('[data-pair^="headers:"][data-pair$=":key"]')
     .count();
   for (const [offset, value] of [" first  value ", " second "].entries()) {
-    await page.locator('[data-add-pair="headers"]').click();
     await page.locator('[data-debug-pair-name="headers"]').fill("X-AWS-Repeat");
     await page
       .locator(`[data-pair="headers:${awsHeaderStart + offset}:value"]`)
@@ -1776,7 +1775,6 @@ try {
     .locator('[data-pair^="headers:"][data-pair$=":key"]')
     .count();
   for (const [offset, value] of ["first", "second"].entries()) {
-    await page.locator('[data-add-pair="headers"]').click();
     await page
       .locator('[data-debug-pair-name="headers"]')
       .fill("X-Hawk-Repeat");

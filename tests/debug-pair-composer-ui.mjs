@@ -69,7 +69,6 @@ try {
   await page.goto(app.launchUrl);
   const tab = (kind) => page.locator(`[data-param="${kind}"]`);
   const composer = (kind) => page.locator(`[data-debug-pair-name="${kind}"]`);
-  const added = (kind) => page.locator(`[data-add-pair="${kind}"]`);
   const real = (kind, index, field) =>
     page.locator(`[data-pair="${kind}:${index}:${field}"]`);
   const pick = (request) =>
@@ -78,7 +77,9 @@ try {
 
   async function empty(kind, name) {
     await tab(kind).click();
-    const table = page.locator(".debug-pairs-empty");
+    const table = page.locator(
+      kind === "headers" ? ".debug-header-pairs" : ".debug-pairs-empty",
+    );
     const composerRow = table.locator("tbody > tr");
     await composerRow.waitFor();
     assert.equal(await table.locator("thead th").count(), 3);
@@ -90,7 +91,8 @@ try {
         return { x, y, width, height };
       }),
     );
-    for (const column of boxes) assert.equal(column.height, 36);
+    const headerHeight = kind === "headers" ? 35 : 36;
+    for (const column of boxes) assert.equal(column.height, headerHeight);
     const primary = boxes.map((column) => column.width);
     assert.ok(
       Math.max(...primary) - Math.min(...primary) <= 4,
@@ -109,7 +111,13 @@ try {
   const header = await empty("headers", "header");
   const query = await empty("query", "query");
   await tab("headers").click();
-  await added("headers").press("Enter");
+  await page.getByRole("button", { name: "公共参数（Header）" }).press("Tab");
+  const nextHeader = page.getByRole("checkbox", { name: "启用新 Header 参数" });
+  assert.equal(
+    await nextHeader.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.keyboard.press("Tab");
   assert.equal(
     await composer("headers").evaluate((el) => el === document.activeElement),
     true,
@@ -180,7 +188,7 @@ try {
   assert.deepEqual(writes, []);
 
   await tab("headers").click();
-  await added("headers").click();
+  await composer("headers").click();
   await page.keyboard.type("X-Verification");
   assert.equal(await real("headers", 0, "key").inputValue(), "X-Verification");
   assert.equal(await real("headers", 1, "key").count(), 0);
@@ -253,7 +261,7 @@ try {
   await touch.goto(app.launchUrl);
   await touch.locator('[data-mode="debug"]').tap();
   await touch.locator('[data-param="headers"]').tap();
-  await touch.locator('[data-add-pair="headers"]').tap();
+  await touch.locator('[data-debug-pair-name="headers"]').tap();
   await touch.keyboard.type("X-Narrow");
   assert.equal(
     await touch.locator('[data-pair="headers:1:key"]').inputValue(),
