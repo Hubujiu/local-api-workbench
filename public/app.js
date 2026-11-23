@@ -82,6 +82,10 @@ import { bindApiRowMenu } from "./api-row-menu.js";
 import { bindPlanPickerTree } from "./plan-step-picker.js";
 import { unsentResponseData } from "./http-response-empty.js";
 import {
+  bindUnsentActualRequest,
+  unsentActualRequestHTML,
+} from "./http-unsent-actual-request.js";
+import {
   httpResponseHeaderRows,
   httpResponseHeadersHTML,
 } from "./http-response-headers.js";
@@ -2631,6 +2635,7 @@ function paramPanel(r, param, design = false) {
   };
   return `<div class="notice">${descriptions[param]}</div><pre>${esc(JSON.stringify(r[param], null, 2))}</pre><button id="edit-operations">编辑${param === "assertions" ? "断言" : param === "extract" ? "提取规则" : "操作"}</button>`;
 }
+const unsentActualRequestSections = new WeakMap();
 function responseContent(responseHeaders) {
   if (responseTab === "examples")
     return (
@@ -2642,6 +2647,17 @@ function responseContent(responseHeaders) {
         .join("") || '<div class="empty"><p>在 Mock 页添加响应示例</p></div>'
     );
   if (!response) {
+    const owner = request();
+    if (
+      !busy &&
+      responseTab === "request" &&
+      owner &&
+      owner.graphqlEditorVersion !== 1
+    )
+      return unsentActualRequestHTML(
+        owner?.method,
+        unsentActualRequestSections.get(owner),
+      );
     const data = !busy && unsentResponseData(responseTab);
     return (
       data ||
@@ -3099,6 +3115,23 @@ function bind() {
       project,
       project.plans.find((item) => item.id === planId),
     );
+  const unsentActualRequest = $(".actual-request-unsent");
+  if (unsentActualRequest) {
+    const owner = project;
+    const ownedRequest = request();
+    bindUnsentActualRequest(
+      unsentActualRequest,
+      () =>
+        project === owner &&
+        request() === ownedRequest &&
+        page === "apis" &&
+        mode === "debug" &&
+        responseTab === "request" &&
+        !busy &&
+        !response,
+      (section) => unsentActualRequestSections.set(ownedRequest, section),
+    );
+  }
   const successBody = $(".http-success-response");
   if (successBody) {
     const ownedResponse = response;
