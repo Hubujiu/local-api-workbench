@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { httpAuthPane, httpDebugAuthPane } from "../public/auth-view.js";
+import { httpAuthPane, httpRequestAuthPane } from "../public/auth-view.js";
 import { authTypes } from "../public/auth-model.js";
 import {
   captureDebugAuthOperation,
@@ -25,8 +25,8 @@ const project = {
   },
 };
 
-test("Debug picker projects real modes in native order and leaves the Design editor separate", () => {
-  assert.deepEqual(debugAuthChoices.slice(0, 8), [
+test("ordinary Design and Debug project the same available modes in native order", () => {
+  assert.deepEqual(debugAuthChoices, [
     "inherit",
     "none",
     "apiKey",
@@ -35,19 +35,29 @@ test("Debug picker projects real modes in native order and leaves the Design edi
     "jwt",
     "digest",
     "oauth1",
+    "oauth2",
+    "hawk",
+    "aws",
+    "ntlm",
+    "edgegrid",
+    "asap",
   ]);
   assert.deepEqual(
     new Set(debugAuthChoices),
     new Set(["inherit", ...authTypes]),
   );
-  const html = httpDebugAuthPane(normalizeRequest(fixture));
+  const html = httpRequestAuthPane(normalizeRequest(fixture));
   assert.match(html, /value="inherit" selected>继承父级/);
   assert.match(html, /value="none">无需认证/);
   assert.doesNotMatch(html, /inherit-auth|data-auth=/);
   assert.match(
-    httpDebugAuthPane({ auth: { type: "bearer", token: "<script>" } }),
+    httpRequestAuthPane({ auth: { type: "bearer", token: "<script>" } }),
     /data-auth="token"[^>]*value="&lt;script&gt;"[^>]*type="password"/,
   );
+  const design = httpRequestAuthPane(normalizeRequest(fixture), "design");
+  assert.match(design, /http-design-auth-pane/);
+  assert.doesNotMatch(design, /inherit-auth|data-auth=/);
+  assert.match(design, /value="inherit" selected>继承父级/);
   assert.match(httpAuthPane({ type: "none" }), /id="inherit-auth"/);
   assert.equal(
     usesDebugAuthChoice({ settings: { nativeInheritance: {} } }, {}),
@@ -99,8 +109,13 @@ test("Debug drafts are isolated per auth type, retain source metadata, and never
   const legacy = { type: "none", token: "fictional-legacy-inactive" };
   const request = normalizeRequest({ ...fixture, auth: legacy });
   const drafts = new Map();
+  assert.deepEqual(
+    request.auth,
+    legacy,
+    "viewing does not rewrite imported legacy fields",
+  );
   updateDebugAuthChoice(request, "none", drafts);
-  assert.deepEqual(request.auth, legacy);
+  assert.deepEqual(request.auth, { type: "none" });
   updateDebugAuthChoice(request, "bearer", drafts);
   assert.deepEqual(request.auth, { type: "bearer" });
   request.auth.token = "bearer-only";
@@ -111,7 +126,7 @@ test("Debug drafts are isolated per auth type, retain source metadata, and never
   updateDebugAuthChoice(request, "bearer", drafts);
   assert.equal(restored(), "bearer-only");
   updateDebugAuthChoice(request, "inherit", drafts);
-  assert.deepEqual(request.auth, legacy);
+  assert.deepEqual(request.auth, { type: "none" });
   assert.equal(
     applySharedAuth(project, request).auth.username,
     "fictional-folder",
@@ -128,8 +143,8 @@ test("frozen none never inherits and in-flight authentication is fenced to the e
   const request = normalizeRequest({ ...fixture, authSnapshot: true });
   const drafts = new Map();
   assert.equal(debugAuthChoice(request), "none");
-  assert.match(httpDebugAuthPane(request), /value="inherit" disabled/);
-  assert.match(httpDebugAuthPane(request), /认证已固定/);
+  assert.match(httpRequestAuthPane(request), /value="inherit" disabled/);
+  assert.match(httpRequestAuthPane(request), /认证已固定/);
   assert.throws(
     () => updateDebugAuthChoice(request, "inherit", drafts),
     /认证已固定/,
@@ -160,4 +175,28 @@ test("frozen none never inherits and in-flight authentication is fenced to the e
     "a switch away and back replaces the auth owner even with identical data",
   );
   assert.equal(request.authSnapshot, true);
+});
+
+test("ordinary Key/Basic fields have associated labels and hide private values without rewriting imported options", () => {
+  const key = httpRequestAuthPane(
+    {
+      auth: {
+        type: "apiKey",
+        key: "X-Demo",
+        value: "<unsafe>",
+        in: "query",
+        queryEncoding: "apipost",
+      },
+    },
+    "design",
+  );
+  assert.match(key, /for="http-auth-api-key-key">Key/);
+  assert.match(key, /data-auth="value" value="&lt;unsafe&gt;" type="password"/);
+  assert.match(key, /value="header" disabled>Header/);
+  assert.match(key, /value="query" selected>Query Params/);
+  const basic = httpRequestAuthPane({ auth: { type: "basic" } });
+  assert.match(basic, /for="http-auth-basic-username">Username/);
+  assert.match(basic, /data-auth="password"[^>]*type="password"/);
+  assert.match(basic, /用户名（支持变量）/);
+  assert.match(basic, /密码（支持变量）/);
 });
