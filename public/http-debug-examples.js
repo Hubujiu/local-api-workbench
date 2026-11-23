@@ -62,6 +62,14 @@ export function debugExampleChoices(request, selected) {
   };
 }
 
+export function editableDebugExamplePreset(request, key) {
+  return (
+    ordinaryExampleDraft(request) &&
+    request.examples.length < 1000 &&
+    presets.some((preset) => preset.key === key)
+  );
+}
+
 function editableMedia(row) {
   const contentTypes = Object.entries(row?.headers || {}).filter(
     ([key]) => key.toLowerCase() === "content-type",
@@ -140,7 +148,88 @@ export function prepareDebugExampleMetadata(request, row, name, rawStatus) {
 
 export function createDebugExampleDrafts() {
   const invalid = new WeakMap();
+  const implicit = new WeakMap();
+  const cleanLineage = new WeakMap();
+  const pinned = new WeakSet();
   return {
+    soleImplicitEdit(owner, row, version, dirty) {
+      if (!implicit.has(row) || pinned.has(row)) return false;
+      const lineage = cleanLineage.get(row);
+      return (
+        !dirty || (lineage?.owner === owner && lineage.version === version)
+      );
+    },
+    rememberSoleEdit(owner, row, version) {
+      cleanLineage.set(row, { owner, version });
+    },
+    pinSave(owner, snapshot) {
+      const captured = [];
+      for (const [requestIndex, request] of owner.requests.entries())
+        for (const [rowIndex, row] of (request.examples || []).entries())
+          if (implicit.has(row)) {
+            const example = snapshot.requests[requestIndex].examples[rowIndex];
+            captured.push({ id: request.id, rowIndex, row, example });
+            pinned.add(row);
+          }
+      return {
+        confirm(saved) {
+          if (!captured.length) return;
+          const byId = new Map(
+            saved.requests.map((request) => [request.id, request]),
+          );
+          for (const { id, rowIndex, example } of captured) {
+            const confirmed = byId.get(id)?.examples?.[rowIndex];
+            if (
+              !confirmed ||
+              confirmed.name !== example.name ||
+              confirmed.status !== example.status ||
+              confirmed.body !== example.body ||
+              confirmed.headers?.["content-type"] !==
+                example.headers["content-type"]
+            )
+              throw Error("响应示例保存回执不完整或不匹配");
+          }
+          for (const { row } of captured) {
+            pinned.delete(row);
+            cleanLineage.delete(row);
+            implicit.delete(row);
+          }
+        },
+        reject() {
+          for (const { row } of captured) pinned.delete(row);
+        },
+      };
+    },
+    implicitPreset(row) {
+      return implicit.get(row);
+    },
+    materializePreset(request, key, body) {
+      if (!body.trim() || !editableDebugExamplePreset(request, key)) return;
+      const preset = presets.find((item) => item.key === key);
+      const row = prepareDebugExampleMetadata(
+        request,
+        undefined,
+        preset.name,
+        String(preset.status),
+      );
+      request.examples.push(row);
+      implicit.set(row, key);
+      return row;
+    },
+    keepExample(row) {
+      implicit.delete(row);
+      cleanLineage.delete(row);
+    },
+    returnToPreset(request, row, body) {
+      const key = implicit.get(row);
+      const index = request.examples.indexOf(row);
+      if (!key || index < 0 || pinned.has(row) || body.trim()) return;
+      request.examples.splice(index, 1);
+      implicit.delete(row);
+      cleanLineage.delete(row);
+      invalid.delete(row);
+      return key;
+    },
     read: (row) => invalid.get(row),
     assertReplaceable(row) {
       if (invalid.has(row))
@@ -167,7 +256,8 @@ export function debugExamplesHTML(request, selected, drafts, esc) {
   const { choices, current } = debugExampleChoices(request, selected);
   const canAuthor = ordinaryExampleDraft(request);
   const row = current?.row,
-    editable = editableDebugExample(request, row);
+    editable = editableDebugExample(request, row),
+    editablePreset = !row && editableDebugExamplePreset(request, current?.key);
   const invalid = drafts.read(row);
   const format = editable
     ? editableMedia(row) === "json"
@@ -179,8 +269,8 @@ export function debugExamplesHTML(request, selected, drafts, esc) {
     <div class="http-debug-example-tools"><div class="http-debug-example-choices" role="group" aria-label="示例列表">${choices.map(({ key, name, row: stored }) => `<button type="button" data-debug-example-choice="${key}" class="ghost" aria-pressed="${key === current?.key}"${stored ? "" : ' title="未保存的示例预设"'}>${esc(name)}</button>`).join("")}</div>
     ${canAuthor && current && (!row || editable) ? '<button id="debug-example-edit" type="button" class="ghost" aria-haspopup="dialog" aria-expanded="false" aria-controls="debug-example-settings">编辑</button>' : ""}
     ${canAuthor ? '<button id="debug-example-add" type="button" class="ghost" aria-haspopup="dialog" aria-expanded="false" aria-controls="debug-example-settings"><span aria-hidden="true">＋</span> 新建期望</button>' : ""}
-    ${format ? `<small class="http-debug-example-format">${format} · ${esc(status)}</small>` : ""}</div>
-    <textarea id="debug-example-body" aria-label="响应示例正文" spellcheck="false" aria-invalid="${Boolean(invalid)}" aria-describedby="debug-example-error"${editable ? "" : " readonly"} placeholder="${row ? "" : canAuthor ? "预设未保存。请选择编辑或新建期望。" : "没有可显示的示例。"}">\n${esc(invalid?.body ?? (typeof row?.body === "string" ? row.body : ""))}</textarea>
+    <small class="http-debug-example-format"${format ? "" : " hidden"}>${format ? `${format} · ${esc(status)}` : ""}</small></div>
+    <textarea id="debug-example-body" aria-label="响应示例正文" spellcheck="false" aria-invalid="${Boolean(invalid)}" aria-describedby="debug-example-error"${editable || editablePreset ? "" : " readonly"} placeholder="${row ? "" : editablePreset ? "输入正文以创建示例草稿（纯文本）。" : canAuthor ? "响应示例已达到数量上限。" : "没有可显示的示例。"}">\n${esc(invalid?.body ?? (typeof row?.body === "string" ? row.body : ""))}</textarea>
     <p id="debug-example-error" role="status" ${invalid ? "" : "hidden"}>${esc(invalid?.message ?? "")}</p>
     ${row && !editable ? '<p class="muted">此示例只读。请在原响应定义或 Mock 页编辑，以保留来源和媒体信息。</p>' : ""}
     ${canAuthor ? '<form id="debug-example-settings" popover="auto" role="dialog" aria-label="响应示例设置"><label>名称<input id="debug-example-name" maxlength="8192" required></label><label>状态码<input id="debug-example-status" inputmode="numeric" maxlength="3" required></label><div><button id="debug-example-cancel" type="button" class="ghost">取消</button><button type="submit" class="primary">确定</button></div></form>' : ""}

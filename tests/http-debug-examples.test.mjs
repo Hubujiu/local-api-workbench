@@ -5,6 +5,7 @@ import {
   createDebugExampleDrafts,
   debugExampleChoices,
   editableDebugExample,
+  editableDebugExamplePreset,
   prepareDebugExampleMetadata,
   validateDebugExampleBody,
 } from "../public/http-debug-examples.js";
@@ -158,4 +159,67 @@ test("only unambiguous canonical supported media enter the inline editor", () =>
     support({ "content-type": "text/plain" }, { nativeMockRoute: {} }),
     false,
   );
+});
+
+test("direct typing materializes independent defaults only on meaningful text and blank undo removes only its own row", () => {
+  const drafts = createDebugExampleDrafts();
+  const r = { examples: [] };
+  assert.equal(editableDebugExamplePreset(r, "success"), true);
+  assert.equal(drafts.materializePreset(r, "success", " \n"), undefined);
+  assert.deepEqual(r.examples, []);
+  const ok = drafts.materializePreset(r, "success", "  {}");
+  drafts.edit(r, ok, "  {}");
+  const failure = drafts.materializePreset(r, "failure", "未通过");
+  drafts.edit(r, failure, "未通过");
+  assert.deepEqual(
+    r.examples.map(({ status, body }) => [status, body]),
+    [
+      [200, "  {}"],
+      [400, "未通过"],
+    ],
+  );
+  assert.deepEqual(ok.headers, { "content-type": "text/plain" });
+  assert.equal(drafts.returnToPreset({ examples: [] }, ok, ""), undefined);
+  assert.equal(drafts.returnToPreset(r, ok, ""), "success");
+  assert.deepEqual(r.examples, [failure]);
+  assert.equal(drafts.implicitPreset(ok), undefined);
+  drafts.keepExample(failure);
+  assert.equal(drafts.returnToPreset(r, failure, ""), undefined);
+  drafts.edit(r, failure, "");
+  assert.equal(r.examples[0].body, "");
+});
+
+test("oversized first direct input remains recoverable and cannot be saved as empty", () => {
+  const drafts = createDebugExampleDrafts();
+  const r = { examples: [] };
+  const body = "巨".repeat(100000);
+  const row = drafts.materializePreset(r, "success", body);
+  drafts.edit(r, row, body);
+  assert.equal(drafts.pending([r]), true);
+  assert.equal(row.body, "");
+  assert.equal(drafts.read(row).body, body);
+  assert.equal(drafts.returnToPreset(r, row, row.body), "success");
+  assert.equal(drafts.pending([r]), false);
+  assert.deepEqual(r.examples, []);
+  assert.equal(
+    editableDebugExamplePreset({ examples: new Array(1000) }, "failure"),
+    false,
+  );
+});
+
+test("clean lineage is exact to the current version, row and project owner", () => {
+  const drafts = createDebugExampleDrafts();
+  const request = { examples: [] };
+  const owner = { requests: [request] };
+  const a = drafts.materializePreset(request, "success", "a");
+  assert.equal(drafts.soleImplicitEdit(owner, a, 5, false), true);
+  drafts.rememberSoleEdit(owner, a, 6);
+  assert.equal(drafts.soleImplicitEdit(owner, a, 6, true), true);
+  assert.equal(drafts.soleImplicitEdit(owner, a, 7, true), false);
+  assert.equal(drafts.soleImplicitEdit({ ...owner }, a, 6, true), false);
+  const b = drafts.materializePreset(request, "failure", "b");
+  assert.equal(drafts.soleImplicitEdit(owner, b, 6, true), false);
+  assert.equal(drafts.returnToPreset(request, a, ""), "success");
+  assert.equal(drafts.soleImplicitEdit(owner, a, 6, true), false);
+  assert.deepEqual(request.examples, [b]);
 });
