@@ -43,12 +43,16 @@ export function scriptSnippetInsertion(source, selectionEnd, code) {
   };
 }
 
+const snippetsLabel = "常用脚本";
+
 export function httpScriptSnippetWorkspaceHTML(editor, stage, folded) {
   return `<div class="http-script-workspace" data-http-script-stage="${stage}" data-snippets-folded="${folded}">
     ${editor}
     <aside class="http-script-snippets" aria-label="常用脚本">
-      <button type="button" class="ghost http-script-snippets-toggle" aria-expanded="${!folded}" aria-controls="http-script-snippet-options">
-        <span>常用脚本</span><span class="http-script-snippets-chevron" aria-hidden="true">›</span>
+      <button type="button" class="ghost http-script-snippets-toggle" aria-label="${snippetsLabel}" aria-expanded="${!folded}" aria-controls="http-script-snippet-options">
+        <span class="http-script-snippets-label" aria-hidden="true">${snippetsLabel}</span>
+        <span class="http-script-snippets-stacked-label" aria-hidden="true">${[...snippetsLabel].map((character) => `<span>${character}</span>`).join("")}</span>
+        <span class="http-script-snippets-chevron" aria-hidden="true">›</span>
       </button>
       <div id="http-script-snippet-options" ${folded ? "hidden" : ""}>
         ${httpScriptSnippets(stage)

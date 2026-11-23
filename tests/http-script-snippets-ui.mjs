@@ -159,20 +159,24 @@ try {
   const folded = await panel.boundingBox();
   assert.equal(folded.width, 40);
   const foldedLayout = await toggle.evaluate((button) => {
-    const characters = button.firstElementChild.firstChild;
+    const stack = button.querySelector(".http-script-snippets-stacked-label");
     const rect = (node) => {
-      const { left, right, top, bottom } = node.getBoundingClientRect();
-      return { left, right, top, bottom };
+      const { left, right, top, bottom, height } = node.getBoundingClientRect();
+      return { left, right, top, bottom, height, center: (top + bottom) / 2 };
     };
+    const rows = [...stack.children].map((element) => {
+      const glyph = document.createRange();
+      glyph.selectNodeContents(element);
+      return {
+        character: element.textContent,
+        row: rect(element),
+        text: rect(glyph),
+      };
+    });
     return {
-      label: characters.textContent,
-      glyphs: [...characters.textContent].map((_, index) => {
-        const letter = document.createRange();
-        letter.setStart(characters, index);
-        letter.setEnd(characters, index + 1);
-        return rect(letter);
-      }),
-      chevron: rect(button.lastElementChild),
+      rows,
+      stack: rect(stack),
+      chevron: rect(button.querySelector(".http-script-snippets-chevron")),
       rail: rect(button.closest("aside")),
     };
   });
@@ -180,25 +184,38 @@ try {
     "HTTP_SCRIPT_SNIPPETS_FOLDED_GLYPHS",
     JSON.stringify(foldedLayout),
   );
-  assert.equal(foldedLayout.label, "常用脚本");
-  assert.equal(foldedLayout.glyphs.length, 4);
-  const { glyphs, chevron, rail } = foldedLayout;
-  for (const [index, glyph] of glyphs.entries()) {
-    assert(glyph.right > glyph.left && glyph.bottom > glyph.top);
-    assert(glyph.left >= rail.left && glyph.right <= rail.right);
-    if (index)
-      assert(
-        glyph.top >= glyphs[index - 1].bottom - 0.5,
-        "Chinese characters must not overlap",
-      );
-  }
-  assert(
-    chevron.top >= glyphs.at(-1).bottom - 0.5,
-    "Chevron follows the label",
+  await capture("pre-desktop-folded");
+  const { rows, stack, chevron, rail } = foldedLayout;
+  assert.deepEqual(
+    rows.map(({ character }) => character),
+    ["常", "用", "脚", "本"],
   );
+  assert(stack.height >= 50, "Folded label has dedicated vertical space");
+  for (const [index, { row, text }] of rows.entries()) {
+    assert(
+      row.height >= 14 && row.right > row.left,
+      "Every glyph has a real row",
+    );
+    assert(
+      text.height >= 10 && text.right > text.left,
+      "Every character has a horizontally typeset glyph",
+    );
+    assert(row.left >= rail.left && row.right <= rail.right);
+    if (index) {
+      const previous = rows[index - 1];
+      assert(
+        row.center - previous.row.center >= 12,
+        "Folded glyph centers are visibly distinct",
+      );
+      assert(
+        text.top >= previous.text.bottom - 0.5,
+        "Glyph boxes must not overlap",
+      );
+    }
+  }
+  assert(chevron.top >= stack.bottom, "Chevron follows the last glyph");
   assert(chevron.bottom <= rail.bottom, "Chevron remains in its rail");
   assert.equal(await editor.inputValue(), afterPre);
-  await capture("pre-desktop-folded");
 
   await showPost();
   assert.equal(await editor.inputValue(), "");
@@ -237,6 +254,14 @@ try {
   );
   await toggle.press("Enter");
   assert.equal(await toggle.getAttribute("aria-expanded"), "false");
+  assert.equal(
+    await toggle.locator(".http-script-snippets-label").isVisible(),
+    true,
+  );
+  assert.equal(
+    await toggle.locator(".http-script-snippets-stacked-label").isVisible(),
+    false,
+  );
   await toggle.press("Enter");
   assert.equal(await toggle.getAttribute("aria-expanded"), "true");
   assert.equal(await editor.inputValue(), afterPre);

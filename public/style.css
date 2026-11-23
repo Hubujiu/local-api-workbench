@@ -7093,6 +7093,10 @@ body.dark .http-pre-wait-title {
 .http-script-snippets-chevron {
   font-size: calc(18 * var(--app-type-unit));
 }
+.http-script-snippets-stacked-label {
+  display: none;
+}
+
 @media (min-width: 761px) {
   .http-script-workspace[data-snippets-folded="true"]
     .http-script-snippets-toggle {
@@ -7101,14 +7105,15 @@ body.dark .http-pre-wait-title {
     padding: 7px 0;
   }
   .http-script-workspace[data-snippets-folded="true"]
-    .http-script-snippets-toggle
-    > span:first-child {
-    writing-mode: vertical-rl;
-    text-orientation: upright;
-    white-space: nowrap;
-    line-height: 1.2;
-    letter-spacing: 2px;
-    flex: 0 0 auto;
+    .http-script-snippets-label {
+    display: none;
+  }
+  .http-script-workspace[data-snippets-folded="true"]
+    .http-script-snippets-stacked-label {
+    display: grid;
+    grid-auto-rows: minmax(15px, max-content);
+    justify-items: center;
+    line-height: max(15px, 1.15em);
   }
   .http-script-workspace[data-snippets-folded="true"]
     .http-script-snippets-chevron {
