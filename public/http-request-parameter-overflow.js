@@ -81,6 +81,16 @@ export function bindHTTPRequestParameterOverflow(editor, { select, onError }) {
             (option) => option.dataset.overflowParam === focused,
           ) || options()[0],
         );
+    } else {
+      // Live tab labels can change without changing which tabs are clipped.
+      prior.forEach((option, index) => {
+        const tab = hidden[index];
+        const checked = tab.getAttribute("aria-pressed");
+        if (option.getAttribute("aria-checked") !== checked)
+          option.setAttribute("aria-checked", checked);
+        if (option.textContent !== tab.textContent)
+          option.textContent = tab.textContent;
+      });
     }
     return hidden.length > 0;
   };

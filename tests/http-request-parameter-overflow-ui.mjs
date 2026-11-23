@@ -187,6 +187,31 @@ try {
   assert.equal(await assertFull("extract"), true);
   await trigger.press("Enter");
   await menu.waitFor();
+  const hiddenBefore = await actualKeys();
+  const originalPath = await menuItem("Path").elementHandle();
+  await menuItem("Path").press("Escape");
+  await menu.waitFor({ state: "hidden" });
+  await url.fill("{{visual-fixture-base}}/draft/{revision}");
+  assert.equal(await tab("path").textContent(), "Path (1)");
+  await trigger.press("Enter");
+  await menu.waitFor();
+  assert.deepEqual(await actualKeys(), hiddenBefore);
+  assert.equal(
+    await menuItem("Path (1)").evaluate(
+      (node, before) => node === before,
+      originalPath,
+    ),
+    true,
+    "refresh a cached entry in place when clipped IDs have not changed",
+  );
+  assert.equal(await menuItem("Path").count(), 0);
+  await menuItem("Path (1)").press("Escape");
+  await menu.waitFor({ state: "hidden" });
+  await url.fill("{{visual-fixture-base}}/draft");
+  await trigger.press("Enter");
+  await menu.waitFor();
+  assert.deepEqual(await actualKeys(), hiddenBefore);
+  assert.equal(await menuItem("Path").count(), 1);
   await menuItem("Body (1)").press("Enter");
   await menu.waitFor({ state: "hidden" });
   assert.equal(await raw.inputValue(), draft);
