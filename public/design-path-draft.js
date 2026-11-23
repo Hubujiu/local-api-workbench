@@ -64,7 +64,8 @@ export function createDesignPathDrafts() {
   }
   return {
     isLinked(project, request, row) {
-      return previous(project, request)?.get(row) === row.key;
+      const sourceKey = previous(project, request)?.get(row);
+      return sourceKey !== undefined && sourceKey === row.key;
     },
     sync(project, request) {
       if (!usesDesignPathDraft(project, request)) return false;
@@ -96,7 +97,9 @@ export function createDesignPathDrafts() {
         path.length !== request.path.length ||
         path.some((row, index) => row !== request.path[index]);
       if (changed) request.path = path;
-      return changed;
+      // An edited row can remain in the exact same position while becoming
+      // manual. Signal that transition so the mounted row is editable again.
+      return changed || keep.size !== owned.size;
     },
   };
 }

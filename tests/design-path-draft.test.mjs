@@ -68,6 +68,27 @@ test("prunes only untouched own rows; never loses authored examples, existing de
   assert.equal(reloaded.path[0].key, "id");
 });
 
+test("ownership-only detach repaints the same kept row and cannot relink it on reintroduction", () => {
+  const owner = { configRevision: 1 };
+  const request = { url: "/{id}/{same}", path: [] };
+  const state = createDesignPathDrafts();
+  assert.equal(state.isLinked(owner, request, {}), false);
+  assert.equal(state.sync(owner, request), true);
+  const array = request.path;
+  const [edited, unchanged] = array;
+  edited.value = "0007";
+  request.url = "/:id/{same}/{same}?x={ignored}#fragment";
+  assert.equal(state.sync(owner, request), true);
+  assert.strictEqual(request.path, array);
+  assert.equal(edited.value, "0007");
+  assert.equal(state.isLinked(owner, request, edited), false);
+  assert.equal(state.isLinked(owner, request, unchanged), true);
+  request.url = "/{id}/{same}";
+  assert.equal(state.sync(owner, request), false);
+  assert.strictEqual(request.path, array);
+  assert.equal(state.isLinked(owner, request, edited), false);
+});
+
 test("guards compatibility-owned path definitions and exports plain rows using the existing runtime contract", () => {
   const request = normalizeRequest({
     name: "Path fixture",
