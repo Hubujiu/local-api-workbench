@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createDebugExampleDrafts } from "../public/http-debug-examples.js";
 import { createProjectImportGuard } from "../public/project-import-guard.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -421,6 +422,7 @@ async function openHarness(
   initial = fixture(),
   controller = createNativeRequestLifecycle(),
   graphqlDrafts = createGraphQLWorkspaceDrafts(),
+  debugExampleDrafts = createDebugExampleDrafts(),
 ) {
   const app = await readFile(
     new URL("../public/app.js", import.meta.url),
@@ -442,6 +444,7 @@ async function openHarness(
     "api",
     "graphqlDrafts",
     "unappliedGraphQL",
+    "debugExampleDrafts",
     `
     let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
@@ -466,6 +469,7 @@ async function openHarness(
       api,
       graphqlDrafts,
       unappliedGraphQL,
+      debugExampleDrafts,
     ),
     gets,
     controller,
@@ -485,6 +489,30 @@ test("actual project reload does not read or replace an owner with an unapplied 
   assert.equal(h.getState().project, owner);
   assert.equal(graphqlRequest.body, '{"query":""}');
   assert.equal(drafts.discard(graphqlRequest), true);
+  const reload = h.open(owner.id);
+  assert.equal(h.gets.length, 1);
+  h.gets[0].resolve(structuredClone(owner));
+  assert.equal(await reload, true);
+});
+
+test("project reload and picker switching preserve an invalid response example draft until recovery", async () => {
+  const owner = fixture();
+  const row = { name: "Working example", status: 200, body: "{}" };
+  const request = owner.requests[0];
+  request.examples = [row];
+  const drafts = createDebugExampleDrafts();
+  const h = await openHarness(owner, undefined, undefined, drafts);
+  drafts.edit(request, row, "{ invalid");
+  await assert.rejects(h.open(owner.id), /无效的响应示例正文/);
+  await assert.rejects(
+    h.open("another", { fromPicker: true }),
+    /无效的响应示例正文/,
+  );
+  assert.deepEqual(h.gets, []);
+  assert.equal(h.getState().project, owner);
+  assert.equal(drafts.read(row).body, "{ invalid");
+  assert.equal(row.body, "{}");
+  assert.equal(drafts.clear(row), true);
   const reload = h.open(owner.id);
   assert.equal(h.gets.length, 1);
   h.gets[0].resolve(structuredClone(owner));

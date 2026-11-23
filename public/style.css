@@ -7206,3 +7206,109 @@ body.dark .http-response-header-count {
     width: 38%;
   }
 }
+
+.http-debug-examples {
+  min-width: 0;
+  padding-top: 13px;
+}
+.http-debug-example-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  min-width: 0;
+}
+.http-debug-example-choices {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: min(65%, 520px);
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.http-debug-example-tools button {
+  flex: none;
+  min-height: 26px;
+  padding-block: 2px;
+  padding-inline: 8px;
+  border: 1px solid transparent;
+}
+.http-debug-example-choices button {
+  max-width: 190px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.http-debug-example-choices [aria-pressed="true"] {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--accent-text, var(--accent));
+}
+#debug-example-add {
+  color: var(--green);
+}
+.http-debug-example-format {
+  color: var(--muted);
+  white-space: nowrap;
+}
+#debug-example-body {
+  display: block;
+  width: calc(100% - 42px);
+  min-height: 160px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  resize: vertical;
+  font-family: var(--mono, monospace);
+}
+#debug-example-body[aria-invalid="true"] {
+  border-color: var(--red);
+}
+#debug-example-error {
+  color: var(--red);
+  margin: 6px 0;
+}
+#debug-example-settings {
+  position: fixed;
+  inset: auto;
+  z-index: 1;
+  width: min(280px, calc(100vw - 16px));
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 14%);
+}
+#debug-example-settings > label {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  align-items: center;
+  margin: 0 0 8px;
+}
+#debug-example-settings input {
+  width: 100%;
+  min-width: 0;
+}
+#debug-example-settings > div {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+@media (max-width: 760px) {
+  .http-debug-example-tools {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .http-debug-example-choices {
+    flex: 0 1 100%;
+    max-width: 100%;
+  }
+  .http-debug-example-tools button {
+    padding-inline: 5px;
+  }
+  #debug-example-body {
+    width: 100%;
+  }
+}

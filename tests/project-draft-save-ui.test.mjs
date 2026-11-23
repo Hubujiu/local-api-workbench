@@ -1,3 +1,4 @@
+import { createDebugExampleDrafts } from "../public/http-debug-examples.js";
 import { createHTTPPreWaitDrafts } from "../public/http-pre-wait.js";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -64,6 +65,7 @@ function harness(initial = fixture(), transport) {
     "changedProvisionalQuery",
     "provisionalQuery",
     "httpPreWaitDrafts",
+    "debugExampleDrafts",
     `
  const debugAuthDrafts = new WeakMap();
  const request=()=>project.requests.find((entry)=>entry.id===current);
@@ -79,7 +81,7 @@ function harness(initial = fixture(), transport) {
  const document={querySelectorAll:()=>[]},sessionStorage={setItem(){}},collect=()=>{},render=()=>{rendered=structuredClone(project)},toast=()=>{},confirm=()=>true;
  const mark=()=>{dirty=true;editVersion++};
  ${saveCode}\n${openCode}\n${errorCode}
- return {save,open:openProject,debugAuthDrafts,editError(){editErrorCode(0);return modalCallback()},rendered:()=>rendered,edit(){project.name='new draft';mark()},replace(p){project=p;mark()},rollback:(e,fn)=>rollbackProjectSave(e,fn),state:()=>({project,dirty,saving}),mark};`,
+ return {save,open:openProject,debugAuthDrafts,debugExampleDrafts,editError(){editErrorCode(0);return modalCallback()},rendered:()=>rendered,edit(){project.name='new draft';mark()},replace(p){project=p;mark()},rollback:(e,fn)=>rollbackProjectSave(e,fn),state:()=>({project,dirty,saving}),mark};`,
   );
   const provisional = createProvisionalQuery();
   return {
@@ -90,6 +92,7 @@ function harness(initial = fixture(), transport) {
       changedProvisionalQuery,
       provisional,
       createHTTPPreWaitDrafts(),
+      createDebugExampleDrafts(),
     ),
     guard,
     calls,
@@ -426,4 +429,59 @@ test("configuration revision can never exceed overall revision", async () => {
     p = h.save();
   h.calls[0].resolve({ ...saved(h.calls[0].data), revision: 2 });
   await assert.rejects(p, /尚未确认/);
+});
+
+test("acknowledged snapshot finalizes an implicit example even if newer edits leave the owner mounted", async () => {
+  const owner = fixture();
+  const request = owner.requests[0];
+  request.examples = [];
+  const h = harness(owner);
+  const drafts = h.debugExampleDrafts;
+  const row = drafts.materializePreset(request, "success", "submitted body");
+  drafts.edit(request, row, "submitted body");
+  const running = h.save();
+  assert.equal(h.calls.length, 1);
+  assert.equal(drafts.returnToPreset(request, row, ""), undefined);
+  drafts.edit(request, row, "");
+  h.mark();
+  h.edit();
+  h.calls[0].resolve(saved(h.calls[0].data));
+  assert.equal(await running, null);
+  assert.equal(h.state().project, owner);
+  assert.equal(h.state().dirty, true);
+  assert.equal(owner.name, "new draft");
+  assert.equal(h.calls[0].data.requests[0].examples[0].body, "submitted body");
+  assert.deepEqual(request.examples, [row]);
+  assert.equal(row.body, "");
+  assert.equal(drafts.implicitPreset(row), undefined);
+  assert.equal(drafts.returnToPreset(request, row, ""), undefined);
+});
+
+test("definite rejection releases a preset save pin while ambiguous acknowledgement retains it", async () => {
+  for (const scenario of ["definite rejection", "wrong example receipt"]) {
+    const owner = fixture();
+    const request = owner.requests[0];
+    request.examples = [];
+    const h = harness(owner);
+    const drafts = h.debugExampleDrafts;
+    const row = drafts.materializePreset(request, "success", "draft");
+    drafts.edit(request, row, "draft");
+    const running = h.save();
+    assert.equal(drafts.returnToPreset(request, row, ""), undefined);
+    if (scenario === "definite rejection") {
+      h.calls[0].reject(rejection());
+      await assert.rejects(running, /rejected/);
+      assert.equal(drafts.returnToPreset(request, row, ""), "success");
+    } else {
+      const response = saved(h.calls[0].data);
+      response.requests[0].examples[0].body = "not the submitted body";
+      h.calls[0].resolve(response);
+      await assert.rejects(running, /保存结果尚未确认/);
+      assert.equal(drafts.returnToPreset(request, row, ""), undefined);
+      assert.equal(drafts.implicitPreset(row), "success");
+      assert.equal(h.state().project, owner);
+      assert.equal(row.body, "draft");
+      assert.equal(owner.configRevision, 1);
+    }
+  }
 });

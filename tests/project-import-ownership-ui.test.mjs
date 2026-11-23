@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createDebugExampleDrafts } from "../public/http-debug-examples.js";
 import assert from "node:assert/strict";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -63,6 +64,7 @@ function harness({
     "hooks",
     "importMode",
     "localProjectImportMarkup",
+    "debugExampleDrafts",
     `
     let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
@@ -92,6 +94,7 @@ function harness({
       hooks,
       mode,
       localProjectImportMarkup,
+      createDebugExampleDrafts(),
     ),
     calls,
     guard,

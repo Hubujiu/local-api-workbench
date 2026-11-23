@@ -1,3 +1,4 @@
+import { createDebugExampleDrafts } from "../public/http-debug-examples.js";
 import { createHTTPPreWaitDrafts } from "../public/http-pre-wait.js";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -97,6 +98,7 @@ function harness(initial = fixture()) {
     "changedProvisionalQuery",
     "provisionalQuery",
     "httpPreWaitDrafts",
+    "debugExampleDrafts",
     "nativeRequestLifecycle",
     "adoptVariableWrites",
     "assert",
@@ -132,6 +134,7 @@ function harness(initial = fixture()) {
       changedProvisionalQuery,
       createProvisionalQuery(),
       createHTTPPreWaitDrafts(),
+      createDebugExampleDrafts(),
       native,
       adoptVariableWrites,
       assert,
