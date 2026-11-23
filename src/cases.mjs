@@ -3,7 +3,9 @@ import { validatePostmanOAuth2Project } from "../public/postman-oauth2-model.js"
 import { randomUUID } from "node:crypto";
 import { normalizeRequest } from "./core.mjs";
 import { activeGraphQLRequest } from "../public/graphql-named-queries.js";
+import { rejectHTTPPreWait } from "./http-pre-wait.mjs";
 export function snapshotCase(input) {
+  rejectHTTPPreWait(input?.request, "冻结用例");
   validatePostmanOAuth2Project({ cases: [input] });
   if (input?.request?.nativeInheritance !== undefined)
     throw Error("冻结用例须先解析原生继承图，不能保留live绑定");

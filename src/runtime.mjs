@@ -132,6 +132,7 @@ import {
   projectFingerprint,
 } from "./project-files.mjs";
 import { validateMockRules } from "./mock.mjs";
+import { rejectHTTPPreWait } from "./http-pre-wait.mjs";
 import { validateResources } from "./resources.mjs";
 import { snapshotCase } from "./cases.mjs";
 import { validateEnvironmentModel } from "./environments.mjs";
@@ -1349,6 +1350,7 @@ export async function executeRequest(
   if (input?.nativeInheritance !== undefined)
     throw Error("请求须先按当前项目解析原生继承图");
 
+  rejectHTTPPreWait(input, "直接 HTTP 传输");
   rejectGraphQLVariableTemplate(input);
   const r = normalizeRequest(input);
   assertActiveFormFileEncoding(r);

@@ -1,3 +1,4 @@
+import { createHTTPPreWaitDrafts } from "../public/http-pre-wait.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -95,6 +96,7 @@ function harness(initial = fixture()) {
     "projectImports",
     "changedProvisionalQuery",
     "provisionalQuery",
+    "httpPreWaitDrafts",
     "nativeRequestLifecycle",
     "adoptVariableWrites",
     "assert",
@@ -129,6 +131,7 @@ function harness(initial = fixture()) {
       guard,
       changedProvisionalQuery,
       createProvisionalQuery(),
+      createHTTPPreWaitDrafts(),
       native,
       adoptVariableWrites,
       assert,

@@ -1,3 +1,4 @@
+import { createHTTPPreWaitDrafts } from "../public/http-pre-wait.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
@@ -62,6 +63,7 @@ function harness(initial = fixture(), transport) {
     "projectImports",
     "changedProvisionalQuery",
     "provisionalQuery",
+    "httpPreWaitDrafts",
     `
  const debugAuthDrafts = new WeakMap();
  const request=()=>project.requests.find((entry)=>entry.id===current);
@@ -81,7 +83,14 @@ function harness(initial = fixture(), transport) {
   );
   const provisional = createProvisionalQuery();
   return {
-    ...build(initial, api, guard, changedProvisionalQuery, provisional),
+    ...build(
+      initial,
+      api,
+      guard,
+      changedProvisionalQuery,
+      provisional,
+      createHTTPPreWaitDrafts(),
+    ),
     guard,
     calls,
     provisional,

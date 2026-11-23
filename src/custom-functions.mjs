@@ -1,5 +1,5 @@
 import { runScript } from "./scripts.mjs";
-export async function previewFunction(fn, value) {
+export async function previewFunction(fn, value, { signal } = {}) {
   if (!fn || typeof fn !== "object") throw Error("函数定义无效");
   const input = JSON.stringify(value);
   if (input === undefined || input.length > 65536)
@@ -15,6 +15,10 @@ export async function previewFunction(fn, value) {
     if (serial === undefined || serial.length > 65536) throw Error('函数结果须为不超过64KiB的JSON值');
     apt.setVar('functionResult', JSON.parse(serial));
   `;
-  const result = await runScript(code, { functions: [fn], variables: {} });
+  const result = await runScript(
+    code,
+    { functions: [fn], variables: {} },
+    { signal },
+  );
   return { value: result.variables.functionResult, logs: result.logs };
 }

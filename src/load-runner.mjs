@@ -25,11 +25,13 @@ import {
   validatePostmanCollections,
 } from "./postman-collection-scopes.mjs";
 import { executeRequest } from "./runtime.mjs";
+import { rejectHTTPPreWait } from "./http-pre-wait.mjs";
 
 // Elapsed execution budgets must not follow civil-clock adjustments.
 const monotonicNow = performance.now.bind(performance);
 
 export async function runLoad(project, request, options = {}) {
+  rejectHTTPPreWait(request, "负载执行");
   const timing = loadTiming(options);
   const dataRows = parseLoadCSV(options.dataCSV);
   const count = Math.min(
