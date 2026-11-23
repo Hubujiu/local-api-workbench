@@ -354,7 +354,7 @@ import {
   editRequestResponseDefinition,
   editRequestResponseSettings,
 } from "./schema-editor.js";
-import { httpAuthPane, httpDebugAuthPane } from "./auth-view.js";
+import { httpAuthPane, httpRequestAuthPane } from "./auth-view.js";
 import {
   captureDebugAuthOperation,
   debugAuthChoice,
@@ -2444,8 +2444,8 @@ function paramPanel(r, param, design = false) {
     }`;
   }
   if (param === "auth")
-    return !design && mode === "debug" && usesDebugAuthChoice(project, r)
-      ? httpDebugAuthPane(r)
+    return (design || mode === "debug") && usesDebugAuthChoice(project, r)
+      ? httpRequestAuthPane(r, design ? "design" : "debug")
       : httpAuthPane(r.auth, r.inheritAuth);
   if (param === "assertions")
     return `<table><thead><tr><th>目标</th><th>操作</th><th>预期值（JSON 或文本）</th><th></th></tr></thead><tbody>${r.assertions.map((a, i) => `<tr><td><input data-rule="${i}:target" value="${esc(a.target)}" placeholder="status / $.data.id / duration"></td><td><select data-rule="${i}:op">${["eq", "neq", "contains", "exists", "lt", "gt"].map((op) => `<option ${a.op === op ? "selected" : ""}>${op}</option>`).join("")}</select></td><td><input data-rule="${i}:value" value="${esc(JSON.stringify(a.value))}"></td><td><button data-remove-rule="${i}">×</button></td></tr>`).join("")}</tbody></table><p><button id="add-assertion">＋ 添加断言</button> <button id="edit-operations">JSON 高级编辑</button></p><div class="notice">status 为状态码，duration 为毫秒，body 为原文；JSON 路径如 $.data.id；响应头使用 header:content-type。</div>`;
@@ -5843,13 +5843,24 @@ function bind() {
     mark();
     render();
   });
+  const ownedHTTPAuth = $("#auth-type[data-debug-auth-choice]")
+    ? { project, request: request() }
+    : null;
+  const ownsHTTPAuth = () =>
+    ownedHTTPAuth &&
+    project === ownedHTTPAuth.project &&
+    request() === ownedHTTPAuth.request &&
+    page === "apis" &&
+    (mode === "debug" || mode === "design") &&
+    usesDebugAuthChoice(project, request());
   on("#auth-type", "change", (_, e) => {
     if (e.hasAttribute("data-debug-auth-choice")) {
       const r = request();
-      if (!usesDebugAuthChoice(project, r) || mode !== "debug") return;
+      if (!e.isConnected || !ownsHTTPAuth()) return;
       const drafts = debugAuthDrafts.get(r) || new Map();
-      const focused = document.activeElement === e;
+      const focused = e.contains(document.activeElement);
       try {
+        if (mode === "design") collect();
         if (!updateDebugAuthChoice(r, e.value, drafts)) return;
       } catch (error) {
         e.value = debugAuthChoice(r);
@@ -5876,6 +5887,7 @@ function bind() {
     if (focused) $("#auth-type")?.focus({ preventScroll: true });
   });
   on("[data-auth]", "input", (_, e) => {
+    if (ownedHTTPAuth && (!e.isConnected || !ownsHTTPAuth())) return;
     request().auth[e.dataset.auth] = e.value;
     mark();
   });

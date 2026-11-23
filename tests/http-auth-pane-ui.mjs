@@ -138,6 +138,11 @@ try {
     }
     await select.selectOption("inherit");
     await select.press("ArrowDown");
+    if (await select.evaluate((element) => element.matches(":open"))) {
+      await page.keyboard.press("Home");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Enter");
+    }
     assert.equal(
       await select.inputValue(),
       "none",

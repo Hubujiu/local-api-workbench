@@ -87,6 +87,9 @@ jobs:
         env:
           HTTP_RESPONSE_LAYOUT_EVIDENCE: /tmp/local-api-http-response-layout
       - run: node tests/http-auth-pane-ui.mjs
+      - run: node tests/http-request-auth-shared-ui.mjs
+        env:
+          HTTP_REQUEST_AUTH_EVIDENCE: /tmp/local-api-http-request-auth
       - run: node tests/environment-workspace-ui.mjs
       - run: node tests/workspace-global-variables-ui.mjs
       - run: node tests/workspace-global-parameters-ui.mjs
@@ -207,6 +210,7 @@ jobs:
             /tmp/local-api-http-request-overflow/http-request-overflow-*.png
             /tmp/local-api-http-post-actions/http-post-actions-*.png
             /tmp/local-api-plan-inspection/plan-inspection-*.png
+            /tmp/local-api-http-request-auth/http-request-auth-*.png
             /tmp/local-api-design-pair-composer/design-pair-*.png
             /tmp/local-api-design-query-metadata/design-query-*.png
             /tmp/local-api-http-design-description-scroll/design-description-*.png

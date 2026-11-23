@@ -9,9 +9,17 @@ const requestedOrder = [
   "jwt",
   "digest",
   "oauth1",
+  "oauth2",
+  "hawk",
+  "aws",
+  "ntlm",
+  "edgegrid",
+  "asap",
 ];
 export const debugAuthChoices = Object.freeze([
-  ...requestedOrder,
+  ...requestedOrder.filter(
+    (type) => type === "inherit" || authTypes.includes(type),
+  ),
   ...authTypes.filter((type) => !requestedOrder.includes(type)),
 ]);
 
@@ -36,12 +44,17 @@ export function updateDebugAuthChoice(request, choice, drafts) {
   if (debugAuthChoice(request) === choice) return false;
   const before = request.auth?.type || "none";
   const type = choice === "inherit" ? "none" : choice;
-  if (before !== type) {
-    drafts.set(before, structuredClone(request.auth || { type: before }));
+  if (before !== type && before !== "none")
+    drafts.set(before, structuredClone(request.auth));
+  if (type === "none") {
+    // A deliberate policy change must never revive stale fields from a legacy
+    // none record. An untouched record is not rewritten just by viewing it.
+    request.auth = { type: "none" };
+    request.inheritAuth = choice === "inherit";
+  } else {
     request.auth = structuredClone(drafts.get(type) || { type });
     request.auth.type = type;
   }
-  if (type === "none") request.inheritAuth = choice === "inherit";
   return true;
 }
 
