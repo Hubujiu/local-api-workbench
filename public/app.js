@@ -1358,6 +1358,7 @@ async function save() {
     snapshot = structuredClone(project),
     version = editVersion,
     operation = projectImports.beginSave(project.id);
+  const exampleReceipt = debugExampleDrafts.pinSave(owner, snapshot);
   let applied = null;
   snapshot.history = [];
   snapshot.runs = [];
@@ -1367,6 +1368,7 @@ async function save() {
   try {
     const saved = await api("/projects/" + snapshot.id, "PUT", snapshot);
     assertProjectSaveReceipt(saved, snapshot);
+    exampleReceipt.confirm(saved);
     const metadata = projects.find((item) => item.id === saved.id);
     if (metadata)
       Object.assign(metadata, {
@@ -1406,6 +1408,7 @@ async function save() {
       outcome.commit_outcome === "not_committed" &&
       outcome.retry_safe === false;
     if (rejected) {
+      exampleReceipt.reject();
       error.projectSaveRollback = { owner, version };
       throw error;
     }
@@ -9137,7 +9140,11 @@ function bindDebugExamples(pane, owner, target) {
     target,
     debugExampleSelections.get(target),
   );
-  const row = current?.row;
+  let row = current?.row;
+  const preset = row ? debugExampleDrafts.implicitPreset(row) : current?.key;
+  const selected = pane.querySelector(
+    '[data-debug-example-choice][aria-pressed="true"]',
+  );
   const owns = () =>
     pane.isConnected &&
     project === owner &&
@@ -9146,7 +9153,7 @@ function bindDebugExamples(pane, owner, target) {
     mode === "debug" &&
     responseTab === "examples" &&
     target.examples === examples &&
-    (!row || examples[Number(current.key)] === row);
+    (!row || examples.includes(row));
   const focus = (selector) => $(selector)?.focus({ preventScroll: true });
   on(
     "[data-debug-example-choice]",
@@ -9157,38 +9164,93 @@ function bindDebugExamples(pane, owner, target) {
         ({ key }) => key === button.dataset.debugExampleChoice,
       );
       if (!choice) return;
-      debugExampleSelections.set(target, choice.row || choice.key);
+      const next =
+        (choice === current ? row : choice.row) ||
+        (choice === current ? preset : choice.key);
+      debugExampleSelections.set(target, next);
+      const active = debugExampleChoices(target, next).current;
       render();
-      focus(`[data-debug-example-choice="${choice.key}"]`);
+      if (active) focus(`[data-debug-example-choice="${active.key}"]`);
     },
     pane,
   );
   const body = pane.querySelector("#debug-example-body");
   const error = pane.querySelector("#debug-example-error");
+  const format = pane.querySelector(".http-debug-example-format");
   const notice = () => {
     const invalid = debugExampleDrafts.read(row);
     body.setAttribute("aria-invalid", String(Boolean(invalid)));
     error.hidden = !invalid;
     error.textContent = invalid?.message || "";
   };
-  on(
-    "#debug-example-body",
-    "input",
-    () => {
-      if (!owns() || !editableDebugExample(target, row)) return;
-      debugExampleDrafts.edit(target, row, body.value);
+  const restorePreset = (value) => {
+    const wasOnlyEdit =
+      row &&
+      debugExampleDrafts.soleImplicitEdit(owner, row, editVersion, dirty);
+    const key = row && debugExampleDrafts.returnToPreset(target, row, value);
+    if (!key) return false;
+    row = undefined;
+    debugExampleSelections.set(target, key);
+    selected.title = "未保存的示例预设";
+    body.placeholder = "输入正文以创建示例草稿（纯文本）。";
+    format.hidden = true;
+    format.textContent = "";
+    mark();
+    if (wasOnlyEdit) {
+      dirty = false;
+      $("#save")?.classList.remove("primary");
+      $("#save-project")?.classList.remove("primary");
+      const indicator = $("#saved-state");
+      if (indicator) indicator.textContent = "✓ 已保存";
+    }
+    return true;
+  };
+  const editBody = (event) => {
+    if (!owns() || body.readOnly || event.isComposing) return;
+    const value = body.value;
+    if (restorePreset(value)) {
       notice();
-      mark();
-    },
-    pane,
-  );
+      return;
+    }
+    if (!row) {
+      row = debugExampleDrafts.materializePreset(target, preset, value);
+      if (!row) return;
+      debugExampleSelections.set(target, row);
+      selected.removeAttribute("title");
+      body.placeholder = "";
+      format.textContent = `纯文本 · ${row.status}`;
+      format.hidden = false;
+    }
+    if (!editableDebugExample(target, row)) return;
+    if (value === row.body && !debugExampleDrafts.read(row)) return;
+    const sole = debugExampleDrafts.soleImplicitEdit(
+      owner,
+      row,
+      editVersion,
+      dirty,
+    );
+    debugExampleDrafts.edit(target, row, value);
+    notice();
+    mark();
+    if (sole) debugExampleDrafts.rememberSoleEdit(owner, row, editVersion);
+  };
+  // Keep the live textarea mounted for first input, composition, Undo and Redo.
+  on("#debug-example-body", "input", editBody, pane);
+  on("#debug-example-body", "compositionend", editBody, pane);
   on(
     "#debug-example-body",
     "keydown",
     (event) => {
-      if (event.key !== "Escape" || !owns() || !debugExampleDrafts.clear(row))
+      if (
+        event.key !== "Escape" ||
+        event.isComposing ||
+        !owns() ||
+        !row ||
+        !debugExampleDrafts.clear(row)
+      )
         return;
       body.value = row.body;
+      restorePreset(body.value);
       notice();
       event.preventDefault();
     },
@@ -9198,7 +9260,7 @@ function bindDebugExamples(pane, owner, target) {
   if (!form) return;
   const name = form.querySelector("#debug-example-name");
   const status = form.querySelector("#debug-example-status");
-  let action, anchor;
+  let action, anchor, openedRow;
   const place = () => {
     const box = anchor.getBoundingClientRect();
     const width = form.getBoundingClientRect().width;
@@ -9223,8 +9285,9 @@ function bindDebugExamples(pane, owner, target) {
     (_, button) => {
       if (!owns()) return;
       anchor = button;
+      openedRow = row;
       action = button.id === "debug-example-edit" ? "edit" : "add";
-      name.value = action === "edit" ? current.name : "";
+      name.value = action === "edit" ? (row?.name ?? current.name) : "";
       status.value = String(
         action === "edit" ? (row?.status ?? current.status) : 200,
       );
@@ -9268,7 +9331,8 @@ function bindDebugExamples(pane, owner, target) {
     "submit",
     (event) => {
       event.preventDefault();
-      if (!owns() || !form.matches(":popover-open")) return;
+      if (!owns() || openedRow !== row || !form.matches(":popover-open"))
+        return;
       const existing = action === "edit" ? row : undefined;
       const next = prepareDebugExampleMetadata(
         target,
@@ -9279,11 +9343,11 @@ function bindDebugExamples(pane, owner, target) {
       if (existing) {
         existing.name = next.name;
         existing.status = next.status;
+        debugExampleDrafts.keepExample(existing);
       } else {
         examples.push(next);
         if (action === "edit") debugExampleSelections.set(target, next);
-        else if (current)
-          debugExampleSelections.set(target, current.row || current.key);
+        else if (current) debugExampleSelections.set(target, row || preset);
       }
       const focusReturn =
         action === "edit" ? "#debug-example-edit" : "#debug-example-add";

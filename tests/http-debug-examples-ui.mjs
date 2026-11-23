@@ -153,7 +153,7 @@ try {
   assert.equal(await ready(), "✓ 已保存");
   assert.equal(await choice("成功").getAttribute("aria-pressed"), "true");
   assert.equal(await choice("失败").isVisible(), true);
-  assert.equal(await body.evaluate((el) => el.readOnly), true);
+  assert.equal(await body.evaluate((el) => el.readOnly), false);
   assert.equal(await body.inputValue(), "");
   const geometry = {
     tools: await pane.locator(".http-debug-example-tools").boundingBox(),
@@ -173,15 +173,83 @@ try {
   await form.waitFor({ state: "hidden" });
   assert.equal(await active(edit), true);
   assert.equal(await ready(), "✓ 已保存");
+  const format = pane.locator(".http-debug-example-format");
+  await body.focus();
+  assert.equal(await active(body), true);
+  assert.equal(await ready(), "✓ 已保存");
+  await body.fill("  ");
+  assert.equal(await ready(), "✓ 已保存");
+  assert.equal(await format.isVisible(), false);
+  await body.fill("");
+  const originalEditor = await body.elementHandle();
+  await body.pressSequentially("x");
+  assert.equal(await body.inputValue(), "x");
+  assert.equal(
+    await originalEditor.evaluate(
+      (node) =>
+        node.isConnected &&
+        node === document.activeElement &&
+        node.selectionStart === 1 &&
+        node.selectionEnd === 1,
+    ),
+    true,
+  );
+  assert.match(await format.textContent(), /纯文本 · 200/);
+  await body.press("Control+z");
+  assert.equal(await body.inputValue(), "");
+  assert.equal(await ready(), "✓ 已保存");
+  assert(
+    !(await page.locator("#save-project").getAttribute("class")).includes(
+      "primary",
+    ),
+  );
+  assert.equal(await format.isVisible(), false);
+  assert.equal(await choice("成功").getAttribute("title"), "未保存的示例预设");
+  await body.press("Control+Shift+z");
+  assert.equal(await body.inputValue(), "x");
+  assert.equal(await active(body), true);
+  assert.match(await format.textContent(), /纯文本 · 200/);
+  await body.fill('{"id":101}');
+  await choice("失败").press("Enter");
+  assert.equal(await body.inputValue(), "");
+  await body.focus();
+  const compositionSession = await page.context().newCDPSession(page);
+  try {
+    await compositionSession.send("Input.imeSetComposition", {
+      text: "草",
+      selectionStart: 1,
+      selectionEnd: 1,
+    });
+    assert.equal(await body.inputValue(), "草");
+    assert.equal(await format.isVisible(), false);
+    assert.equal(
+      await choice("失败").getAttribute("title"),
+      "未保存的示例预设",
+    );
+    await compositionSession.send("Input.insertText", { text: "失败样例" });
+    assert.equal(await body.inputValue(), "失败样例");
+    assert.match(await format.textContent(), /纯文本 · 400/);
+    assert.equal(await active(body), true);
+  } finally {
+    await compositionSession.detach();
+  }
+  await body.fill("");
+  assert.equal(await format.isVisible(), false);
+  assert.equal(await ready(), "● 未保存");
+  await body.fill("失败样例");
+  assert.deepEqual(writes, []);
+  assert.deepEqual(forbidden, []);
+  assert.deepEqual(await app.store.get(owner.id), baseline);
+  await choice("成功").press("Enter");
+  assert.equal(await body.inputValue(), '{"id":101}');
+  await choice("失败").press("Enter");
+  assert.equal(await body.inputValue(), "失败样例");
+  await capture("direct-input-committed");
+  await choice("成功").press("Enter");
   await open(edit);
   await confirm.press("Enter");
   await form.waitFor({ state: "hidden" });
-  assert.equal(await body.evaluate((el) => el.readOnly), false);
-  assert.match(
-    await pane.locator(".http-debug-example-format").textContent(),
-    /纯文本/,
-  );
-  await body.fill('{"id":101}');
+  assert.equal(await body.inputValue(), '{"id":101}');
   await open(add);
   assert.equal(await status.inputValue(), "200");
   await name.fill("Review 404");
@@ -199,6 +267,7 @@ try {
 
   await open(edit);
   const staleForm = await form.elementHandle();
+  const staleEditor = await body.elementHandle();
   await name.fill("Not applied to owner");
   await page
     .locator(`.sidebar [data-request="${b.id}"]`)
@@ -208,6 +277,11 @@ try {
     element.dispatchEvent(
       new Event("submit", { bubbles: true, cancelable: true }),
     );
+  });
+  await staleEditor.evaluate((element) => {
+    if (element.isConnected) throw Error("Expected a detached body editor");
+    element.value = "Not applied to another draft";
+    element.dispatchEvent(new Event("input", { bubbles: true }));
   });
   assert.equal(await body.inputValue(), '{"id":7}');
   await body.fill("{ invalid");
@@ -261,6 +335,17 @@ try {
   assert.equal(await body.evaluate((el) => el.readOnly), true);
   assert.equal(await edit.count(), 0);
   assert.equal(await body.inputValue(), "<fixture>unchanged</fixture>");
+  await pick({ id: "folder-fixture" });
+  await responseTab.click();
+  assert.equal(await body.inputValue(), "");
+  await open(edit);
+  await confirm.press("Enter");
+  await form.waitFor({ state: "hidden" });
+  assert.match(await format.textContent(), /纯文本 · 200/);
+  await body.fill("Explicitly created, then cleared");
+  await body.fill("");
+  assert.match(await format.textContent(), /纯文本 · 200/);
+  assert.equal(await choice("成功").getAttribute("title"), null);
   await pick(a);
   await responseTab.click();
   assert.equal(await choice("Review 404").getAttribute("aria-pressed"), "true");
@@ -302,6 +387,12 @@ try {
       headers: { "content-type": "text/plain" },
     },
     {
+      name: "失败",
+      status: 400,
+      body: "失败样例",
+      headers: { "content-type": "text/plain" },
+    },
+    {
       name: "Review 404",
       status: 404,
       body: "sample only",
@@ -309,6 +400,14 @@ try {
     },
   ]);
   assert.deepEqual(saved.requests[1].examples, baseline.requests[1].examples);
+  assert.deepEqual(saved.requests[2].examples, [
+    {
+      name: "成功",
+      status: 200,
+      body: "",
+      headers: { "content-type": "text/plain" },
+    },
+  ]);
   assert.deepEqual(saved.requests[0].responses, baseline.requests[0].responses);
   assert.deepEqual(saved.history, baseline.history);
   assert.equal(saved.settings.mockEnabled, baseline.settings.mockEnabled);
