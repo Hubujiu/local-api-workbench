@@ -82,6 +82,10 @@ import { bindApiRowMenu } from "./api-row-menu.js";
 import { bindPlanPickerTree } from "./plan-step-picker.js";
 import { unsentResponseData } from "./http-response-empty.js";
 import {
+  httpResponseHeaderRows,
+  httpResponseHeadersHTML,
+} from "./http-response-headers.js";
+import {
   httpResponseTabs,
   readResponseTabsPosition,
   restoreResponseTabsPosition,
@@ -2229,6 +2233,7 @@ function render(preserveEditingFocus = false) {
 }
 function editor(r) {
   const httpLayout = mode === "debug" && r.graphqlEditorVersion !== 1;
+  const responseHeaders = httpLayout ? httpResponseHeaderRows(response) : null;
   return `<section data-editor-mode="${esc(mode)}"${httpLayout ? " data-http-response-layout" : ""} class="editor ${mode === "debug" && (httpLayout ? activeHTTPResponseLayout() : responseLayout) === "split" ? "split-layout" : ""}"><div class="subnav"><div class="request-modes" role="group" aria-label="接口工作模式">${[
     ["design", "设计"],
     ["debug", "调试"],
@@ -2244,7 +2249,7 @@ function editor(r) {
       "",
     )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button>${requestCurlAction(mode === "debug")}<button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法"${r.graphqlEditorVersion === 1 ? " disabled" : ""}>${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : httpRequestActions({ debug: mode === "debug", busy, cancel: busy && mode !== "cases" && !caseCancellationOwner(), dirty })}</div>${
     mode === "debug"
-      ? `${requestParameterTabs(r, param, usesDesignPathDraft(project, r))}${httpLayout ? requestParameterOverflowHTML() : ""}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" && r.bodyType !== "binary" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded", "binary"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response${responseTab === "body" && isPopulatedHTTPResponse(response) ? " http-success-response-active" : ""}"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length)}<div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div>${httpLayout ? httpResponseLayoutHTML(!busy && !response && responseTab === "body") : ""}</div>`
+      ? `${requestParameterTabs(r, param, usesDesignPathDraft(project, r))}${httpLayout ? requestParameterOverflowHTML() : ""}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" && r.bodyType !== "binary" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded", "binary"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response${responseTab === "body" && isPopulatedHTTPResponse(response) ? " http-success-response-active" : ""}"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length, responseHeaders?.length)}<div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent(responseHeaders)}</div>${httpLayout ? httpResponseLayoutHTML(!busy && !response && responseTab === "body") : ""}</div>`
       : modePanel(r)
   }</section>`;
 }
@@ -2626,7 +2631,7 @@ function paramPanel(r, param, design = false) {
   };
   return `<div class="notice">${descriptions[param]}</div><pre>${esc(JSON.stringify(r[param], null, 2))}</pre><button id="edit-operations">编辑${param === "assertions" ? "断言" : param === "extract" ? "提取规则" : "操作"}</button>`;
 }
-function responseContent() {
+function responseContent(responseHeaders) {
   if (responseTab === "examples")
     return (
       request()
@@ -2678,7 +2683,11 @@ function responseContent() {
       v = JSON.stringify(JSON.parse(v), null, 2);
     } catch {}
   }
-  return `${failure}${response.rawBodyBase64 ? '<button id="download-response-binary">下载原始二进制响应</button>' : ""}${response.codecError ? `<div class="notice">解码失败，以下为 Base64：${esc(response.codecError)}</div>` : ""}<pre>${esc(typeof v === "string" ? v : JSON.stringify(v, null, 2))}</pre>`;
+  const content =
+    responseTab === "headers" && responseHeaders
+      ? httpResponseHeadersHTML(responseHeaders, esc)
+      : `<pre>${esc(typeof v === "string" ? v : JSON.stringify(v, null, 2))}</pre>`;
+  return `${failure}${response.rawBodyBase64 ? '<button id="download-response-binary">下载原始二进制响应</button>' : ""}${response.codecError ? `<div class="notice">解码失败，以下为 Base64：${esc(response.codecError)}</div>` : ""}${content}`;
 }
 function designParameterPanel(r) {
   return `<div class="design-parameter-tabs" role="tablist" aria-label="设计请求参数标签">${designParameterTabs

@@ -138,6 +138,9 @@ jobs:
       - run: node tests/http-success-response-ui.mjs
         env:
           HTTP_SUCCESS_RESPONSE_EVIDENCE: /tmp/local-api-http-success-response
+      - run: node tests/http-response-headers-ui.mjs
+        env:
+          HTTP_RESPONSE_HEADERS_EVIDENCE: /tmp/local-api-http-response-headers
       - run: node tests/debug-multipart-editor-ui.mjs
       - run: node tests/debug-urlencoded-editor-ui.mjs
       - run: node tests/form-file-privacy-ui.mjs
@@ -226,6 +229,7 @@ jobs:
             /tmp/local-api-design-response-header-inline/design-response-header-*.png
             /tmp/local-api-design-response-settings-inline/design-response-settings-*.png
             /tmp/local-api-http-success-response/response-*-workbench.png
+            /tmp/local-api-http-response-headers/http-response-headers-*.png
             /tmp/local-api-http-response-layout/http-response-layout-*.png
             /tmp/local-api-http-split-body/http-split-body-*.png
             /tmp/local-api-http-request-overflow/http-request-overflow-*.png
