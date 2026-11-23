@@ -61,7 +61,10 @@ try {
   });
   project.requests.push(source);
   project.plans.push(plan, empty);
-  project.runs.push({
+  await app.store.save(project);
+  project = await app.store.get(project.id);
+  const configuredRevision = project.configRevision;
+  const retained = {
     id: "retained-run",
     planId: plan.id,
     planName: plan.name,
@@ -89,9 +92,14 @@ try {
         ],
       },
     ],
-  });
-  await app.store.save(project);
+  };
+  // Configuration saves intentionally preserve prior history. Seed this
+  // synthetic past result via the activity writer without running anything.
+  project.runs.push(retained);
+  await app.store.save(project, { activity: true });
   project = await app.store.get(project.id);
+  assert.equal(project.configRevision, configuredRevision);
+  assert.deepEqual(project.runs, [retained]);
   const baseline = structuredClone(project);
   const storedEmptyPlan = baseline.plans.find(({ id }) => id === empty.id);
   assert.equal(storedEmptyPlan.environmentId, plain.id);
@@ -230,7 +238,7 @@ try {
   assert.equal(await focused(step), true);
 
   await page.getByRole("button", { name: "执行记录", exact: true }).click();
-  const record = page.locator('[data-plan-run-id="retained-run"]');
+  const record = page.locator(`[data-plan-run-id="${retained.id}"]`);
   await record.locator(":scope > summary").press("Space");
   await record.getByText("接口返回状态码 403，期望 200").waitFor();
   await record.locator("[data-run-step] > summary").press("Enter");
