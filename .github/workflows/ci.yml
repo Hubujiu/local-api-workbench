@@ -147,6 +147,9 @@ jobs:
       - run: node tests/http-unsent-actual-request-ui.mjs
         env:
           HTTP_UNSENT_ACTUAL_REQUEST_EVIDENCE: /tmp/local-api-http-unsent-actual-request
+      - run: node tests/http-curl-preview-ui.mjs
+        env:
+          HTTP_CURL_PREVIEW_EVIDENCE: /tmp/local-api-http-curl-preview
       - run: node tests/debug-multipart-editor-ui.mjs
       - run: node tests/debug-urlencoded-editor-ui.mjs
       - run: node tests/form-file-privacy-ui.mjs
@@ -238,6 +241,7 @@ jobs:
             /tmp/local-api-http-success-response/response-*-workbench.png
             /tmp/local-api-http-response-headers/http-response-headers-*.png
             /tmp/local-api-http-unsent-actual-request/http-unsent-actual-request-*.png
+            /tmp/local-api-http-curl-preview/http-curl-preview-*.png
             /tmp/local-api-http-response-layout/http-response-layout-*.png
             /tmp/local-api-http-split-body/http-split-body-*.png
             /tmp/local-api-http-request-overflow/http-request-overflow-*.png

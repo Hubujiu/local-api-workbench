@@ -448,6 +448,7 @@ import {
   exportDocumentation,
   requestDocumentationHTML,
 } from "./document-export.js";
+import { createCurlPreview } from "./http-curl-preview.js";
 import { icon as lineIcon } from "./icons.js";
 const $ = (s) => document.querySelector(s),
   esc = (v) =>
@@ -533,6 +534,7 @@ let openedDocuments = [];
 let activeDocumentId = null;
 const documentModes = new Map();
 let modalRevision = 0;
+const curlPreview = createCurlPreview();
 let modalFocusHandlers;
 let opened = [],
   token = "",
@@ -1948,6 +1950,7 @@ function openScopedDefinitionExport() {
   bindScopedExportSelection($("#dialog-content"));
 }
 function modal(title, html, onSave, label = "确定", afterClose) {
+  curlPreview.dismiss();
   const d = $("#dialog"),
     revision = ++modalRevision;
   let submitting = false;
@@ -2040,6 +2043,7 @@ function tree() {
 }
 
 function render(preserveEditingFocus = false) {
+  curlPreview.dismiss();
   provisionalQuery.observe(
     project,
     page === "apis" && mode === "design" && !workspaceDocument()
@@ -6625,7 +6629,7 @@ function bind() {
     const details = element.closest("details");
     details.open = false;
     details.querySelector("summary").focus();
-    $("#curl").click();
+    return openCurlPreview(details.querySelector("summary"));
   });
   on("#send-menu-plan", "click", () => {
     mode = "cases";
@@ -6728,19 +6732,46 @@ function bind() {
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
-  on("#curl", "click", async () => {
+  async function openCurlPreview(opener) {
+    if (!opener.isConnected || $("#dialog").open) return;
     collect();
-    const r = await api("/projects/" + project.id + "/curl", "POST", {
-      request: request(),
-      environmentId: env(),
-    });
-    modal(
-      "cURL（Bash）",
-      `<p class="muted">按当前环境生成，不执行前后置脚本。可能包含认证凭据，请勿公开分享。HTTP/2命令需要支持HTTP/2的cURL；HTTPS严格HTTP/2需cURL8.10或更新版。</p><textarea id="curl-output" readonly>${esc(r.curl)}</textarea>`,
-      () => navigator.clipboard.writeText(r.curl),
-      "复制",
+    const owner = project,
+      ownedRequest = request(),
+      environmentId = env(),
+      ownerMode = mode,
+      projectIntent = projectOpenRequestSequence,
+      version = editVersion,
+      openingRevision = modalRevision;
+    if (!owner || !ownedRequest) return;
+    const ownsPreview = () =>
+      opener.isConnected &&
+      project === owner &&
+      request() === ownedRequest &&
+      env() === environmentId &&
+      page === "apis" &&
+      mode === ownerMode &&
+      projectOpenRequestSequence === projectIntent &&
+      editVersion === version &&
+      modalRevision === openingRevision &&
+      !workspaceDocument();
+    const drawer = curlPreview.open(
+      $("#curl-preview-dialog"),
+      opener,
+      ownsPreview,
+      (value) => navigator.clipboard.writeText(value),
     );
-  });
+    if (!drawer) return;
+    try {
+      const r = await api("/projects/" + owner.id + "/curl", "POST", {
+        request: ownedRequest,
+        environmentId,
+      });
+      drawer.deliver(r.curl);
+    } catch (error) {
+      drawer.fail(error);
+    }
+  }
+  on("#curl", "click", (_, opener) => openCurlPreview(opener));
   on("#import,#welcome-import,#project-menu-import", "click", (_, opener) => {
     const owner = project;
     modal(
@@ -9752,6 +9783,7 @@ async function send() {
 document.addEventListener("keydown", (e) => {
   if (
     $("#dialog").open ||
+    $("#curl-preview-dialog")?.open ||
     $("#empty-trash-dialog")?.open ||
     $("#appearance-dialog")?.open ||
     $("#project-switch-confirmation")?.open ||
