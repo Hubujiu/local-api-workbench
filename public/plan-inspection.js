@@ -127,6 +127,7 @@ function mountTabs(root, entries) {
           `<button type="button" id="${key}-tab-${index}" role="tab" aria-controls="${key}-panel-${index}">${esc(label)}</button>`,
       )
       .join("") +
+    "</div>" +
     entries
       .map(
         ([, content], index) =>
