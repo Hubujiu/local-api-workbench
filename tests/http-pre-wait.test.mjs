@@ -282,6 +282,63 @@ test("unmarked ordinary Wait is retained for read and backup but has no executio
   );
 });
 
+test("Wait admission reads no linear request, phase, row, or marker hooks", async () => {
+  let calls = 0;
+  const trap = () => {
+    calls++;
+    throw Error("definition hook invoked");
+  };
+  const getter = (value, key) =>
+    Object.defineProperty(value, key, {
+      enumerable: true,
+      get: trap,
+    });
+  for (const corrupt of [
+    (step) => getter(step, "request"),
+    (step) => getter(step.request, "before"),
+    (step) => {
+      step.request.before = [];
+      getter(step.request, "after");
+    },
+    (step) => getter(step.request.before, "0"),
+    (step) => getter(step.request.before[0], "type"),
+    (step) => getter(step.request.before[0], "waitVersion"),
+    (step) => {
+      step.request = new Proxy(step.request, {
+        get: trap,
+        getOwnPropertyDescriptor: trap,
+      });
+    },
+    (step) => {
+      step.request.before = new Proxy(step.request.before, {
+        get: trap,
+        getOwnPropertyDescriptor: trap,
+      });
+    },
+    (step) => {
+      step.request.before[0] = new Proxy(step.request.before[0], {
+        get: trap,
+        getOwnPropertyDescriptor: trap,
+      });
+    },
+  ]) {
+    const candidate = plan(input([wait(0)]));
+    corrupt(candidate.steps[0]);
+    assert.throws(() => snapshotPlan(candidate), /访问器或代理/);
+    await assert.rejects(
+      runPlan(candidate, {}, () => assert.fail("unexpected dispatch"), admit),
+      /访问器或代理/,
+    );
+  }
+  const unboundRoot = getter(plan(input([wait(0)])), "steps");
+  assert.throws(() => snapshotPlan(unboundRoot), /访问器或代理/);
+  await assert.rejects(
+    runPlan(unboundRoot, {}, () => assert.fail("unexpected dispatch"), admit),
+    /访问器或代理/,
+  );
+  assert.equal(calls, 0);
+});
+
 test("unsupported surfaces fail closed rather than dropping enabled or disabled Wait", async () => {
   const request = normalizeRequest(input([wait(1250, false)]));
   for (const unsupported of [

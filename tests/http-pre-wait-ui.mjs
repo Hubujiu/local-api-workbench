@@ -228,6 +228,70 @@ try {
   assert.equal(await time(0).inputValue(), "1250");
   assert.equal(await enabled(0).isChecked(), false);
   assert.equal(await time(1).inputValue(), "10000");
+  // Capture a real settled editor, not an error toast from the later
+  // plan-rejection check (the earlier budget notice expires normally).
+  await page.locator("#toast").waitFor({ state: "hidden" });
+  await page.setViewportSize({ width: 430, height: 830 });
+  assert.equal(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+    430,
+  );
+  const narrow = await cards.evaluateAll((elements) =>
+    elements.map((row) => {
+      const duration = row.querySelector(".http-pre-wait-duration");
+      const input = duration.querySelector("input");
+      const suffix = duration.querySelector("span");
+      const tools = row.querySelector(".http-pre-wait-tools");
+      const css = getComputedStyle(input);
+      const ink = document.createElement("canvas").getContext("2d");
+      ink.font = [css.fontWeight, css.fontSize, css.fontFamily].join(" ");
+      const inputBox = input.getBoundingClientRect();
+      const suffixBox = suffix.getBoundingClientRect();
+      const toolsBox = tools.getBoundingClientRect();
+      const durationBox = duration.getBoundingClientRect();
+      const cardBox = row.getBoundingClientRect();
+      return {
+        value: input.value,
+        suffix: suffix.textContent,
+        contentWidth:
+          inputBox.width -
+          parseFloat(css.paddingLeft) -
+          parseFloat(css.paddingRight) -
+          parseFloat(css.borderLeftWidth) -
+          parseFloat(css.borderRightWidth),
+        fiveDigitWidth: Math.ceil(ink.measureText("10000").width),
+        suffixFits:
+          suffixBox.left >= inputBox.right &&
+          suffixBox.right <= durationBox.right,
+        actionsBelow:
+          toolsBox.top >= durationBox.bottom &&
+          toolsBox.bottom <= cardBox.bottom,
+      };
+    }),
+  );
+  console.log("HTTP_PRE_WAIT_NARROW_CONTENT", JSON.stringify(narrow));
+  assert.deepEqual(
+    narrow.map(({ value, suffix }) => [value, suffix]),
+    [
+      ["1250", "ms"],
+      ["10000", "ms"],
+    ],
+  );
+  for (const row of narrow) {
+    assert(
+      row.contentWidth >= row.fiveDigitWidth + 2,
+      "All five digits fit in the input's content box",
+    );
+    assert(row.suffixFits, "ms suffix has independent space");
+    assert(row.actionsBelow, "Row actions stay reachable below the input");
+  }
+  assert.equal(await time(0).isVisible(), true);
+  assert.equal(
+    await card(0).getByRole("button", { name: "删除等待" }).isVisible(),
+    true,
+  );
+  await capture("narrow");
+  await page.setViewportSize({ width: 1363, height: 1023 });
   await page.locator('[data-mode="cases"]').click();
   await page.locator("#create-case").click();
   const plan = page.getByRole("dialog", { name: "新建执行计划", exact: true });
@@ -245,18 +309,6 @@ try {
   assert.equal(await time(0).inputValue(), "1250");
   assert.equal(await time(1).inputValue(), "10000");
   assert.deepEqual(blocked, []);
-  await page.setViewportSize({ width: 430, height: 830 });
-  assert.equal(
-    await page.evaluate(() => document.documentElement.scrollWidth),
-    430,
-  );
-  assert.equal(await time(0).isVisible(), true);
-  assert.equal(
-    await card(0).getByRole("button", { name: "删除等待" }).isVisible(),
-    true,
-  );
-  await capture("narrow");
-  await page.setViewportSize({ width: 1363, height: 1023 });
   assert.deepEqual(await app.store.get(owner.id), baseline);
   saveAllowed = true;
   await page.locator("#save").click();

@@ -12,15 +12,19 @@ export const isHTTPPreWaitMarker = (operation) =>
 export const containsHTTPPreWaitMarker = (operations) =>
   Array.isArray(operations) && operations.some(isHTTPPreWaitMarker);
 
+export function httpPreWaitUnsupported(destination) {
+  return Error(
+    destination +
+      "不支持手动调试前置等待；请在普通 HTTP 调试中执行，或使用项目备份保留定义",
+  );
+}
+
 export function rejectHTTPPreWait(request, destination) {
   if (
     containsHTTPPreWaitMarker(request?.before) ||
     containsHTTPPreWaitMarker(request?.after)
   )
-    throw Error(
-      destination +
-        "不支持手动调试前置等待；请在普通 HTTP 调试中执行，或使用项目备份保留定义",
-    );
+    throw httpPreWaitUnsupported(destination);
 }
 
 // Native function template pipelines contain multiple synchronous transforms in

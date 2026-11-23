@@ -31,6 +31,7 @@ import {
 import {
   assertHTTPPreWaitAdmission,
   hasEnabledHTTPPreWait,
+  readPlanStepsForHTTPPreWait,
   rejectHTTPPreWait,
   validateHTTPPreWaitDefinition,
 } from "./http-pre-wait.mjs";
@@ -646,12 +647,9 @@ export function snapshotPlan(
   { allowRuntimeRows = false, preWaitAdmission } = {},
 ) {
   const failurePolicy = readPlanFailurePolicy(plan);
-  validatePlanStepTypes(plan.steps);
-  assertHTTPPreWaitAdmission(
-    plan,
-    planLeaves(plan.steps || []),
-    preWaitAdmission,
-  );
+  const admittedSteps = readPlanStepsForHTTPPreWait(plan);
+  validatePlanStepTypes(admittedSteps);
+  assertHTTPPreWaitAdmission(admittedSteps, preWaitAdmission);
   for (const step of planLeaves(plan.steps || [])) liveRequestId(step);
   validatePostmanOAuth2Project({ plans: [plan] });
   const repeated = validateRepeatGraph(plan.steps, { allowRuntimeRows });
@@ -836,12 +834,9 @@ export async function runPlan(
   } = {},
 ) {
   const failurePolicy = readPlanFailurePolicy(plan);
-  validatePlanStepTypes(plan.steps);
-  assertHTTPPreWaitAdmission(
-    plan,
-    planLeaves(plan.steps || []),
-    preWaitAdmission,
-  );
+  const admittedSteps = readPlanStepsForHTTPPreWait(plan);
+  validatePlanStepTypes(admittedSteps);
+  assertHTTPPreWaitAdmission(admittedSteps, preWaitAdmission);
   for (const step of planLeaves(plan.steps || []))
     if (liveRequestId(step) !== undefined)
       throw Error("实时计划须先在项目快照中冻结引用");

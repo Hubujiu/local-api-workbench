@@ -7042,9 +7042,12 @@ body.dark .http-pre-wait-title {
     margin-inline: 4px;
   }
   .http-pre-wait-bar {
-    grid-template-columns: 29px 36px minmax(0, 1fr) auto;
+    grid-template-columns: 29px 36px minmax(0, 1fr);
     gap: 5px;
     padding-inline: 5px;
+  }
+  .http-pre-wait-tools {
+    grid-column: 1 / -1;
   }
 }
 @media (forced-colors: active) {
