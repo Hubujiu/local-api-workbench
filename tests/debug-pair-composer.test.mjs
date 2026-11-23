@@ -1,16 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  debugCookieSelection,
   debugPairComposer,
   debugPairFromKey,
   ownsDebugPairComposer,
 } from "../public/debug-pair-composer.js";
 
-test("composer exists only in the matching Debug Header or Query view", () => {
+test("composer exists only in the matching Debug Header, Query or Cookie view", () => {
   assert(ownsDebugPairComposer("headers", "apis", "debug", "headers"));
   assert(ownsDebugPairComposer("query", "apis", "debug", "query"));
+  assert(ownsDebugPairComposer("cookies", "apis", "debug", "cookies"));
   for (const args of [
     ["path", "apis", "debug", "path"],
+    ["cookies", "apis", "design", "cookies"],
+    ["cookies", "apis", "debug", "cookies", { graphqlEditorVersion: 1 }],
     ["query", "apis", "design", "query"],
     ["query", "settings", "debug", "query"],
     ["query", "apis", "debug", "headers"],
@@ -40,4 +44,25 @@ test("composer has a distinct input and real add and dictionary actions", () => 
   assert.doesNotMatch(empty, /data-pair=|checked|colspan/);
   assert.equal((empty.match(/<td>/g) || []).length, 3);
   assert.match(debugPairComposer("query", false), /colspan="2"/);
+});
+
+test("Cookie composer owns a real next-row choice and aggregate excludes it", () => {
+  const html = debugPairComposer("cookies", false);
+  assert.match(html, /data-debug-cookie-next checked/);
+  assert.match(html, /data-debug-pair-name="cookies"/);
+  assert.doesNotMatch(html, /data-pair-enabled|data-add-pair|必填/);
+  const on = { enabled: true },
+    off = { enabled: false };
+  const selection = (checked, indeterminate, disabled) => ({
+    checked,
+    indeterminate,
+    disabled,
+  });
+  assert.deepEqual(debugCookieSelection([]), selection(true, false, true));
+  assert.deepEqual(debugCookieSelection([on]), selection(true, false, false));
+  assert.deepEqual(
+    debugCookieSelection([on, off]),
+    selection(false, true, false),
+  );
+  assert.deepEqual(debugCookieSelection([off]), selection(false, false, false));
 });

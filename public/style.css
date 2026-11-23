@@ -6838,3 +6838,65 @@ body.dark .request-panel > .debug-path-pairs .design-path-type {
     margin-inline-start: -28px;
   }
 }
+
+.request-panel > .debug-cookie-pairs {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 4px;
+}
+.debug-cookie-pairs col {
+  width: 33.333%;
+}
+.request-panel > .debug-cookie-pairs th {
+  padding-inline: 9px;
+  height: 35px;
+  color: var(--muted);
+  font-weight: 400;
+  border-inline-end: 0;
+  background: transparent;
+}
+.request-panel > .debug-cookie-pairs :is(th, td):first-child {
+  padding-inline-start: 20px;
+  text-align: start;
+}
+.request-panel > .debug-cookie-pairs td:nth-child(2) {
+  padding-inline: 9px;
+}
+.debug-cookie-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.debug-cookie-pairs .debug-cookie-name input[type="checkbox"] {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+.debug-cookie-pairs .debug-cookie-name [data-debug-cookie-next] {
+  accent-color: var(--muted);
+}
+.debug-cookie-name > :is([data-debug-pair-name], [data-pair]),
+.debug-cookie-pairs td:nth-child(2) input[data-pair] {
+  width: 100%;
+}
+.debug-cookie-pairs .pair-row-actions {
+  flex-wrap: wrap;
+}
+@media (max-width: 760px) {
+  .request-panel > .debug-cookie-pairs :is(th, td):first-child {
+    padding-inline-start: 5px;
+  }
+  .debug-cookie-pairs .pair-description {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .debug-cookie-pairs .debug-cookie-name {
+    gap: 4px;
+  }
+}
