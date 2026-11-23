@@ -32,3 +32,33 @@
     outline-offset: -2px;
   }
 }
+
+/* Visual refinement of the existing browser picker, not a replacement control. */
+@supports (appearance: base-select) and selector(select::picker-icon) {
+  @media (forced-colors: none) {
+    .http-request-auth-pane .form-grid > #auth-type {
+      padding: 6px 11px 2px 12px;
+      font-size: calc(14 * var(--app-type-unit));
+      line-height: 20px;
+    }
+    .http-request-auth-pane #auth-type option {
+      font-size: calc(13 * var(--app-type-unit));
+    }
+    .http-request-auth-pane #auth-type::picker-icon {
+      content: "";
+      box-sizing: border-box;
+      inline-size: 6px;
+      block-size: 6px;
+      margin-inline-end: 2px;
+      border-block-end: 1px solid currentColor;
+      border-inline-end: 1px solid currentColor;
+      transform: rotate(45deg);
+    }
+    body:not(.dark) .http-request-auth-pane #auth-type {
+      border-color: #eae9e2;
+    }
+    body:not(.dark) .http-request-auth-pane #auth-type::picker-icon {
+      color: #827765;
+    }
+  }
+}

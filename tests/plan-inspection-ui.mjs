@@ -162,6 +162,62 @@ try {
   const drawer = page.locator("#plan-environment-inspection");
   const close = drawer.getByRole("button", { name: "关闭执行环境" });
   const currentPanel = (root) => root.locator('[role="tabpanel"]:visible');
+  const assertTabLayout = async (root, expected, label) => {
+    const layout = await root.evaluate((surface) => {
+      const list = surface.querySelector('[role="tablist"]');
+      const tabs = [...surface.querySelectorAll('[role="tab"]')];
+      const panels = [...surface.querySelectorAll('[role="tabpanel"]')];
+      const directPanels = panels.filter(
+        (panel) => panel.parentElement === surface,
+      );
+      const visible = panels.filter(
+        (panel) => panel.getClientRects().length > 0,
+      );
+      const selected = tabs.filter(
+        (tab) => tab.getAttribute("aria-selected") === "true",
+      );
+      return {
+        directList: list?.parentElement === surface,
+        tabOnlyList:
+          !!list &&
+          list.children.length === tabs.length &&
+          tabs.every((tab) => tab.parentElement === list),
+        tabs: tabs.length,
+        panels: panels.length,
+        directPanels: directPanels.length,
+        hiddenPanels: panels.filter((panel) => panel.hidden).length,
+        visible: visible.length,
+        selected: selected.length,
+        correctPairs: tabs.every(
+          (tab, index) =>
+            tab.getAttribute("aria-controls") === panels[index]?.id &&
+            panels[index]?.getAttribute("aria-labelledby") === tab.id,
+        ),
+        visibleIsSelected:
+          !!selected[0] &&
+          !!visible[0] &&
+          selected[0].getAttribute("aria-controls") === visible[0].id,
+        tabsBottom: list?.getBoundingClientRect().bottom,
+        panelTop: visible[0]?.getBoundingClientRect().top,
+      };
+    });
+    console.log("PLAN_INSPECTION_TAB_LAYOUT", label, JSON.stringify(layout));
+    assert.equal(layout.directList, true, label);
+    assert.equal(layout.tabOnlyList, true, label);
+    assert.equal(layout.tabs, expected, label);
+    assert.equal(layout.panels, expected, label);
+    assert.equal(layout.directPanels, expected, label);
+    assert.equal(layout.hiddenPanels, expected - 1, label);
+    assert.equal(layout.visible, 1, label);
+    assert.equal(layout.selected, 1, label);
+    assert.equal(layout.correctPairs, true, label);
+    assert.equal(layout.visibleIsSelected, true, label);
+    assert(
+      layout.panelTop >= layout.tabsBottom,
+      label + ": panel must be below its tab row",
+    );
+  };
+  const environmentTabs = drawer.locator("#plan-environment-inspection-tabs");
   const fitsViewport = async (element, width) => {
     const frame = await element.boundingBox();
     assert.ok(
@@ -202,6 +258,7 @@ try {
   await currentPanel(drawer).getByText("默认服务", { exact: true }).waitFor();
   await currentPanel(drawer).getByText("extra", { exact: true }).waitFor();
   assert.doesNotMatch(await drawer.innerHTML(), new RegExp(privateFixture));
+  await assertTabLayout(environmentTabs, 2, "desktop environment");
   await capture("populated");
   await close.click();
   assert.equal(await focused(openEnvironment), true);
@@ -218,12 +275,15 @@ try {
     await snapshotPanel.innerHTML(),
     new RegExp(privateFixture + "|X-Source-Only"),
   );
+  const snapshotTabs = snapshotPanel.locator(".plan-snapshot-tabs");
+  await assertTabLayout(snapshotTabs, 7, "desktop snapshot");
   await capture("snapshot");
   const path = snapshotPanel.getByRole("tab", { name: "路径参数" });
   await path.click();
   await currentPanel(snapshotPanel)
     .getByText("暂无路径参数", { exact: true })
     .waitFor();
+  await assertTabLayout(snapshotTabs, 7, "desktop switched snapshot");
   await capture("snapshot-path");
   await path.press("ArrowRight");
   await currentPanel(snapshotPanel)
@@ -259,6 +319,7 @@ try {
     "true",
   );
   await fitsViewport(drawer, 430);
+  await assertTabLayout(environmentTabs, 2, "430 environment");
   await capture("narrow-drawer");
   await page.keyboard.press("Escape");
   await step.press("Space");
@@ -267,6 +328,7 @@ try {
     .getByText("已记录（源码已隐藏）", { exact: true })
     .waitFor();
   await fitsViewport(snapshotPanel, 430);
+  await assertTabLayout(snapshotTabs, 7, "430 snapshot");
   await capture("narrow-snapshot");
   await step.click();
   assert.equal(await step.getAttribute("aria-expanded"), "false");

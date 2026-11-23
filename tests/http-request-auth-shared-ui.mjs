@@ -132,6 +132,15 @@ try {
     }
     return selector;
   };
+  const triggerTone = () =>
+    choose.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        supportsIcon: CSS.supports("selector(select::picker-icon)"),
+        padding: style.paddingInlineStart,
+        borderColor: style.borderTopColor,
+      };
+    });
   const checkMenu = async (name) => {
     assert.deepEqual(await choose.locator("option").allTextContents(), labels);
     const popup = await choose.evaluate((element) => ({
@@ -172,6 +181,11 @@ try {
   assert.equal(await choose.inputValue(), "inherit");
   assert.equal(await page.locator("#inherit-auth").count(), 0);
   const designFrame = await desktopLayout("design");
+  const presentation = await triggerTone();
+  if (presentation.supportsIcon) {
+    assert.equal(presentation.padding, "12px");
+    assert.equal(presentation.borderColor, "rgb(234, 233, 226)");
+  }
   await capture("design-inherit");
   const styleablePopup = await checkMenu("design-menu");
   await choose.focus();
@@ -297,6 +311,22 @@ try {
   );
   await capture("narrow-debug");
   await checkMenu("narrow-menu");
+  await page.emulateMedia({ forcedColors: "active" });
+  assert.equal(
+    await choose.evaluate(() => matchMedia("(forced-colors: active)").matches),
+    true,
+  );
+  assert.notEqual(
+    (await triggerTone()).padding,
+    "12px",
+    "decorative styling yields to forced colors",
+  );
+  assert.equal((await choose.boundingBox()).height, 32);
+  assert.equal(await choose.inputValue(), "bearer");
+  await choose.focus();
+  await choose.press("Tab");
+  assert.equal(await ownFocus(token), true);
+  assert.equal(await token.getAttribute("type"), "password");
   assert.deepEqual(blocked, []);
   assert.deepEqual(errors, []);
   assert.equal(writes.length, 1);
