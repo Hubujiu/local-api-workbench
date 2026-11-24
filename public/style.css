@@ -7611,3 +7611,44 @@ body.dark .http-response-header-count {
 .debug-literal-query-table td input[aria-invalid="true"] {
   border-color: var(--red);
 }
+
+.debug-literal-query-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.debug-literal-query-heading > h3 {
+  margin: 4px 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.debug-literal-query-equality {
+  min-height: 26px;
+  padding: 2px 8px;
+}
+.debug-literal-query-equality[hidden] {
+  display: none;
+}
+.debug-literal-query-equality[aria-pressed="true"] {
+  color: var(--accent-text, var(--accent));
+  border-color: currentColor;
+}
+
+.debug-literal-query-table td > label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.debug-literal-query-table
+  :is(.debug-literal-query-select-all, [data-debug-literal-query-enabled]) {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  margin: 0 4px 0 0;
+  accent-color: var(--accent);
+}
+.debug-literal-query-table .debug-literal-query-unchecked td {
+  color: var(--muted);
+  background: var(--panel);
+}
