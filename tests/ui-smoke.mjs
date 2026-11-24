@@ -528,10 +528,38 @@ try {
 
   await page.locator("#toggle-parameter-helper").click();
   assert.equal(await page.locator("#body-code").inputValue(), originalBody);
-  await page.locator('summary[aria-label="发送更多操作"]').click();
+  const curlSendMenu = page.locator('summary[aria-label="发送更多操作"]');
+  const curlDrawer = page.getByRole("dialog", {
+    name: "生成代码",
+    exact: true,
+  });
+  const curlOutput = curlDrawer.getByRole("textbox", {
+    name: "生成的 cURL 代码",
+  });
+  const closeCurlDrawer = curlDrawer.getByRole("button", {
+    name: "关闭",
+    exact: true,
+  });
+  await curlSendMenu.click();
   await page.locator("#send-menu-curl").click();
-  await page.locator("#dialog").waitFor({ state: "visible" });
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await curlDrawer.waitFor();
+  await curlOutput.waitFor();
+  assert.equal(await curlOutput.getAttribute("readonly"), "");
+  assert.match(await curlOutput.inputValue(), /^curl\b/);
+  assert.equal(
+    await curlDrawer
+      .getByRole("button", { name: "复制代码", exact: true })
+      .isEnabled(),
+    true,
+  );
+  await closeCurlDrawer.click();
+  await curlDrawer.waitFor({ state: "hidden" });
+  assert.equal(
+    await curlSendMenu.evaluate(
+      (element) => document.activeElement === element,
+    ),
+    true,
+  );
 
   await page.locator('input[name="body-type"][value="none"]').check();
   await page.getByText("当前请求未包含 Body", { exact: true }).waitFor();
@@ -4166,16 +4194,12 @@ try {
   await page.screenshot({ path: "/tmp/local-api-http2-proxy.png" });
   await saveAndWait("#save");
   await page.locator("#curl").click();
-  await page.locator("#curl-output").waitFor();
-  assert.match(
-    await page.locator("#curl-output").inputValue(),
-    /--http2-prior-knowledge/,
-  );
-  assert.match(
-    await page.locator("#curl-output").inputValue(),
-    /--proxytunnel/,
-  );
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await curlOutput.waitFor();
+  const proxyCurl = await curlOutput.inputValue();
+  assert.match(proxyCurl, /--http2-prior-knowledge/);
+  assert.match(proxyCurl, /--proxytunnel/);
+  await closeCurlDrawer.click();
+  await curlDrawer.waitFor({ state: "hidden" });
   const observedProject = await app.store.create("stdio UI evidence");
   observedProject.plans = [
     snapshotPlan({
@@ -6183,14 +6207,15 @@ try {
   await page.locator("#script-code").fill("");
   await page.locator("#url").fill(fixtureURL + "/sdk-url/42?raw=%2f+&x=1&x=2");
   await page.locator("#curl").click();
-  await page.locator("#curl-output").waitFor();
+  await curlOutput.waitFor();
   assert.ok(
-    (await page.locator("#curl-output").inputValue()).includes(
+    (await curlOutput.inputValue()).includes(
       "/sdk-url/42?raw=%2f+&x=1&x=2&table=a%2Bb",
     ),
   );
   await page.screenshot({ path: "/tmp/local-api-sdk-url-curl.png" });
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await closeCurlDrawer.click();
+  await curlDrawer.waitFor({ state: "hidden" });
 
   await page.locator("#method").selectOption("POST");
   await page.locator("#url").fill(fixtureURL + "/final-body");
