@@ -1,4 +1,3 @@
-import { pruneLiteralURLQueryRows } from "../public/debug-url-query.js";
 import { createDebugExampleDrafts } from "../public/http-debug-examples.js";
 import { createHTTPPreWaitDrafts } from "../public/http-pre-wait.js";
 import test from "node:test";
@@ -15,6 +14,29 @@ import { createApp } from "../src/server.mjs";
 const source = (
   await readFile(new URL("../public/app.js", import.meta.url), "utf8")
 ).replaceAll("\r\n", "\n");
+// Load the real app's import statement, not a test-only replacement. An
+// unbound helper throws before fetch and otherwise escapes a save-unit test.
+const literalQueryImport = source.match(
+  /import\s*\{[^}]+\}\s*from "\.\/debug-url-query\.js";/,
+)?.[0];
+assert.ok(literalQueryImport, "app must import the literal query editor");
+const literalQueryModule = new URL(
+  "../public/debug-url-query.js",
+  import.meta.url,
+);
+const { expireLiteralURLQueryRows, pruneLiteralURLQueryRows } = await import(
+  "data:text/javascript," +
+    encodeURIComponent(
+      literalQueryImport.replace(
+        '"./debug-url-query.js"',
+        JSON.stringify(literalQueryModule.href),
+      ) + "\nexport { expireLiteralURLQueryRows, pruneLiteralURLQueryRows };",
+    )
+);
+const expireOwnedLiteralURLCode = source.slice(
+  source.indexOf("  const expireOwnedLiteralURL ="),
+  source.indexOf("  let composingPathURL ="),
+);
 const saveCode = source.slice(
   source.indexOf("async function save()"),
   source.indexOf("\nfunction collect()"),
@@ -489,6 +511,60 @@ test("definite rejection releases a preset save pin while ambiguous acknowledgem
   }
 });
 
+test("the mounted URL handler expires dormant rows only for its owning request", () => {
+  const request = {
+    id: "r",
+    url: "https://fixture.invalid/items?new=1#part",
+    query: [],
+  };
+  const other = { id: "other" };
+  const project = {
+    id: "a",
+    requests: [request, other],
+    literalQueryEditor: {
+      version: 1,
+      projectId: "a",
+      entries: [
+        {
+          requestId: "r",
+          effectiveURL: "https://fixture.invalid/items?enabled=1#part",
+          rows: [
+            { token: "enabled=1", enabled: true },
+            { token: "dormant=2", enabled: false },
+          ],
+        },
+      ],
+    },
+  };
+  let current = other;
+  const toasts = [];
+  const expireOwned = new Function(
+    "project",
+    "pathRequest",
+    "request",
+    "expireLiteralURLQueryRows",
+    "toast",
+    `const pathProject = project, page = "apis", workspaceDocument = () => false;
+    ${expireOwnedLiteralURLCode}
+    return expireOwnedLiteralURL;`,
+  )(
+    project,
+    request,
+    () => current,
+    expireLiteralURLQueryRows,
+    (message) => toasts.push(message),
+  );
+  expireOwned({ isConnected: true });
+  assert.equal(project.literalQueryEditor.entries.length, 1);
+  current = request;
+  expireOwned({ isConnected: false });
+  assert.equal(project.literalQueryEditor.entries.length, 1);
+  assert.deepEqual(toasts, []);
+  expireOwned({ isConnected: true });
+  assert.deepEqual(project.literalQueryEditor.entries, []);
+  assert.equal(toasts.length, 1);
+  assert.equal(request.url, "https://fixture.invalid/items?new=1#part");
+});
 test("explicitly restoring the last private URL query row may return an omitted sidecar", async () => {
   const owner = fixture();
   owner.literalQueryEditor = { version: 1, projectId: owner.id, entries: [] };

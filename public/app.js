@@ -141,7 +141,12 @@ import {
   debugQueryEqualityLabel,
   ownsDebugPairComposer,
 } from "./debug-pair-composer.js";
-import { bindDebugURLQuery, debugURLQueryContents } from "./debug-url-query.js";
+import {
+  bindDebugURLQuery,
+  debugURLQueryContents,
+  expireLiteralURLQueryRows,
+  pruneLiteralURLQueryRows,
+} from "./debug-url-query.js";
 import {
   canComposeDesignPair,
   designPairComposer,
