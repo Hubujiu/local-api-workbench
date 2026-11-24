@@ -82,6 +82,11 @@ try {
   const group = page.locator(".debug-literal-query-origin");
   const table = group.getByRole("table", { name: "URL 中的查询" });
   const inputs = table.getByRole("textbox");
+  const equality = group.getByRole("button", {
+    name: "URL 空值等号",
+    exact: true,
+  });
+  const tableEquality = page.locator("#query-add-equal");
   const first = table.getByRole("textbox", { name: "URL 查询值 1：tag" });
   const second = table.getByRole("textbox", { name: "URL 查询值 2：tag" });
   const values = () =>
@@ -122,6 +127,30 @@ try {
     true,
   );
   await capture("edited-desktop");
+  assert.equal(await equality.getAttribute("aria-pressed"), "mixed");
+  assert.equal(await tableEquality.isChecked(), true);
+  await equality.press("Enter");
+  const allEqual = edited.replace("&flag&", "&flag=&");
+  assert.equal(await equality.getAttribute("aria-pressed"), "true");
+  assert.equal(await url.inputValue(), allEqual);
+  await capture("blank-equality-keep-desktop");
+  await equality.press("Space");
+  const noEqual = edited.replace("&empty=", "&empty");
+  assert.equal(await equality.getAttribute("aria-pressed"), "false");
+  assert.equal(await url.inputValue(), noEqual);
+  assert.equal(
+    await equality.evaluate((node) => node === document.activeElement),
+    true,
+  );
+  assert.equal(await editor.evaluate((node) => node.isConnected), true);
+  assert.equal(await table.getByText("无等号", { exact: true }).count(), 2);
+  assert.equal(await tableEquality.isChecked(), true);
+  assert.deepEqual(await values(), ["ui%2Bnext", "a+b", "", ""]);
+  assert.deepEqual(writes, []);
+  await capture("blank-equality-omit-desktop");
+  // Return to the previous mixed fixture for the existing lexical tests.
+  await url.fill(edited);
+  const sameOwnerEditor = await first.elementHandle();
   await first.fill("bad%2");
   assert.equal(await url.inputValue(), edited);
   assert.equal(await first.getAttribute("aria-invalid"), "true");
@@ -150,7 +179,7 @@ try {
   assert.equal(await url.inputValue(), edited);
   await url.fill(edited.replace("tag=a+b", "tag=%2b"));
   assert.deepEqual(await values(), ["ui%2Bnext", "%2b", "", ""]);
-  await editor.evaluate((node) => {
+  await sameOwnerEditor.evaluate((node) => {
     if (node.isConnected)
       throw Error("Expected detached editor after URL refresh");
     node.value = "not applicable";
@@ -159,12 +188,18 @@ try {
   assert.deepEqual(await values(), ["ui%2Bnext", "%2b", "", ""]);
   await url.fill(edited);
   const beforeOwnerSwitch = await first.elementHandle();
+  const staleEquality = await equality.elementHandle();
   await first.press("Control+Enter");
   assert.deepEqual(forbidden, []);
   assert.deepEqual(writes, []);
 
   await page.locator('.sidebar [data-request="opaque-query"]').click();
   assert.equal(await first.evaluate((node) => node.readOnly), true);
+  assert.equal(await equality.count(), 0);
+  await staleEquality.evaluate((node) => {
+    if (node.isConnected) throw Error("Expected detached literal equality");
+    node.click();
+  });
   assert.equal(await url.inputValue(), raw);
   await beforeOwnerSwitch.evaluate((node) => {
     if (node.isConnected) throw Error("Expected detached literal editor");
@@ -191,6 +226,12 @@ try {
     true,
   );
   await capture("edited-narrow");
+  await equality.press("Space");
+  await equality.press("Space");
+  assert.equal(await url.inputValue(), noEqual);
+  assert.equal(await equality.getAttribute("aria-pressed"), "false");
+  assert.equal(await tableEquality.isChecked(), true);
+  await capture("blank-equality-omit-narrow");
   await page.setViewportSize({ width: 1363, height: 1023 });
   allowSave = true;
   await page.locator("#save").click();
@@ -200,7 +241,7 @@ try {
     .waitFor();
   allowSave = false;
   const saved = await app.store.get(owner.id);
-  assert.equal(saved.requests[0].url, edited);
+  assert.equal(saved.requests[0].url, noEqual);
   assert.deepEqual(saved.requests[0].query, baseline.requests[0].query);
   assert.equal(
     saved.requests[0].queryAddEqual,

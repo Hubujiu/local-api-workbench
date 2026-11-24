@@ -94,8 +94,28 @@ export function changeDebugURLQueryValue(raw, index, value) {
   return inspectDebugURLQuery(updated)?.rows ? updated : null;
 }
 
-const notice =
-  "仅编辑 URL 中选中一项的编码文本；下方参数表及其等号设置不受影响。";
+export function debugURLQueryBlankState(parsed) {
+  const blank = parsed?.rows?.filter((row) => row.value === "") || [];
+  if (!blank.length) return null;
+  if (blank.every((row) => row.equals)) return "true";
+  return blank.some((row) => row.equals) ? "mixed" : "false";
+}
+
+export function setDebugURLQueryBlankEquality(raw, equals) {
+  const parsed = inspectDebugURLQuery(raw);
+  if (!parsed?.rows || typeof equals !== "boolean") return null;
+  if (debugURLQueryBlankState(parsed) === null) return raw;
+  const next = parsed.rows.map((row, index) =>
+    row.value === "" ? row.key + (equals ? "=" : "") : parsed.tokens[index],
+  );
+  const updated =
+    raw.slice(0, parsed.start) + next.join("&") + raw.slice(parsed.end);
+  return inspectDebugURLQuery(updated)?.rows ? updated : null;
+}
+
+const blankEqualityAction = (state) =>
+  state === "true" ? "省略 URL 查询空值的等号" : "保留 URL 查询空值的等号";
+const notice = "此处修改 URL 查询的编码文本或空值等号；不影响下方参数表。";
 
 export function debugURLQueryContents(project, request, esc) {
   const parsed = inspectDebugURLQuery(request.url);
@@ -103,7 +123,8 @@ export function debugURLQueryContents(project, request, esc) {
   if (parsed.opaque)
     return '<p class="muted">此 URL 查询无法安全拆分，请直接编辑请求地址。</p><h3>另加的参数表</h3>';
   const editable = canEditDebugURLQuery(project, request);
-  return `<h3>URL 中的查询</h3><p class="muted">${editable ? notice : "此 URL 查询仅供查看。原有定义及参数表不会改写。"}</p>
+  const blank = debugURLQueryBlankState(parsed);
+  return `<div class="debug-literal-query-heading"><h3>URL 中的查询</h3>${editable ? `<button class="ghost debug-literal-query-equality" type="button" aria-pressed="${blank ?? "false"}" title="${blankEqualityAction(blank)}"${blank === null ? " hidden" : ""}>URL 空值等号</button>` : ""}</div><p class="muted">${editable ? notice : "此 URL 查询仅供查看。原有定义及参数表不会改写。"}</p>
   <table class="pairs-table request-pairs-table debug-literal-query-table" aria-label="URL 中的查询"><thead><tr><th scope="col">参数名</th><th scope="col">编码值</th></tr></thead><tbody>${parsed.rows
     .map(
       ({ key, value, equals }, index) =>
@@ -152,6 +173,31 @@ export function bindDebugURLQuery(
       ? "需输入有效的 URL 编码值，例如 %2B；未应用此输入。"
       : "";
   }
+  function reflectBlankEquality(changedIndex) {
+    const control = region.querySelector(".debug-literal-query-equality");
+    if (!control) return;
+    const parsed = inspectDebugURLQuery(snapshot);
+    const state = debugURLQueryBlankState(parsed);
+    control.hidden = state === null;
+    control.setAttribute("aria-pressed", state ?? "false");
+    control.title = blankEqualityAction(state);
+    const selector =
+      changedIndex === undefined
+        ? "[data-debug-literal-query-value]"
+        : `[data-debug-literal-query-value="${changedIndex}"]`;
+    for (const node of region.querySelectorAll(selector)) {
+      const row = parsed?.rows?.[Number(node.dataset.debugLiteralQueryValue)];
+      if (!row) continue;
+      const label = node.parentElement.querySelector("small");
+      if (row.equals) label?.remove();
+      else if (!label) {
+        const marker = node.ownerDocument.createElement("small");
+        marker.className = "muted";
+        marker.textContent = "无等号";
+        node.after(marker);
+      }
+    }
+  }
   function edit(event) {
     const node = event.target;
     if (
@@ -168,8 +214,7 @@ export function bindDebugURLQuery(
     report(node, pending !== null);
     if (next === null || next === snapshot) return;
     snapshot = request.url = urlField.value = next;
-    const equals = inspectDebugURLQuery(next).rows[index].equals;
-    if (equals) node.parentElement.querySelector("small")?.remove();
+    reflectBlankEquality(index);
     changed();
   }
   function cancel(node) {
@@ -182,6 +227,35 @@ export function bindDebugURLQuery(
     report(node, false);
     pending = null;
   }
+  function ownsBlankControl(node) {
+    return (
+      owns() &&
+      node.isConnected &&
+      !node.hidden &&
+      node.matches(".debug-literal-query-equality") &&
+      node.closest(".debug-literal-query-origin") === region &&
+      canEditDebugURLQuery(project, request)
+    );
+  }
+  region.addEventListener("click", ({ target }) => {
+    const control = target.closest(".debug-literal-query-equality");
+    if (
+      !control ||
+      !ownsBlankControl(control) ||
+      pending ||
+      composing ||
+      snapshot !== request.url ||
+      urlField.value !== snapshot
+    )
+      return;
+    const state = debugURLQueryBlankState(inspectDebugURLQuery(snapshot));
+    if (state === null) return;
+    const next = setDebugURLQueryBlankEquality(snapshot, state !== "true");
+    if (!next || next === snapshot) return;
+    snapshot = request.url = urlField.value = next;
+    reflectBlankEquality();
+    changed();
+  });
   region.addEventListener("input", edit);
   region.addEventListener("compositionstart", ({ target }) => {
     if (isEditor(target)) composing = target;
@@ -192,7 +266,8 @@ export function bindDebugURLQuery(
   });
   region.addEventListener("focusout", (event) => cancel(event.target));
   region.addEventListener("keydown", (event) => {
-    if (!isProjectedField(event.target)) return;
+    const blank = ownsBlankControl(event.target);
+    if (!blank && !isProjectedField(event.target)) return;
     if (
       (event.ctrlKey || event.metaKey) &&
       (event.key === "Enter" ||
@@ -205,6 +280,7 @@ export function bindDebugURLQuery(
       event.stopPropagation();
       return;
     }
+    if (blank) return;
     if (
       !isEditor(event.target) ||
       event.isComposing ||
