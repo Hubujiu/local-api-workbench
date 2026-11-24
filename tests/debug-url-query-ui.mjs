@@ -13,6 +13,99 @@ const { chromium } = createRequire(import.meta.url)(
 const root = await mkdtemp(join(tmpdir(), "workbench-url-query-"));
 const raw = "https://fixture.invalid/items?tag=a%2Bb&tag=a+b&flag&empty=#part";
 const edited = raw.replace("a%2Bb", "ui%2Bnext");
+// Report only enums, counts, and fixture comparisons; never URLs or raw receipts.
+function saveFacts(payload, expectedURL, expectedDisabled) {
+  const req = payload?.requests?.find(({ id }) => id === "visual-query");
+  const entries = payload?.literalQueryEditor?.entries;
+  const entry = entries?.find(({ requestId }) => requestId === "visual-query");
+  return {
+    canonicalMatches: req?.url === expectedURL,
+    configRevision: payload?.configRevision,
+    entries: entries?.length ?? 0,
+    disabled: entry?.rows.filter(({ enabled }) => !enabled).length ?? 0,
+    entryMatches: expectedDisabled
+      ? entry?.effectiveURL === expectedURL
+      : !entry,
+  };
+}
+
+async function pressOwnerSave(
+  page,
+  origin,
+  path,
+  phase,
+  expectedURL,
+  expectedDisabled,
+) {
+  const state = page.locator("#saved-state");
+  const isOwnerSave = (req) => {
+    const dest = new URL(req.url());
+    return (
+      req.method() === "PUT" && dest.origin === origin && dest.pathname === path
+    );
+  };
+  const diagnostic = { phase, request: null, response: null };
+  const observeRequest = (req) => {
+    if (!isOwnerSave(req)) return;
+    try {
+      diagnostic.request = saveFacts(
+        req.postDataJSON(),
+        expectedURL,
+        expectedDisabled,
+      );
+    } catch {
+      diagnostic.request = "unreadable";
+    }
+  };
+  page.on("request", observeRequest);
+  try {
+    assert.equal(await state.textContent(), "● 未保存");
+    const [response] = await Promise.all([
+      page.waitForResponse((response) => isOwnerSave(response.request())),
+      page.locator("#save").click(),
+    ]);
+    diagnostic.response = { status: response.status() };
+    const receipt = await response.json().catch(() => null);
+    if (response.ok()) {
+      diagnostic.response.receipt = saveFacts(
+        receipt,
+        expectedURL,
+        expectedDisabled,
+      );
+    } else {
+      diagnostic.response.notCommitted =
+        receipt?.commit_outcome === "not_committed";
+      diagnostic.response.retrySafe = receipt?.retry_safe === true;
+      diagnostic.response.literalQueryValidation =
+        typeof receipt?.error === "string" &&
+        receipt.error.includes("URL 查询编辑状态");
+    }
+    assert.equal(response.status(), 200, "Owner PUT must commit successfully");
+    await state.getByText("✓ 已保存", { exact: true }).waitFor();
+  } catch (error) {
+    diagnostic.ui = await page
+      .evaluate(() => {
+        const state = document.querySelector("#saved-state")?.textContent;
+        const toast = document.querySelector("#toast")?.textContent || "";
+        return {
+          saveDisabled: document.querySelector("#save")?.disabled,
+          saved: state === "✓ 已保存",
+          dirty: state === "● 未保存",
+          unconfirmed: toast.includes("保存结果尚未确认"),
+          newerDraft: toast.includes("已保存本次快照"),
+          literalQueryValidation: toast.includes("URL 查询编辑状态"),
+        };
+      })
+      .catch(() => null);
+    console.error(
+      "DEBUG_URL_QUERY_SAVE_DIAGNOSTICS",
+      JSON.stringify(diagnostic),
+    );
+    throw error;
+  } finally {
+    page.off("request", observeRequest);
+  }
+}
 let browser, app;
 try {
   app = await createApp({ root, port: 0 });
@@ -279,11 +372,14 @@ try {
   assert.deepEqual(writes, []);
   assert.deepEqual(await app.store.get(owner.id), baseline);
   allowSave = true;
-  await page.locator("#save").click();
-  await page
-    .locator("#saved-state")
-    .getByText("✓ 已保存", { exact: true })
-    .waitFor();
+  await pressOwnerSave(
+    page,
+    origin,
+    ownerPath,
+    "disable",
+    withoutDuplicate,
+    true,
+  );
   allowSave = false;
   const saved = await app.store.get(owner.id);
   assert.equal(saved.requests[0].url, withoutDuplicate);
@@ -373,11 +469,14 @@ try {
     withoutDuplicate,
   );
   allowRestartSave = true;
-  await reopened.locator("#save").click();
-  await reopened
-    .locator("#saved-state")
-    .getByText("✓ 已保存", { exact: true })
-    .waitFor();
+  await pressOwnerSave(
+    reopened,
+    restartOrigin,
+    ownerPath,
+    "restore",
+    noEqual,
+    false,
+  );
   allowRestartSave = false;
   const final = await app.store.get(owner.id);
   assert.equal(final.requests[0].url, noEqual);
