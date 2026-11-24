@@ -1,0 +1,92 @@
+#dialog:has(.interface-case-editor) {
+  position: fixed;
+  inset: 0 0 0 auto;
+  margin: 0;
+  width: 60vw;
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: -4px 0 18px #0002;
+}
+#dialog:has(.interface-case-editor)::backdrop {
+  background: #27231582;
+}
+#dialog:has(.interface-case-editor) > form {
+  display: grid;
+  height: 100%;
+  grid-template-rows: 46px minmax(0, 1fr) auto;
+}
+#dialog:has(.interface-case-editor) > form > header {
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 16px;
+}
+#dialog:has(.interface-case-editor) > form > header button {
+  order: -1;
+  color: var(--text);
+  padding-inline: 5px;
+  font-size: calc(18 * var(--app-type-unit));
+}
+#dialog:has(.interface-case-editor) > form > footer {
+  padding: 10px 16px;
+}
+#dialog-content:has(.interface-case-editor) {
+  display: grid;
+  min-height: 0;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+}
+.interface-case-editor {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  min-width: 0;
+}
+.interface-case-scroll {
+  min-height: 0;
+  padding: 16px;
+  overflow: auto;
+}
+.interface-case-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+#dialog-content .interface-case-fields label {
+  margin: 0 0 5px;
+}
+.interface-case-fields :is(input, select) {
+  margin-top: 6px;
+}
+#dialog-content .interface-case-editor #modal-json {
+  display: block;
+  resize: vertical;
+  min-height: 170px;
+  height: clamp(170px, 42dvh, 440px);
+}
+#case-save-error {
+  margin: 0;
+  padding: 8px 16px;
+  max-height: min(30dvh, 160px);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  border-top: 1px solid var(--line);
+  color: var(--text);
+  background: var(--panel);
+}
+#case-save-error:empty {
+  display: none;
+}
+@media (max-width: 800px) {
+  #dialog:has(.interface-case-editor) {
+    width: min(100vw, 560px);
+  }
+}
+@media (max-width: 460px) {
+  .interface-case-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

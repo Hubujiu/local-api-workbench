@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { win32 } from "node:path";
 import { runWindowsFixtureProcess } from "./codegen-windows-process.mjs";
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -164,7 +165,7 @@ export function createWireObservations() {
 export async function buildGoFixtures(
   dir,
   sources,
-  { signal, run = runFixtureProcess } = {},
+  { binary = "go", signal, run = runFixtureProcess } = {},
 ) {
   const { mkdir, writeFile, readFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
@@ -187,7 +188,7 @@ export async function buildGoFixtures(
   }
   // A single invocation builds each independent, unmodified main package.
   await run(
-    "go",
+    binary,
     ["build", "-o", output, ...sources.map((_, index) => `./fixture-${index}`)],
     {
       cwd: dir,
@@ -204,7 +205,13 @@ export async function buildGoFixtures(
 export function fixtureToolAvailable(
   binary,
   args,
-  { fixture, pattern, timeoutMs = 5000, env = process.env } = {},
+  {
+    fixture,
+    pattern,
+    timeoutMs = 5000,
+    env = process.env,
+    required = false,
+  } = {},
 ) {
   const result = spawnSync(binary, args, {
     encoding: "utf8",
@@ -215,8 +222,13 @@ export function fixtureToolAvailable(
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
-  if (result.error?.code === "ENOENT") return false;
-  if (result.error || result.signal) {
+  if (!required && result.error?.code === "ENOENT") return false;
+  const available =
+    !result.error &&
+    !result.signal &&
+    result.status === 0 &&
+    (!pattern || pattern.test(result.stdout));
+  if (result.error || result.signal || (required && !available)) {
     const receipt = {
       phase: "probe",
       fixture,
@@ -224,14 +236,48 @@ export function fixtureToolAvailable(
       signal: result.signal,
       timedOut: result.error?.code === "ETIMEDOUT",
     };
-    throw Object.assign(Error(JSON.stringify(receipt)), { receipt });
+    const message =
+      result.error || result.signal
+        ? JSON.stringify(receipt)
+        : "Required fixture tool did not report its expected version: " +
+          fixture;
+    throw Object.assign(Error(message), { receipt });
   }
-  return result.status === 0 && (!pattern || pattern.test(result.stdout));
+  return available;
 }
 
-export function goFixtureEnvironment() {
+export function goFixtureTool({
+  platform = process.platform,
+  env = process.env,
+} = {}) {
+  const required = platform === "win32" && env.GITHUB_ACTIONS === "true";
+  const root = env.WORKBENCH_FIXTURE_GO_ROOT;
+  const version = env.WORKBENCH_FIXTURE_GO_VERSION;
+  if (
+    required &&
+    (!/^[A-Za-z]:[\\/]/.test(root ?? "") ||
+      !/^\d+\.\d+\.\d+$/.test(version ?? ""))
+  )
+    throw Error("Missing pinned Windows Go fixture setup");
   return {
-    ...process.env,
+    binary: required ? win32.join(root, "bin", "go.exe") : "go",
+    options: {
+      fixture: "tool-go",
+      pattern: required
+        ? new RegExp(
+            `^go version go${version.replaceAll(".", "\\.")} windows/amd64\\s*$`,
+          )
+        : /^go version go/,
+      required,
+      timeoutMs: required ? 20000 : 5000,
+      env: goFixtureEnvironment(env),
+    },
+  };
+}
+
+export function goFixtureEnvironment(env = process.env) {
+  return {
+    ...env,
     GO111MODULE: "off",
     GOPROXY: "off",
     GOTOOLCHAIN: "local",

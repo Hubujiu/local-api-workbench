@@ -1,3 +1,4 @@
+import { checkedProductVersion } from "../public/product-version.js";
 import { listenForWorkbench } from "./workbench-listener.mjs";
 import { GrpcOwnerOperations } from "./grpc-owner-operations.mjs";
 import { SessionCreationIntents } from "./grpc-creation-intents.mjs";
@@ -103,6 +104,11 @@ import {
   resolveDynamicValue,
   resolveDynamicRequest,
 } from "./dynamic-values.mjs";
+import {
+  manualHTTPPreWait,
+  rejectHTTPPreWait,
+  validateHTTPPreWait,
+} from "./http-pre-wait.mjs";
 import { previewFunction } from "./custom-functions.mjs";
 import { parseErrorCodeList } from "./error-codes.mjs";
 import { sampleProjectSchema, schemaMockResponse } from "./mock-fields.mjs";
@@ -138,6 +144,7 @@ import {
   listRequestDefinitionHistory,
   getRequestDefinitionVersion,
 } from "./request-definition-history.mjs";
+import { recentSavedDefinitions } from "./recent-saved-definitions.mjs";
 import { OAuthManager } from "./oauth.mjs";
 import { ProtocolSessions } from "./protocol-sessions.mjs";
 import { queryRemoteDatabase } from "./remote-database.mjs";
@@ -164,11 +171,22 @@ import {
   toCurl,
 } from "./core.mjs";
 const publicDir = fileURLToPath(new URL("../public/", import.meta.url));
+async function runtimePackageVersion() {
+  try {
+    const manifest = new URL("../package.json", import.meta.url);
+    return checkedProductVersion(
+      JSON.parse(await readFile(manifest, "utf8")).version,
+    );
+  } catch {
+    return "";
+  }
+}
 export async function createApp({
   root = process.env.LOCAL_API_DATA || ".local-api",
   port = Number(process.env.PORT) || 4318,
 } = {}) {
   const requestedPort = port;
+  const version = await runtimePackageVersion();
   const store = new Store(path.resolve(root));
   await store.init();
   const autoImports = new ActiveProjectImports({
@@ -427,7 +445,12 @@ export async function createApp({
       const origin = req.headers.origin;
       if (
         origin &&
-        ![base, `http://localhost:${server.address().port}`].includes(origin)
+        ![base, `http://localhost:${server.address().port}`].includes(origin) &&
+        !(
+          origin === "null" &&
+          req.method === "GET" &&
+          req.url === "/visualizer.css"
+        )
       )
         return json(res, 403, { error: "Origin rejected" });
       const u = new URL(req.url, base),
@@ -442,7 +465,7 @@ export async function createApp({
           });
         return json(res, 200, {
           token,
-          version: "0.1.0",
+          version,
           instanceId: protocolIntents.instanceId,
         });
       }
@@ -1103,7 +1126,20 @@ export async function createApp({
           return json(res, 200, await store.list());
         if (u.pathname === "/api/projects" && req.method === "POST") {
           const b = await body(req);
-          return json(res, 201, await store.create(b.name, b.directory));
+          if (
+            b.description !== undefined &&
+            (typeof b.description !== "string" || b.description.length > 2000)
+          )
+            return json(res, 400, {
+              error: "项目描述须为文本，最多 2000 个字符",
+            });
+          return json(
+            res,
+            201,
+            await store.create(b.name, b.directory, {
+              description: b.description,
+            }),
+          );
         }
         if (u.pathname === "/api/restore" && req.method === "POST") {
           // Full backups have a dedicated bounded transport. Normal owner/MCP
@@ -1185,6 +1221,18 @@ export async function createApp({
                     ["cancel", "reconcile"].includes(parts[5])))));
           const p = evidenceOnly ? { id: parts[2] } : await store.get(parts[2]);
           ownerPutOutcome?.validatedRead();
+          if (action === "recent-saved-definitions") {
+            res.setHeader("Cache-Control", "no-store");
+            if (parts.length !== 4 || u.search)
+              return json(res, 400, { error: "已保存版本查询路径无效" });
+            if (req.method !== "GET") {
+              res.setHeader("Allow", "GET");
+              return json(res, 405, { error: "已保存版本仅支持读取" });
+            }
+            if (p.archived)
+              return json(res, 409, { error: "归档项目没有活动接口版本" });
+            return json(res, 200, recentSavedDefinitions(p));
+          }
           if (action === "load-reports") {
             if (req.method !== "GET" || parts.length > 5 || u.search)
               return json(res, 400, {
@@ -1649,6 +1697,11 @@ export async function createApp({
               ].includes(format)
             )
               throw Error("项目导出格式无效");
+            if (
+              ["native", "backup"].includes(format) &&
+              p.literalQueryEditorIssue
+            )
+              throw Error("私有 URL 查询编辑数据不可用；无法生成完整项目备份");
             const apipostFormat = ["apipost", "apipost-directory"].includes(
               format,
             );
@@ -2419,6 +2472,7 @@ export async function createApp({
             const data = await body(req);
             if (action === "code-generation")
               assertCodeTarget(data.target, data.client);
+            rejectHTTPPreWait(data.request, "cURL／代码导出");
             const inheritedRequest = resolveNativeInheritance(p, data.request);
             const exportRequest =
               inheritedRequest?.scriptURLMode === "sdk" ||
@@ -2463,6 +2517,7 @@ export async function createApp({
             const b = await body(req),
               { controller, runId } = claimRun(b.runId);
             try {
+              validateHTTPPreWait(b.request);
               const context = debugEnvironment(
                 p,
                 b.environmentId,
@@ -2481,15 +2536,19 @@ export async function createApp({
                 request.postmanCollectionId,
               );
               const single = await runPlan(
-                snapshotPlan({
-                  name: request.name,
-                  functions: b.functions || p.settings?.functions || [],
-                  steps: [{ request }],
-                }),
+                snapshotPlan(
+                  {
+                    name: request.name,
+                    functions: b.functions || p.settings?.functions || [],
+                    steps: [{ request }],
+                  },
+                  { preWaitAdmission: manualHTTPPreWait },
+                ),
                 env,
                 executeRequest,
                 {
                   ...scoped,
+                  preWaitAdmission: manualHTTPPreWait,
                   databaseQuery: (operation, signal) =>
                     databaseSessions.query(p.id, operation, signal),
                   cookieSession: projectCookieSession(

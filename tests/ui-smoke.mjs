@@ -1,3 +1,11 @@
+import { revealDebugPreSettings } from "./helpers/http-pre-actions-ui.mjs";
+import { openProjectCreateUI } from "./helpers/open-project-create-ui.mjs";
+import { pickProjectUI } from "./helpers/pick-project-ui.mjs";
+import { revealDebugPostSettings } from "./helpers/http-post-actions-ui.mjs";
+import { exerciseHTTPResponseTabs } from "./helpers/http-response-tabs-ui.mjs";
+import { exerciseRequestParameterTabs } from "./helpers/http-request-parameter-tabs-ui.mjs";
+import { exerciseHTTPRequestActions } from "./helpers/http-request-actions-ui.mjs";
+import { captureHTTPWorkbenchBaseline } from "./helpers/http-workbench-visual-baseline.mjs";
 import { exerciseMCPDatabaseUI } from "./helpers/mcp-database-ui.mjs";
 import { exercisePlanHistoryRefreshUI } from "./helpers/plan-history-refresh-ui.mjs";
 import { exerciseAgentRegisterLoginUI } from "./helpers/agent-register-login-ui.mjs";
@@ -425,6 +433,18 @@ async function saveAndWait(selector = "#save-project") {
     .getByText("✓ 已保存", { exact: true })
     .waitFor();
 }
+async function openBodyHelperTab(name) {
+  const toggle = page.locator("#toggle-parameter-helper");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true")
+    await toggle.click();
+  const helper = page.locator(".parameter-helper");
+  await helper.waitFor();
+  const tab = helper.getByRole("tab", { name, exact: true });
+  if (await tab.count()) {
+    await tab.click();
+    assert.equal(await tab.getAttribute("aria-selected"), "true");
+  }
+}
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 try {
@@ -432,7 +452,22 @@ try {
   await exercisePlanHistoryRefreshUI(browserContext);
   await page.goto(app.launchUrl);
   await page.getByRole("button", { name: "发 送", exact: true }).waitFor();
+  await exerciseHTTPRequestActions(page);
+  await exerciseRequestParameterTabs(page);
+  await exerciseHTTPResponseTabs(page);
   await page.screenshot({ path: "/tmp/local-api-initial.png" });
+  const commonHeaderParameters = page.getByRole("button", {
+    name: "公共参数（Header）",
+    exact: true,
+  });
+  assert.equal(await commonHeaderParameters.count(), 0);
+  await page.locator('[data-param="headers"]').click();
+  await commonHeaderParameters.click();
+  await page.locator("#parameter-scope").waitFor();
+  await page.locator('.rail [data-page="apis"]').click();
+  await page.locator('[data-param="query"]').click();
+  assert.equal(await commonHeaderParameters.count(), 0);
+  await page.locator('[data-param="body"]').click();
   const helperLabelBox = await page
     .locator("#toggle-parameter-helper .helper-label")
     .boundingBox();
@@ -454,8 +489,20 @@ try {
     "false",
   );
   assert.equal(await page.locator("#body-code").inputValue(), originalBody);
-  await page.locator("#toggle-parameter-helper").click();
-  await page.getByText("插入环境变量", { exact: true }).waitFor();
+  await openBodyHelperTab("动态值");
+  const referenceVariable = page.getByRole("button", {
+    name: "引用变量",
+    exact: true,
+  });
+  if (await referenceVariable.isVisible()) {
+    await referenceVariable.press("Enter");
+    await page.locator(".raw-helper-variable-chooser").waitFor();
+    await page.keyboard.press("Escape");
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    assert.equal(await page.locator("#body-code").inputValue(), originalBody);
+  } else {
+    await page.getByText("插入环境变量", { exact: true }).waitFor();
+  }
   await page.locator("#body-code").fill('{"name":""}');
   await page
     .locator("#body-code")
@@ -481,13 +528,65 @@ try {
 
   await page.locator("#toggle-parameter-helper").click();
   assert.equal(await page.locator("#body-code").inputValue(), originalBody);
-  await page.locator('summary[aria-label="发送更多操作"]').click();
+  const curlSendMenu = page.locator('summary[aria-label="发送更多操作"]');
+  const curlDrawer = page.getByRole("dialog", {
+    name: "生成代码",
+    exact: true,
+  });
+  const curlOutput = curlDrawer.getByRole("textbox", {
+    name: "生成的 cURL 代码",
+  });
+  const closeCurlDrawer = curlDrawer.getByRole("button", {
+    name: "关闭",
+    exact: true,
+  });
+  await curlSendMenu.click();
   await page.locator("#send-menu-curl").click();
-  await page.locator("#dialog").waitFor({ state: "visible" });
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await curlDrawer.waitFor();
+  await curlOutput.waitFor();
+  assert.equal(await curlOutput.getAttribute("readonly"), "");
+  assert.match(await curlOutput.inputValue(), /^curl\b/);
+  assert.equal(
+    await curlDrawer
+      .getByRole("button", { name: "复制代码", exact: true })
+      .isEnabled(),
+    true,
+  );
+  await closeCurlDrawer.click();
+  await curlDrawer.waitFor({ state: "hidden" });
+  assert.equal(
+    await curlSendMenu.evaluate(
+      (element) => document.activeElement === element,
+    ),
+    true,
+  );
 
   await page.locator('input[name="body-type"][value="none"]').check();
-  await page.getByText("此请求没有 Body", { exact: true }).waitFor();
+  await page.getByText("当前请求未包含 Body", { exact: true }).waitFor();
+  assert.equal(
+    await page.locator(".body-none #generate-body").isVisible(),
+    true,
+  );
+  assert.equal(await page.locator(".body-none #format-json").count(), 0);
+  await page.setViewportSize({ width: 1363, height: 1023 });
+  const bodyEmptyFrame = await page.locator(".body-none").boundingBox();
+  const emptyResponseTabs = await page.locator(".response-tabs").boundingBox();
+  assert.deepEqual(
+    [
+      bodyEmptyFrame.x,
+      bodyEmptyFrame.y,
+      bodyEmptyFrame.width,
+      bodyEmptyFrame.height,
+    ],
+    [371, 273, 976, 140],
+  );
+  assert(Math.abs(emptyResponseTabs.y - 584) <= 1);
+  assert.deepEqual(
+    await page
+      .locator(".response-tabs button")
+      .evaluateAll((nodes) => nodes.slice(0, 6).map((n) => n.dataset.response)),
+    ["body", "headers", "cookies", "examples", "request", "logs"],
+  );
   await page.locator('input[name="body-type"][value="raw"]').check();
   assert.equal(await page.locator("#body-code").inputValue(), originalBody);
   await page.locator("#raw-format").selectOption("raw");
@@ -507,15 +606,34 @@ try {
     [
       "history",
       "apis",
-      "grpc",
-      "socketio",
       "docs",
       "dictionary",
       "settings",
       "git",
+      "grpc",
+      "socketio",
       "trash",
     ],
   );
+  const railAPIs = page.locator('.rail [data-page="apis"]');
+  await railAPIs.focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await railAPIs.getAttribute("aria-current"), "page");
+  assert.equal(
+    await railAPIs.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await page.locator(".rail :focus").getAttribute("data-page"),
+    "docs",
+  );
+  await page.keyboard.press("Shift+Tab");
+  assert.equal(
+    await railAPIs.evaluate((el) => el === document.activeElement),
+    true,
+  );
+
   const bodyPanelBox = await page.locator(".request-panel").boundingBox();
   const bodyEditorBox = await page.locator(".body-editor-shell").boundingBox();
   assert(
@@ -533,11 +651,14 @@ try {
     responseTabsBox.y >= 490 && responseTabsBox.y <= 525,
     "response separator stays near official reference",
   );
-  assert.equal(
+  assert.deepEqual(
     await page
-      .locator("#body-code")
-      .evaluate((el) => getComputedStyle(el).lineHeight),
-    "18px",
+      .locator("#body-code, #code-highlight, #code-gutter")
+      .evaluateAll((nodes) =>
+        nodes.map((el) => getComputedStyle(el).lineHeight),
+      ),
+    ["16px", "16px", "16px"],
+    "request text, syntax highlight and gutter share the native 16px row pitch",
   );
   assert(await page.locator(".empty-symbol svg").isVisible());
   const searchFieldBox = await page.locator("#search").boundingBox();
@@ -562,7 +683,6 @@ try {
       "must-not-create-on-cancel",
     ),
   );
-  await page.locator(".tree-create summary").click();
   assert.equal(await page.locator("#new-folder").isVisible(), false);
   const activeName = await page.locator("#request-name").inputValue();
   await page.locator("#request-name").fill("定位保留未保存内容");
@@ -596,6 +716,7 @@ try {
   await page.locator('[data-param="body"]').click();
 
   await page.screenshot({ path: "/tmp/local-api-reference-light.png" });
+  await captureHTTPWorkbenchBaseline(page);
   await page.locator("#compact-ui").click();
   assert.equal(await page.locator(".sidebar").isVisible(), false);
   await page.locator("#response-layout").click();
@@ -872,7 +993,7 @@ try {
   await page.locator('[data-plan="' + conflictPlanId + '"]').click();
   await page.locator('[data-step-edit="0"]').waitFor();
   uploadedMultipart = null;
-  await Promise.all([
+  const [uploadPlanResponse] = await Promise.all([
     page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname ===
@@ -882,7 +1003,14 @@ try {
     ),
     page.getByRole("button", { name: "执行计划", exact: true }).last().click(),
   ]);
-  await page.getByText("✓ 通过", { exact: false }).waitFor();
+  const uploadRun = await uploadPlanResponse.json();
+  assert.equal(uploadRun.status, "passed");
+  await page
+    .locator(
+      `[data-plan-run-id="${uploadRun.id}"] > summary .plan-run-verdict.success`,
+    )
+    .getByText("通过", { exact: true })
+    .waitFor();
   assert(
     uploadedMultipart,
     "the explicit post-reconciliation run must reach the real upload fixture",
@@ -951,9 +1079,10 @@ try {
   const stepBodyDynamicResult = await (await bodyDynamicRun).json();
   assert.equal(stepBodyDynamicResult.status, "passed");
   await page
-    .locator("details.card[open] > summary")
-    .filter({ hasText: stepBodyDynamicResult.createdAt })
-    .getByText("✓ 通过", { exact: true })
+    .locator(
+      `[data-plan-run-id="${stepBodyDynamicResult.id}"][open] > summary .plan-run-verdict.success`,
+    )
+    .getByText("通过", { exact: true })
     .waitFor();
   assert.deepEqual(JSON.parse(uploadedMultipart.body.toString()), {
     value: rawDynamicValue,
@@ -1012,6 +1141,7 @@ try {
   // Exercise editable scripts, response evidence and repeated modal dismissal.
   await page.locator('[data-page="apis"]').click();
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   assert.equal(await page.locator("#script-dialect").inputValue(), "legacy");
   page.once("dialog", (dialog) => dialog.dismiss());
   await page.locator("#script-dialect").selectOption("apipost8");
@@ -1039,6 +1169,7 @@ try {
     '/visualizer-leak.css");</style>';
   await page.locator('[data-page="apis"]').click();
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   await page
     .locator("#script-code")
     .fill(
@@ -1337,7 +1468,7 @@ try {
   );
   await saveAndWait();
   await page.locator(".tree-create summary").click();
-  await page.locator('[data-page="protocols"]').click();
+  await page.locator('[data-tree-protocol="sse"]').click();
   await page.locator("#protocol-url").fill(fixtureURL + "/sse");
   await page.locator("#protocol-name").fill("Saved SSE fixture");
   await Promise.all([
@@ -1507,6 +1638,8 @@ try {
   const awsSavedScripts = {};
   for (const phase of ["before", "after"]) {
     await page.locator(`[data-param="${phase}"]`).click();
+    if (phase === "after") await revealDebugPostSettings(page);
+    else await revealDebugPreSettings(page);
     awsSavedScripts[phase] = await page.locator("#script-code").inputValue();
     await page.locator("#script-code").fill("");
   }
@@ -1524,10 +1657,7 @@ try {
     .locator('[data-pair^="headers:"][data-pair$=":key"]')
     .count();
   for (const [offset, value] of [" first  value ", " second "].entries()) {
-    await page.locator('[data-add-pair="headers"]').click();
-    await page
-      .locator(`[data-pair="headers:${awsHeaderStart + offset}:key"]`)
-      .fill("X-AWS-Repeat");
+    await page.locator('[data-debug-pair-name="headers"]').fill("X-AWS-Repeat");
     await page
       .locator(`[data-pair="headers:${awsHeaderStart + offset}:value"]`)
       .fill(value);
@@ -1558,6 +1688,8 @@ try {
   await page.locator('[data-param="auth"]').click();
   for (const phase of ["before", "after"]) {
     await page.locator(`[data-param="${phase}"]`).click();
+    if (phase === "after") await revealDebugPostSettings(page);
+    else await revealDebugPreSettings(page);
     await page.locator("#script-code").fill(awsSavedScripts[phase]);
   }
   await page.locator('[data-param="auth"]').click();
@@ -1631,6 +1763,7 @@ try {
   await page.locator('[data-auth="iss"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/local-api-asap-auth.png" });
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   for (const expected of [61, 60]) {
     await page
       .locator("#script-code")
@@ -1670,9 +1803,8 @@ try {
     .locator('[data-pair^="headers:"][data-pair$=":key"]')
     .count();
   for (const [offset, value] of ["first", "second"].entries()) {
-    await page.locator('[data-add-pair="headers"]').click();
     await page
-      .locator(`[data-pair="headers:${hawkHeaderStart + offset}:key"]`)
+      .locator('[data-debug-pair-name="headers"]')
       .fill("X-Hawk-Repeat");
     await page
       .locator(`[data-pair="headers:${hawkHeaderStart + offset}:value"]`)
@@ -1792,7 +1924,7 @@ try {
   await page.screenshot({ path: "/tmp/local-api-ntlm.png" });
   await page.locator('[data-open-tab="' + beforeNTLMRequest + '"]').click();
   await page.locator('[data-param="auth"]').click();
-  await page.locator("#auth-type").selectOption("none");
+  await page.locator("#auth-type").selectOption("inherit");
   await page.locator("#url").fill(oauthPreviousURL);
   await page.locator('.rail [data-page="settings"]').click();
   await page.locator('[data-settings-anchor="resource-functions"]').click();
@@ -2173,6 +2305,12 @@ try {
     "Visible deterministic verification plan",
   );
   await page.locator('[data-page="apis"]').click();
+  const casesRequestURL = await page.locator("#url").inputValue();
+  await page.locator('[data-mode="cases"]').click();
+  assert.equal(await page.locator(".urlbar").isVisible(), false);
+  await page.locator('[data-mode="debug"]').click();
+  assert.equal(await page.locator("#url").inputValue(), casesRequestURL);
+  assert(await page.locator("#send").isVisible());
   await page.locator('[data-mode="cases"]').click();
   await page.locator("#new-interface-case").click();
   await page.locator("#case-name").fill("Independent persisted case");
@@ -2188,12 +2326,20 @@ try {
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.reload();
   await page.locator('[data-mode="cases"]').click();
-  await page.getByText("Independent persisted case", { exact: true }).waitFor();
-  await page.locator("[data-run-case]").click();
-  await page
-    .locator(".page pre")
-    .getByText('"outcome": "passed"', { exact: false })
-    .waitFor();
+  const persistedCaseRow = page.locator(".interface-case-row").filter({
+    has: page.getByText("Independent persisted case", { exact: true }),
+  });
+  await persistedCaseRow
+    .getByRole("button", { name: "运行用例", exact: true })
+    .click();
+  const persistedCaseEvidence = persistedCaseRow.locator(
+    "[data-case-result-body]",
+  );
+  await persistedCaseEvidence.waitFor({ state: "visible" });
+  assert.equal(
+    JSON.parse(await persistedCaseEvidence.textContent()).outcome,
+    "passed",
+  );
   await page.screenshot({ path: "/tmp/local-api-cases.png" });
   await page.locator('[data-mode="mock"]').click();
   const exampleMockURL = await page.locator(".mock-url").inputValue();
@@ -2440,8 +2586,7 @@ try {
 
   await page.locator('[data-page="apis"]').click();
   await page.locator('[data-param="query"]').click();
-  await page.locator('[data-add-pair="query"]').click();
-  await page.locator('[data-dictionary-pair="query:0"]').click();
+  await page.locator('[data-debug-pair-dictionary="query"]').click();
   await page.locator("#dialog-save").click();
   assert.equal(
     await page.locator('[data-pair="query:0:key"]').inputValue(),
@@ -2470,7 +2615,7 @@ try {
   );
   await page.locator('[data-param="body"]').click();
   await page.locator("#body-code").fill('{"existing":true}');
-  await page.locator("#toggle-parameter-helper").click();
+  await openBodyHelperTab("字典库");
   await page
     .locator("[data-insert-dictionary]")
     .filter({ hasText: "customerId" })
@@ -2936,8 +3081,7 @@ try {
   assert.equal(generatedBody.label, "xxx");
   assert.match(generatedBody.user_name, /^[\u4e00-\u9fff]{2,3}$/);
   await page.locator("#body-code").fill("");
-  if (!(await page.locator("#new-body-dynamic").isVisible()))
-    await page.locator("#toggle-parameter-helper").click();
+  await openBodyHelperTab("动态值");
   await page.locator("#new-body-dynamic").click();
   await page.locator("#dynamic-value").fill('{"n":7,"literal":"{{keep}}"}');
   await page.locator("#dialog-save").click();
@@ -3981,7 +4125,11 @@ try {
   ];
   await app.store.save(h2Project);
   await page.reload();
-  await page.locator("#project-select").selectOption(h2Project.id);
+  await pickProjectUI(page, h2Project.id);
+  await page
+    .locator("#tree [data-request]")
+    .getByText("HTTP2 proxy UI", { exact: true })
+    .click();
   await page.waitForFunction(
     () => document.querySelector("#request-name")?.value === "HTTP2 proxy UI",
   );
@@ -4046,16 +4194,12 @@ try {
   await page.screenshot({ path: "/tmp/local-api-http2-proxy.png" });
   await saveAndWait("#save");
   await page.locator("#curl").click();
-  await page.locator("#curl-output").waitFor();
-  assert.match(
-    await page.locator("#curl-output").inputValue(),
-    /--http2-prior-knowledge/,
-  );
-  assert.match(
-    await page.locator("#curl-output").inputValue(),
-    /--proxytunnel/,
-  );
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await curlOutput.waitFor();
+  const proxyCurl = await curlOutput.inputValue();
+  assert.match(proxyCurl, /--http2-prior-knowledge/);
+  assert.match(proxyCurl, /--proxytunnel/);
+  await closeCurlDrawer.click();
+  await curlDrawer.waitFor({ state: "hidden" });
   const observedProject = await app.store.create("stdio UI evidence");
   observedProject.plans = [
     snapshotPlan({
@@ -4400,6 +4544,7 @@ try {
   await page.getByRole("button", { name: "新建接口", exact: true }).click();
   await page.locator("#url").fill(fixtureURL + "/global-parameters");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator("#add-db-operation").click();
   await page
     .locator("#operation-db-sql")
@@ -4535,6 +4680,7 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator('.rail [data-page="apis"]').click();
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator('[data-edit-db-operation="0"]').click();
   assert.equal(await page.locator("#operation-db-connection").inputValue(), "");
   await page.locator("#dialog-save").click();
@@ -4553,6 +4699,7 @@ try {
   assert.equal((await (await reboundReply).json()).outcome, "passed");
 
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator("#edit-operations").click();
   await page.locator("#modal-json").fill("[]");
   await page.locator("#dialog-save").click();
@@ -4871,12 +5018,7 @@ try {
     1,
   );
   await page.locator('.rail [data-page="apis"]').click();
-  assert.equal(
-    await page
-      .locator('[data-tree-folder=""] > summary [data-edit-folder]')
-      .count(),
-    0,
-  );
+  assert.equal(await page.locator('#tree [data-tree-folder=""]').count(), 0);
   assert.equal(
     await page
       .locator(
@@ -4971,7 +5113,9 @@ try {
     .getByText("Bearer shared-auth-fixture", { exact: false })
     .waitFor();
   await page.locator('[data-param="auth"]').click();
-  await page.locator("#inherit-auth").uncheck();
+  const authType = page.getByLabel("类型", { exact: true });
+  assert.equal(await authType.inputValue(), "inherit");
+  await authType.selectOption("none");
   const noSharedAuth = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
   );
@@ -5025,6 +5169,7 @@ try {
   );
   await page.waitForFunction(() => !document.querySelector("#send")?.disabled);
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator("#inherit-shared-scripts").uncheck();
   const noScriptReply = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
@@ -5137,16 +5282,43 @@ try {
   });
   await app.store.save(formSchemaProject);
   await page.reload();
-  await page.locator("#project-select").selectOption(formSchemaProject.id);
+  await pickProjectUI(page, formSchemaProject.id);
+  await page
+    .locator("#tree [data-request]")
+    .getByText("Form schema fidelity", { exact: true })
+    .click();
   await page.waitForFunction(
     () =>
       document.querySelector("#request-name")?.value === "Form schema fidelity",
   );
   await page.locator('[data-param="body"]').click();
   await page.locator('[data-pair="form:2:value"]').fill("payload edit only");
+  const uploadValue = page.locator('[data-pair="form:4:value"]');
+  const uploadType = page.locator('[data-field-type="4"]');
+  await uploadValue.fill("example to retain");
+  const cancelConversion = page.waitForEvent("dialog");
+  const canceledSelection = uploadType.selectOption("file");
+  const conversionDialog = await cancelConversion;
+  assert.equal(conversionDialog.type(), "confirm");
+  assert.match(conversionDialog.message(), /切换字段类型会清除/);
+  await conversionDialog.dismiss();
+  await canceledSelection;
+  assert.equal(await uploadType.inputValue(), "text");
+  assert.equal(await uploadValue.inputValue(), "example to retain");
   await saveAndWait("#save-project");
   let formState = await app.store.get(formSchemaProject.id);
   assert.equal(formState.requests[0].form[2].schemaDefined, false);
+  assert.equal(formState.requests[0].form[4].schemaDefined, false);
+  assert.equal(formState.requests[0].form[4].value, "example to retain");
+  assert.equal(
+    Object.hasOwn(
+      exportOpenAPI(formState).paths["/form"].post.requestBody.content[
+        "multipart/form-data"
+      ].schema.properties,
+      "upload",
+    ),
+    false,
+  );
   assert.equal(
     Object.hasOwn(
       exportOpenAPI(formState).paths["/form"].post.requestBody.content[
@@ -5166,9 +5338,14 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.locator('[data-pair="form:3:key"]').fill("renamed");
-  await page.locator('[data-field-type="4"]').selectOption("file");
+  const acceptConversion = page.waitForEvent("dialog");
+  const acceptedSelection = uploadType.selectOption("file");
+  await (await acceptConversion).accept();
+  await acceptedSelection;
   await saveAndWait("#save-project");
   formState = await app.store.get(formSchemaProject.id);
+  assert.notEqual(formState.requests[0].form[4].schemaDefined, false);
+  assert.equal(formState.requests[0].form[4].value, "");
   const formContract =
     exportOpenAPI(formState).paths["/form"].post.requestBody.content[
       "multipart/form-data"
@@ -5339,7 +5516,7 @@ try {
     schemaMockProjectId,
   );
 
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("Response example roundtrip");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -5429,6 +5606,7 @@ try {
   await page.locator('[data-mode="debug"]').click();
   await page.locator("#url").fill(fixtureURL + "/script-response-wire");
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   const derivedBody = {
     value: 0,
     html: '<img src="' + fixtureURL + '/response-mutation-leak">',
@@ -5482,6 +5660,7 @@ try {
     .locator("#url")
     .fill("{{browser?host#part}}/script-form-body?drop=1#{{browser#fragment}}");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   page.once("dialog", (dialog) => dialog.accept());
   await page.locator("#script-dialect").selectOption("apipost8");
   await page
@@ -5492,6 +5671,8 @@ try {
   // The inline editor must be reachable without scrolling past long help text.
   for (const stage of ["after", "before"]) {
     await page.locator(`[data-param="${stage}"]`).click();
+    if (stage === "after") await revealDebugPostSettings(page);
+    else await revealDebugPreSettings(page);
     const visibleCodeHeight = await page
       .locator("#script-code")
       .evaluate((input) => {
@@ -5580,6 +5761,7 @@ try {
   );
   await page.keyboard.press("Escape");
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   await page.locator("#expand-script").click();
   assert.equal(await page.locator("#expanded-script-code").inputValue(), "");
   await page
@@ -5588,6 +5770,7 @@ try {
   await page.keyboard.press("Escape");
   assert.equal(await page.locator("#script-code").inputValue(), "");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   assert.equal(
     await page.locator("#script-code").inputValue(),
     expandedFormScript,
@@ -5676,7 +5859,7 @@ try {
   await page.locator("#url").fill(fixtureURL + "/script-form-body");
   await page.locator('[data-param="query"]').click();
   await page.locator('[data-add-pair="query"]').click();
-  await page.locator('[data-pair="query:0:key"]').fill("flag");
+  await page.locator('[data-debug-pair-name="query"]').fill("flag");
   await page.locator("#query-add-equal").uncheck();
   await saveAndWait();
   const flagRequestId = await page
@@ -5707,8 +5890,7 @@ try {
   await page.screenshot({ path: "/tmp/local-api-query-equals.png" });
   await page.locator('[data-param="cookies"]').click();
   await page.locator("#cookie-encoding").selectOption("apipost");
-  await page.locator('[data-add-pair="cookies"]').click();
-  await page.locator('[data-pair="cookies:0:key"]').fill("中文");
+  await page.getByRole("textbox", { name: "新 Cookie 参数名" }).fill("中文");
   await page.locator('[data-pair="cookies:0:value"]').fill("空 格+");
   await saveAndWait();
   await page.reload();
@@ -5900,7 +6082,7 @@ try {
   assert(!markdownDocument.includes(privateUploadBase64));
   await page.locator("#dialog").waitFor({ state: "hidden" });
 
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("SDK URL mode fixture");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -5912,9 +6094,10 @@ try {
     .fill(fixtureURL + "/sdk-url/{id}?raw=%2f+&x=1&x=2");
   await page.locator('[data-param="query"]').click();
   await page.locator('[data-add-pair="query"]').click();
-  await page.locator('[data-pair="query:0:key"]').fill("table");
+  await page.locator('[data-debug-pair-name="query"]').fill("table");
   await page.locator('[data-pair="query:0:value"]').fill("a+b");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   page.once("dialog", (dialog) => dialog.dismiss());
   await page.locator("#script-url-mode").selectOption("sdk");
   assert.equal(await page.locator("#script-url-mode").inputValue(), "string");
@@ -5927,6 +6110,7 @@ try {
       "pm.request.url.variables.upsert({key:'id',value:'42'});pm.request.url.query.one('x').value='changed';",
     );
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   await page
     .locator("#script-code")
     .fill(
@@ -5941,6 +6125,7 @@ try {
   await page.locator(`[data-request="${sdkRequestId}"]`).click();
   await page.locator('[data-mode="debug"]').click();
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   assert.equal(await page.locator("#script-url-mode").inputValue(), "sdk");
   const sdkReply = page.waitForResponse(
     (response) =>
@@ -6018,17 +6203,19 @@ try {
   await page.locator("#dialog").waitFor({ state: "hidden" });
   // Export the definition without executing its earlier mutation script.
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator("#script-code").fill("");
   await page.locator("#url").fill(fixtureURL + "/sdk-url/42?raw=%2f+&x=1&x=2");
   await page.locator("#curl").click();
-  await page.locator("#curl-output").waitFor();
+  await curlOutput.waitFor();
   assert.ok(
-    (await page.locator("#curl-output").inputValue()).includes(
+    (await curlOutput.inputValue()).includes(
       "/sdk-url/42?raw=%2f+&x=1&x=2&table=a%2Bb",
     ),
   );
   await page.screenshot({ path: "/tmp/local-api-sdk-url-curl.png" });
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await closeCurlDrawer.click();
+  await curlDrawer.waitFor({ state: "hidden" });
 
   await page.locator("#method").selectOption("POST");
   await page.locator("#url").fill(fixtureURL + "/final-body");
@@ -6037,12 +6224,14 @@ try {
   await page.locator("#raw-format").selectOption("raw");
   await page.locator("#body-code").fill("{{payload}}");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page
     .locator("#script-code")
     .fill(
       "pm.variables.set('payload','{{literal}}+&');const bytes=pm.getFinalRequestRawBody();pm.setRequestHeader('x-final-signature',CryptoJS.HmacSHA256(bytes,'fixture-key').toString());",
     );
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   await page
     .locator("#script-code")
     .fill(
@@ -6072,7 +6261,7 @@ try {
   // projects so the unsaved-change confirmation cannot cancel the switch.
   await saveAndWait();
 
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("OpenAPI URL query fixture");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -6086,7 +6275,7 @@ try {
   await page.locator("#url").fill(fixtureURL + "/items?q=one+two&empty=");
   await page.locator('[data-param="query"]').click();
   await page.locator('[data-add-pair="query"]').click();
-  await page.locator('[data-pair="query:0:key"]').fill("table");
+  await page.locator('[data-debug-pair-name="query"]').fill("table");
   await page.locator('[data-pair="query:0:value"]').fill("a+b");
   await saveAndWait();
   await page.locator("#export").click();
@@ -6109,6 +6298,7 @@ try {
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.screenshot({ path: "/tmp/local-api-openapi-url-query.png" });
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   page.once("dialog", (dialog) => dialog.accept());
   await page.locator("#script-url-mode").selectOption("sdk");
   await saveAndWait();
@@ -6207,7 +6397,7 @@ try {
   await page.screenshot({ path: "/tmp/local-api-restored-modern-project.png" });
 
   // Independent grouped-source fixture; no mutation of earlier validation inputs.
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("Imported sample groups fixture");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -6380,18 +6570,25 @@ try {
   await page.locator("#send:not([disabled])").waitFor();
   await page.screenshot({ path: "/tmp/local-api-imported-form-defaults.png" });
 
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("Case batch execution fixture");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.locator('.rail [data-page="apis"]').click();
   await page.locator("#add-request").click();
+  await page.locator("#request-name").fill("Other case source");
+  await saveAndWait();
+  await page.locator("#add-request").click();
   await page.locator("#request-name").fill("Batch execution source");
   await page.locator("#url").fill(fixtureURL + "/case-batch/first");
   await saveAndWait();
   const batchProjectId = await page.locator("#project-select").inputValue();
-  const batchSource = (await app.store.get(batchProjectId)).requests.find(
+  const batchRequests = (await app.store.get(batchProjectId)).requests;
+  const batchSource = batchRequests.find(
     (r) => r.name === "Batch execution source",
+  );
+  const otherCaseSource = batchRequests.find(
+    (r) => r.name === "Other case source",
   );
   await page.locator('[data-mode="cases"]').click();
   async function createBatchCase(name, endpoint) {
@@ -6480,12 +6677,21 @@ try {
   } finally {
     clearTimeout(slowTimer);
   }
-  await page.locator("#cancel").click();
+  assert.equal(await page.locator(".urlbar").isVisible(), false);
+  assert.equal(await page.locator("#cancel").count(), 0);
+  await page.locator('[data-mode="debug"]').click();
+  assert.equal(await page.locator("#cancel, #cancel-case-run").count(), 0);
+  await page.locator('[data-mode="cases"]').click();
+  await page.locator(`[data-request="${otherCaseSource.id}"]`).click();
+  assert.equal(await page.locator("#cancel, #cancel-case-run").count(), 0);
+  await page.locator(`[data-request="${batchSource.id}"]`).click();
+  await page.locator("#cancel-case-run").click();
   await page
     .locator("#case-batch-status")
     .getByText("已取消", { exact: false })
     .waitFor();
   releaseCaseBatchSlow();
+  assert.equal(await page.locator("#cancel-case-run").count(), 0);
   const interruptedSummary = await page
     .locator(`[data-case-result="${firstBatchCase.id}"] summary`)
     .textContent();
@@ -6623,7 +6829,7 @@ try {
     await mkdir(path.dirname(filePath), { recursive: true });
     await writeFile(filePath, file.text);
   }
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("Native JSON subset fixture");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -6687,6 +6893,7 @@ try {
     (e) => e.name === "Imported",
   );
   await page.locator("#env").selectOption(nativeEnv.id);
+  await page.locator('[data-mode="debug"]').click();
   const nativeResponse = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url().endsWith("/execute"),
   );
@@ -6965,7 +7172,7 @@ try {
   templateModern.apis[1].request.query.parameter = [
     { key: "q", value: '{{$function.fn_WRAP("a,b")|upper}}', is_checked: 1 },
   ];
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("Source Query function fixture");
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -7159,10 +7366,7 @@ try {
     await page.locator("#body-code").inputValue(),
     "{{@value:apipost_body}}",
   );
-  if (
-    !(await page.locator('[data-edit-body-dynamic="apipost_body"]').isVisible())
-  )
-    await page.locator("#toggle-parameter-helper").click();
+  await openBodyHelperTab("动态值");
   await page.locator('[data-edit-body-dynamic="apipost_body"]').click();
   assert.equal(
     await page.locator("#dynamic-source").inputValue(),
@@ -7280,10 +7484,7 @@ try {
   await page.locator("#dialog-save").click();
   await page.locator("#dialog").waitFor({ state: "hidden" });
   await page.locator('[data-param="body"]').click();
-  if (
-    !(await page.locator('[data-edit-body-dynamic="apipost_body"]').isVisible())
-  )
-    await page.locator("#toggle-parameter-helper").click();
+  await openBodyHelperTab("动态值");
   await page.locator('[data-edit-body-dynamic="apipost_body"]').click();
   assert.equal(
     await page.locator("#dynamic-value").inputValue(),

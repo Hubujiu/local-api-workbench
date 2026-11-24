@@ -1,3 +1,7 @@
+import {
+  filterStoredLiteralQueryEditor,
+  validateLiteralQueryEditor,
+} from "./literal-query-editor.mjs";
 import { validateLoadRuns } from "./load-report-evidence.mjs";
 import { ProjectCommitUncertain } from "./project-commit-outcome.mjs";
 import { validateRequestDefinitionHistory } from "./request-definition-history.mjs";
@@ -50,6 +54,7 @@ function validateLayout(project) {
   // same pre-publication/pre-recovery gate. Neither check may apply any bytes.
   validateRequestDefinitionHistory(project);
   validateLoadRuns(project.loadRuns === undefined ? [] : project.loadRuns);
+  validateLiteralQueryEditor(project);
 }
 function writeJSON(file, value, beforePublish, onPublicationPossible) {
   return writeText(
@@ -84,7 +89,26 @@ async function writeText(file, text, beforePublish, onPublicationPossible) {
   }
 }
 const localHistoryFile = ".local-history.json";
-const historyFields = ["requestDefinitionHistoryFormat", "loadReportFormat"];
+const literalQueryFile = "history/literal-query-editor.json";
+const retainLiteralQueryInJournal = "_retainLiteralQueryEditorFile";
+const historyFields = [
+  "requestDefinitionHistoryFormat",
+  "loadReportFormat",
+  "literalQueryEditorFormat",
+];
+
+async function requestFileIdentity(directory, requestId) {
+  const info = await lstat(path.join(directory, "apis", filename(requestId)), {
+    bigint: true,
+  });
+  if (!info.isFile()) return null;
+  return createHash("sha256")
+    .update(
+      [info.dev, info.ino, info.size, info.mtimeNs, info.ctimeNs].join(":"),
+    )
+    .digest("hex");
+}
+
 const privateGitRules = [
   "/history/",
   "/.transaction.json",
@@ -150,9 +174,10 @@ async function historyManifest(directory, metadata) {
   return manifest;
 }
 
-async function apply(directory, project) {
+async function apply(directory, project, retainLiteralQueryFile = false) {
   const metadata = { ...project, storageFormat: 3, collections: {} };
   delete metadata._diskFingerprint;
+  delete metadata.literalQueryEditor;
   delete metadata.loadReportFormat;
   delete metadata.requestDefinitionHistory;
   delete metadata.requestDefinitionHistoryFormat;
@@ -213,6 +238,23 @@ async function apply(directory, project) {
       path.join(directory, "history/definitions.json"),
       project.requestDefinitionHistory,
     );
+  if (retainLiteralQueryFile) localHistory.literalQueryEditorFormat = 1;
+  else if (project.literalQueryEditor?.entries.length) {
+    const data = project.literalQueryEditor;
+    const witnesses = await Promise.all(
+      data.entries.map(async ({ requestId }) => ({
+        requestId,
+        identity: await requestFileIdentity(directory, requestId),
+      })),
+    );
+    if (witnesses.some(({ identity }) => !identity))
+      throw Error("URL 查询编辑状态的接口文件无效");
+    await writeJSON(path.join(directory, literalQueryFile), {
+      data,
+      witnesses,
+    });
+    localHistory.literalQueryEditorFormat = 1;
+  } else await rm(path.join(directory, literalQueryFile), { force: true });
   await ensureGitIgnore(directory);
   await writeJSON(path.join(directory, localHistoryFile), localHistory);
   await writeJSON(path.join(directory, "project.json"), metadata);
@@ -228,9 +270,22 @@ export async function recoverProject(directory, expectedId) {
     throw error;
   }
   if (journal.id !== expectedId) throw Error("项目恢复日志ID不匹配");
+  const retainLiteralQueryFile = Object.hasOwn(
+    journal,
+    retainLiteralQueryInJournal,
+  );
+  if (
+    retainLiteralQueryFile &&
+    (journal[retainLiteralQueryInJournal] !== true ||
+      Object.hasOwn(journal, "literalQueryEditor"))
+  )
+    throw Error("URL 查询编辑状态恢复日志无效");
+  if (Object.hasOwn(journal, "literalQueryEditorIssue"))
+    throw Error("URL 查询诊断不能写入恢复日志");
+  delete journal[retainLiteralQueryInJournal];
   validateLayout(journal);
   try {
-    await apply(directory, journal);
+    await apply(directory, journal, retainLiteralQueryFile);
     await rm(path.join(directory, ".transaction.json"));
   } catch (error) {
     throw new ProjectCommitUncertain(expectedId, error);
@@ -239,7 +294,7 @@ export async function recoverProject(directory, expectedId) {
 export async function writeProject(
   directory,
   project,
-  { signal, beforePublish } = {},
+  { signal, beforePublish, retainLiteralQueryFile = false } = {},
 ) {
   const assertNotAborted = () => {
     if (signal?.aborted)
@@ -248,6 +303,12 @@ export async function writeProject(
       });
   };
   assertNotAborted();
+  if (
+    Object.hasOwn(project, retainLiteralQueryInJournal) ||
+    Object.hasOwn(project, "literalQueryEditorIssue") ||
+    (retainLiteralQueryFile && Object.hasOwn(project, "literalQueryEditor"))
+  )
+    throw Error("URL 查询编辑状态不能写入该项目事务");
   validateLayout(project);
   await mkdir(directory, { recursive: true });
   // The complete journal is written before separate files. Reads recover it under the same lock.
@@ -257,7 +318,9 @@ export async function writeProject(
   try {
     await writeJSON(
       journal,
-      project,
+      retainLiteralQueryFile
+        ? { ...project, [retainLiteralQueryInJournal]: true }
+        : project,
       () => {
         assertNotAborted();
         beforePublish?.();
@@ -281,7 +344,7 @@ export async function writeProject(
     throw error;
   }
   try {
-    await apply(directory, project);
+    await apply(directory, project, retainLiteralQueryFile);
     await rm(path.join(directory, ".transaction.json"));
   } catch (error) {
     throw new ProjectCommitUncertain(project.id, error);
@@ -352,6 +415,63 @@ export async function readProject(directory, expectedId) {
       )
         project[key] = [];
       else throw error;
+    }
+  }
+  if (
+    Object.hasOwn(metadata, "literalQueryEditor") ||
+    Object.hasOwn(metadata, "literalQueryEditorIssue") ||
+    Object.hasOwn(metadata, retainLiteralQueryInJournal) ||
+    (Object.hasOwn(history, "literalQueryEditorFormat") &&
+      (metadata.storageFormat !== 3 || history.literalQueryEditorFormat !== 1))
+  )
+    throw Error("URL 查询编辑状态清单无效");
+  if (history.literalQueryEditorFormat === 1) {
+    try {
+      const sidecar = path.join(directory, literalQueryFile);
+      const stat = await lstat(sidecar);
+      if (!stat.isFile() || stat.size > 8 * 1024 * 1024)
+        throw Error("URL 查询编辑状态文件无效");
+      const disk = JSON.parse(await readFile(sidecar, "utf8"));
+      if (
+        !disk ||
+        Object.keys(disk).length !== 2 ||
+        !Array.isArray(disk.witnesses) ||
+        disk.witnesses.length > 100 ||
+        !Array.isArray(disk.data?.entries) ||
+        disk.witnesses.length !== disk.data.entries.length
+      )
+        throw Error("URL 查询编辑状态文件无效");
+      const visible = new Set();
+      const known = new Set(project.requests.map(({ id }) => id));
+      const seen = new Set();
+      for (const [index, witness] of disk.witnesses.entries()) {
+        if (
+          !witness ||
+          Object.keys(witness).length !== 2 ||
+          typeof witness.requestId !== "string" ||
+          witness.requestId !== disk.data.entries[index]?.requestId ||
+          seen.has(witness.requestId) ||
+          typeof witness.identity !== "string" ||
+          !/^[a-f0-9]{64}$/.test(witness.identity)
+        )
+          throw Error("URL 查询编辑状态文件身份无效");
+        seen.add(witness.requestId);
+        if (
+          known.has(witness.requestId) &&
+          witness.identity ===
+            (await requestFileIdentity(directory, witness.requestId))
+        )
+          visible.add(witness.requestId);
+      }
+      const editor = filterStoredLiteralQueryEditor(
+        project,
+        disk.data,
+        visible,
+      );
+      if (editor) project.literalQueryEditor = editor;
+    } catch (error) {
+      project.literalQueryEditorIssue =
+        error?.code === "ENOENT" ? "missing" : "invalid";
     }
   }
   delete project.loadReportFormat;

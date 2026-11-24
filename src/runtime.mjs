@@ -1,8 +1,15 @@
 import {
+  readLiteralQueryEditorShape,
+  reconcileLiteralQueryEditor,
+} from "./literal-query-editor.mjs";
+import {
   validateLoadRuns,
   transitionLoadRun,
 } from "./load-report-evidence.mjs";
+import { graphQLEditorVersion } from "../public/graphql-editor.js";
+import { assertStoredGraphQLNamedQueries } from "../public/graphql-named-queries.js";
 import { rejectGraphQLVariableTemplate } from "./graphql-variable-template.mjs";
+import { assertActiveFormFileEncoding } from "./form-wire-guard.mjs";
 import { loadNetworkBudget } from "./load-network-budget.mjs";
 import { validateCookieObjectRequest } from "./openapi-cookie-objects.mjs";
 import { validateHeaderObjectRequest } from "./openapi-header-objects.mjs";
@@ -129,6 +136,7 @@ import {
   projectFingerprint,
 } from "./project-files.mjs";
 import { validateMockRules } from "./mock.mjs";
+import { rejectHTTPPreWait } from "./http-pre-wait.mjs";
 import { validateResources } from "./resources.mjs";
 import { snapshotCase } from "./cases.mjs";
 import { validateEnvironmentModel } from "./environments.mjs";
@@ -416,6 +424,12 @@ export class Store {
     const project = JSON.parse(
       await readFile(path.join(base, key + ".json"), "utf8"),
     );
+    if (
+      Object.hasOwn(project, "literalQueryEditor") ||
+      Object.hasOwn(project, "literalQueryEditorIssue") ||
+      Object.hasOwn(project, "_retainLiteralQueryEditorFile")
+    )
+      throw Error("旧项目文件不能包含私有 URL 查询编辑状态");
     validateStoredRuntimeRows(project);
     validateNativeInheritanceProject(project);
     validateAPIResourceTrash(project);
@@ -803,9 +817,21 @@ export class Store {
     return task;
   }
   #validateProject(p) {
+    if (isProxy(p)) throw Error("项目不能为代理对象");
+    readLiteralQueryEditorShape(p);
+    const editorIssue = Object.getOwnPropertyDescriptor(
+      p,
+      "literalQueryEditorIssue",
+    );
+    if (
+      Object.hasOwn(p, "_retainLiteralQueryEditorFile") ||
+      (editorIssue &&
+        (!Object.hasOwn(editorIssue, "value") ||
+          !["missing", "invalid"].includes(editorIssue.value)))
+    )
+      throw Error("URL 查询编辑状态诊断无效");
     // History is opaque service-owned evidence, not user-supplied executable
     // objects. Inspect its descriptor before any clone/JSON operation.
-    if (isProxy(p)) throw Error("项目不能为代理对象");
     const historyDescriptor = Object.getOwnPropertyDescriptor(
       p,
       "requestDefinitionHistory",
@@ -939,6 +965,8 @@ export class Store {
       );
     }
     for (const request of p.requests || []) {
+      graphQLEditorVersion(request);
+      assertStoredGraphQLNamedQueries(request);
       validateRequestTaskSource(request);
       validateAuth(request.auth);
       validateMockRules(request.mockRules || []);
@@ -1221,6 +1249,11 @@ export class Store {
           }
         : previous;
     assertAPIResourceTrashIdentity(resourcePrevious, p, apiResourceRestore);
+    const retainLiteralQueryFile = Boolean(previous?.literalQueryEditorIssue);
+    if (retainLiteralQueryFile && Object.hasOwn(p, "literalQueryEditor"))
+      throw Error("私有 URL 查询编辑数据需要恢复，暂不能修改禁用项");
+    delete p.literalQueryEditorIssue;
+    reconcileLiteralQueryEditor(previous, p, { activity });
     const next = structuredClone(p);
     next.revision = (previous?.revision || 0) + 1;
     next.configRevision = activity
@@ -1269,10 +1302,17 @@ export class Store {
       throw Object.assign(Error("项目保存已取消"), {
         code: "STORE_SAVE_ABORTED",
       });
-    await writeProject(path.join(base, p.id), next, { signal, beforePublish });
+    await writeProject(path.join(base, p.id), next, {
+      signal,
+      beforePublish,
+      retainLiteralQueryFile,
+    });
     try {
       const saved = await readProject(path.join(base, p.id), p.id);
       validateAPIResourceTrash(saved);
+      // A readback may omit a private entry if an external file write races it.
+      if (!Object.hasOwn(saved, "literalQueryEditor"))
+        delete p.literalQueryEditor;
       Object.assign(p, saved);
     } catch (error) {
       throw new ProjectCommitUncertain(p.id, error);
@@ -1344,8 +1384,10 @@ export async function executeRequest(
   if (input?.nativeInheritance !== undefined)
     throw Error("请求须先按当前项目解析原生继承图");
 
+  rejectHTTPPreWait(input, "直接 HTTP 传输");
   rejectGraphQLVariableTemplate(input);
   const r = normalizeRequest(input);
+  assertActiveFormFileEncoding(r);
   const admittedNetworkBudget = loadNetworkBudget(networkBudget);
   if (admittedNetworkBudget)
     validateRedirectAdmission({ ...r, redirect: true }, {});

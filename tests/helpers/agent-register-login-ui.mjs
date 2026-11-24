@@ -1,3 +1,4 @@
+import { pickProjectUI } from "./pick-project-ui.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { registerLoginScenario } from "./agent-register-login-fixture.mjs";
@@ -16,7 +17,7 @@ export async function exerciseAgentRegisterLoginUI(browserContext) {
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));
       await page.goto(app.launchUrl);
-      await page.locator("#project-select").selectOption(project.id);
+      await pickProjectUI(page, project.id);
       await page.locator('header button[data-page="plans"]').click();
       await page.locator(`[data-plan="${plan.id}"]`).click();
       assert.equal(await page.locator("#plan-name").inputValue(), plan.name);
@@ -33,7 +34,10 @@ export async function exerciseAgentRegisterLoginUI(browserContext) {
       const exportButton = page.locator(`[data-export-run="${run.id}"]`);
       const card = page.locator("details.card").filter({ has: exportButton });
       const summary = card.locator(":scope > summary");
-      assert.match(await summary.innerText(), failed ? /× 失败/ : /✓ 通过/);
+      assert.equal(
+        await summary.locator(".plan-run-verdict").innerText(),
+        failed ? "失败" : "通过",
+      );
       if ((await card.getAttribute("open")) === null) await summary.click();
       await card
         .getByText(`快照 SHA256: ${run.planHash}`, { exact: true })

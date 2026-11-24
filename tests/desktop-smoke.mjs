@@ -1,3 +1,5 @@
+import { revealDebugPreSettings } from "./helpers/http-pre-actions-ui.mjs";
+import { revealDebugPostSettings } from "./helpers/http-post-actions-ui.mjs";
 import {
   observeDesktopProcess,
   observeDesktopElectron,
@@ -166,10 +168,12 @@ try {
   phase = "script";
   console.log("DESKTOP_PHASE", phase);
   await window.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(window);
   window.once("dialog", (dialog) => dialog.accept());
   await window.locator("#script-dialect").selectOption("apipost8");
   const packagedRequestURL = await window.locator("#url").inputValue();
   await window.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(window);
   await window
     .locator("#script-code")
     .fill(
@@ -291,6 +295,7 @@ try {
   phase = "sdk-url";
   console.log("DESKTOP_PHASE", phase);
   await window.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(window);
   const sdkOriginalAfter = await window.locator("#script-code").inputValue();
   window.once("dialog", (dialog) => dialog.accept());
   await window.locator("#script-url-mode").selectOption("sdk");
@@ -300,6 +305,7 @@ try {
       "pm.test('packaged-sdk-url',()=>{pm.expect(typeof pm.request.url).to.equal('object');pm.expect(pm.request.url.query.get('packaged-sdk')).to.equal('one&two');});",
     );
   await window.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(window);
   const sdkOriginalBefore = await window.locator("#script-code").inputValue();
   await window
     .locator("#script-code")
@@ -325,6 +331,7 @@ try {
   window.once("dialog", (dialog) => dialog.accept());
   await window.locator("#script-url-mode").selectOption("string");
   await window.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(window);
   await window.locator("#script-code").fill(sdkOriginalAfter);
   phase = "final-body";
   console.log("DESKTOP_PHASE", phase);
@@ -342,12 +349,14 @@ try {
   await window.locator("#raw-format").selectOption("raw");
   await window.locator("#body-code").fill("{{payload}}");
   await window.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(window);
   await window
     .locator("#script-code")
     .fill(
       "pm.variables.set('payload','{{literal}}+&');const bytes=pm.getFinalRequestRawBody();pm.setRequestHeader('x-final-signature',CryptoJS.HmacSHA256(bytes,'fixture-key').toString());",
     );
   await window.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(window);
   await window
     .locator("#script-code")
     .fill(
@@ -455,6 +464,7 @@ try {
   phase = "json-body-assertions";
   console.log("DESKTOP_PHASE", phase);
   await window.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(window);
   await window
     .locator("#script-code")
     .fill(
@@ -470,7 +480,7 @@ try {
   await window.locator("#send:not([disabled])").waitFor();
   await window.locator('[data-open-tab="' + beforeJWTRequest + '"]').click();
   await window.locator('[data-param="auth"]').click();
-  await window.locator("#auth-type").selectOption("none");
+  await window.locator("#auth-type").selectOption("inherit");
   await window.locator("#url").fill(packagedRequestURL);
   phase = "xml";
   console.log("DESKTOP_PHASE", phase);

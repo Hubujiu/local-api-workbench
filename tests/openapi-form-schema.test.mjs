@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import Ajv2020 from "ajv/dist/2020.js";
+import { prepareFormTypeChange } from "../public/form-field-types.js";
 import {
   importDocument,
   exportOpenAPI,
@@ -99,6 +100,48 @@ test("example-only fields do not become schema declarations and relax a closed f
   );
   request.form.find((f) => f.key === "extra").schemaDefined = true;
   assert.deepEqual(media(request).schema.properties.extra, {});
+});
+
+test("only applying a deliberate multipart file conversion declares an example-only field", () => {
+  const mime = "multipart/form-data";
+  const schema = {
+    type: "object",
+    properties: {},
+    additionalProperties: false,
+  };
+  const [request] = importDocument(source(schema, { upload: "example" }, mime));
+  const [row] = request.form;
+  row.description = "retain this annotation";
+  const original = structuredClone(row);
+  assert.equal(row.schemaDefined, false);
+  assert.equal(prepareFormTypeChange(row, "text", "form-data"), null);
+  const pending = prepareFormTypeChange(row, "file", "form-data");
+  assert.equal(pending.confirm, true);
+  assert.deepEqual(request.form[0], original);
+  assert.deepEqual(media(request).schema, schema);
+
+  request.form[0] = pending.row;
+  assert.equal(Object.hasOwn(pending.row, "schemaDefined"), false);
+  assert.equal(pending.row.description, original.description);
+  assert.equal(pending.row.value, "");
+  assert.equal(pending.row.requiresFile, true);
+  const output = media(request);
+  assert.deepEqual(output.schema, {
+    ...schema,
+    properties: {
+      upload: {
+        type: "string",
+        format: "binary",
+        description: "retain this annotation",
+      },
+    },
+  });
+  const [reimport] = importDocument(
+    exportOpenAPI({ name: "Forms", requests: [request] }),
+  );
+  assert.equal(reimport.form[0].type, "file");
+  assert.notEqual(reimport.form[0].schemaDefined, false);
+  assert.deepEqual(reimport.form[0].schema, output.schema.properties.upload);
 });
 
 test("unrepresented required names and absent object type are preserved", () => {

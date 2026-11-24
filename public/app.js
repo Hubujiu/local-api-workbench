@@ -1,4 +1,219 @@
+import {
+  formFileRepresentation,
+  unsupportedURLencodedForm,
+  prepareFormTypeChange,
+  formTextExample,
+} from "./form-field-types.js";
+import {
+  compactHTTPBodySelector,
+  httpBodyFamily,
+  httpBodyModesHTML,
+  httpBodyRadios,
+} from "./http-body-modes.js";
+import {
+  debugMultipartEditor,
+  isDebugMultipart,
+  newMultipartTextRow,
+  syncMultipartAll,
+} from "./debug-multipart-editor.js";
+import {
+  debugURLencodedEditor,
+  isDebugURLencoded,
+} from "./debug-urlencoded-editor.js";
+import { readNewHTTPTimeout } from "./send-settings.js";
+import {
+  createManualResponseView,
+  readAfterSendResponse,
+} from "./after-send-settings.js";
+import { productBuild, updateProductVersion } from "./product-version.js";
+import { projectTopMenu, bindProjectTopMenu } from "./project-top-menu.js";
+import { projectCreateForm } from "./project-create-form.js";
+import {
+  bindProjectCreationForm,
+  createProjectCreationFlow,
+} from "./project-create-settlement.js";
+const projectCreationFlow = createProjectCreationFlow(sessionStorage);
+import { apiCreateMenu, bindApiCreateMenu } from "./api-create-menu.js";
+import { createGraphQLSchemaDirectory } from "./graphql-schema-directory.js";
+import { newGraphQLEditorRequest } from "./graphql-editor.js";
+import {
+  prepareGraphQLNamedQueryChange,
+  readGraphQLNamedQueries,
+} from "./graphql-named-queries.js";
+import {
+  createGraphQLResponseFence,
+  defaultNamedQuery,
+} from "./graphql-named-workspace.js";
+import {
+  bindGraphQLWorkspace,
+  createGraphQLWorkspaceDrafts,
+  graphqlWorkspaceHTML,
+  unappliedGraphQL,
+} from "./graphql-workspace.js";
+import { confirmDirtyProjectSwitch } from "./project-switch-confirmation.js";
+import { apiWelcome } from "./api-welcome.js";
+import {
+  applyFontScale,
+  fontScaleKey,
+  readFontScale,
+} from "./appearance-font-scale.js";
+import {
+  appearanceTheme,
+  activeAppearanceTheme,
+  applyAppearanceTheme,
+  openAppearanceSettings,
+} from "./appearance-settings.js";
+import {
+  bindProjectSwitcher,
+  projectSwitcherHTML,
+  selectableProjects,
+} from "./project-switcher.js";
+import { hasVisibleTrash, openEmptyTrash } from "./empty-trash.js";
+import { databaseConnectionHTML } from "./database-connection-view.js";
+import {
+  databaseManagerHTML,
+  bindDatabaseManager,
+} from "./database-manager.js";
+import { selectedSSEWorkbench } from "./sse-workbench.js";
+import { createSSECaptureOwner, sseCaptureView } from "./sse-capture-owner.js";
+import { protocolDefinitionEdit } from "./protocol-definition-edit.js";
+import { renderWorkspaceTree } from "./api-sidebar-tree.js";
+import { bindApiRowMenu } from "./api-row-menu.js";
+import { bindPlanPickerTree } from "./plan-step-picker.js";
+import { unsentResponseData } from "./http-response-empty.js";
+import {
+  bindUnsentActualRequest,
+  unsentActualRequestHTML,
+} from "./http-unsent-actual-request.js";
+import {
+  httpResponseHeaderRows,
+  httpResponseHeadersHTML,
+} from "./http-response-headers.js";
+import {
+  httpResponseTabs,
+  readResponseTabsPosition,
+  restoreResponseTabsPosition,
+} from "./http-response-tabs.js";
+import {
+  bindHTTPResponseLayout,
+  effectiveResponseLayout,
+  httpResponseLayoutHTML,
+  responseLayoutMedia,
+} from "./http-response-layout.js";
+import {
+  bindHTTPSuccessResponse,
+  httpSuccessResponseHTML,
+  isPopulatedHTTPResponse,
+} from "./http-success-response.js";
+import {
+  namedFormRows,
+  requestParameterTabs,
+  revealParameterTab,
+} from "./http-request-parameter-tabs.js";
+import {
+  bindHTTPRequestParameterOverflow,
+  requestParameterOverflowHTML,
+} from "./http-request-parameter-overflow.js";
+import {
+  bindHTTPPostActions,
+  httpPostActionsHTML,
+} from "./http-post-actions.js";
+import { bindHTTPPreActions, httpPreActionsHTML } from "./http-pre-actions.js";
+import {
+  bindHTTPScriptSnippets,
+  httpScriptSnippetWorkspaceHTML,
+} from "./http-script-snippets.js";
+import {
+  addHTTPPreWait,
+  createHTTPPreWaitDrafts,
+  httpPreWaitHTML,
+  isHTTPPreWait,
+  supportsHTTPPreWait,
+  validateHTTPPreWaits,
+  waitDraftError,
+} from "./http-pre-wait.js";
+import {
+  debugHeaderNameListHTML,
+  debugPairSelection,
+  debugPairComposer,
+  debugPairFromKey,
+  debugQueryEquality,
+  debugQueryEqualityLabel,
+  ownsDebugPairComposer,
+} from "./debug-pair-composer.js";
+import {
+  bindDebugURLQuery,
+  debugURLQueryContents,
+  expireLiteralURLQueryRows,
+  pruneLiteralURLQueryRows,
+} from "./debug-url-query.js";
+import {
+  canComposeDesignPair,
+  designPairComposer,
+  isDesignPairKind,
+} from "./design-pair-composer.js";
+import {
+  bindDesignQueryTypeMenu,
+  designQueryMetadataHTML,
+  designQueryTypeMenuHTML,
+  prepareDesignQueryType,
+} from "./design-query-metadata.js";
+import {
+  changedProvisionalQuery,
+  createProvisionalQuery,
+  provisionalQueryDefaults,
+  provisionalQueryEnabled,
+  provisionalQueryNotice,
+  provisionalQueryRow,
+} from "./design-query-provisional.js";
+import {
+  httpRequestActions,
+  requestCurlAction,
+} from "./http-request-actions.js";
+import {
+  designResponsePanel,
+  responseSelection,
+  editDesignResponseHeader,
+  addDesignResponseStringHeader,
+  editDesignResponseRoot,
+  responseRootTypeFields,
+  headerEditorFields,
+  exampleMedia,
+  scopedResponseExamples,
+  designExampleTarget,
+  prepareDesignExampleBody,
+  supportsDesignExamples,
+} from "./design-response.js";
+import {
+  createDesignResponseSettingsDrafts,
+  unappliedDesignResponseSettings,
+  unappliedDesignResponseHeader,
+  unappliedDesignResponseExample,
+  unchangedResponseDefinitions,
+} from "./design-response-settings-draft.js";
+import {
+  documentCounts,
+  documentWorkspaceTabs,
+  prepareWorkspaceDocumentLinks,
+  workspaceDocumentById,
+  workspaceDocumentHTML,
+} from "./workspace-document.js";
+import { bindWorkspaceDocumentScroll } from "./workspace-document-scroll.js";
+import { markdownEdit, markdownTools } from "./design-markdown.js";
+import { insertTextareaText } from "./textarea-edit-history.js";
+import { emptyCasePanel, populatedCasePanel } from "./case-empty-view.js";
+import {
+  cookieManagerHTML,
+  environmentDialogHTML,
+  environmentDialogShell,
+  mountEnvironmentDialog,
+} from "./environment-dialog.js";
 import { bindMCPDatabase } from "./mcp-database-view.js";
+import {
+  isMCPActivityReceipt,
+  mcpTopStatusButton,
+  updateMCPTopStatus,
+} from "./mcp-top-status.js";
 import {
   loadDatabasePreviewCapabilities,
   isPreviewDatabase,
@@ -14,6 +229,14 @@ import {
   protocolHistoryDetail,
   prepareProtocolHistoryExport,
 } from "./protocol-history-view.js";
+import {
+  bindRecentHistoryFilter,
+  recentHistoryPage,
+} from "./recent-history-view.js";
+import {
+  recentSavedTrashAvailable,
+  recentSavedTrashTargets,
+} from "./recent-saved-trash.js";
 import {
   createGrpcStreamState,
   renderGrpcStream,
@@ -37,12 +260,17 @@ import {
 import {
   scopedExportResources,
   scopedExportSelectionHTML,
+  bindScopedExportSelection,
   readScopedExportInput,
   assertScopedExportPreview,
   scopedExportConfirmationHTML,
   scopedExportRequest,
   assertScopedExportResult,
 } from "./scoped-export-view.js";
+import {
+  bindGraphQLExportNotice,
+  graphqlExportNoticeHTML,
+} from "./graphql-export-notice.js";
 import { createProtocolSessionController } from "./protocol-session-controller.js";
 import {
   planStructureEditor,
@@ -52,6 +280,8 @@ import { createProjectImportGuard } from "./project-import-guard.js";
 const projectImports = createProjectImportGuard();
 import { createNativeRequestLifecycle } from "./native-request-lifecycle.js";
 const nativeRequestLifecycle = createNativeRequestLifecycle();
+// All admitted reads compete; a canceled picker read does not replace the mounted workspace.
+let projectOpenRequestSequence = 0;
 let projectOpenSequence = 0;
 let bodyGenerationSequence = 0;
 import { mysqlPortInput, mongoPortInput } from "./mysql-port-input.js";
@@ -61,6 +291,22 @@ import {
   isApipostFunctionSource,
   apipostFunctionSourceGroups,
 } from "./apipost-function-template.js";
+import {
+  bindLocalProjectImport,
+  localProjectImportMarkup,
+} from "./local-project-import.js";
+import {
+  assertOpenAPIApplyReceipt,
+  assertOpenAPIReview,
+  openAPIReviewMarkup,
+  readOpenAPIReviewInput,
+} from "./openapi-file-review.js";
+import {
+  assertOpenAPISubsetPlan,
+  bindOpenAPISelection,
+  openAPISelectionScope,
+  scopedOpenAPIInput,
+} from "./openapi-file-selection.js";
 import { selectedDirectoryDocument } from "./apipost-directory-input.js";
 import { createCaseResultStore } from "./case-result-store.js";
 import { runCaseBatch, caseEvidence } from "./case-batch.js";
@@ -85,9 +331,30 @@ import { assertionCounts } from "./assertion-state.js";
 import { createScriptDraft, applyScriptDraft } from "./script-draft.js";
 import { mockURL, mockDebugTarget } from "./mock-target.js";
 import { editResponseExample } from "./response-example.js";
+import {
+  createDebugExampleDrafts,
+  debugExampleChoices,
+  debugExamplesHTML,
+  editableDebugExample,
+  prepareDebugExampleMetadata,
+} from "./http-debug-examples.js";
 import { applySelectedFormFile } from "./form-file-selection.js";
+import {
+  binaryBodyHTML,
+  bindBinaryBodyEditor,
+  prepareBinaryBodyChange,
+} from "./binary-body-editor.js";
 import { variableRows } from "./variable-definitions.js";
+import {
+  globalParameterWorkspaceIssue,
+  mountWorkspaceGlobalParameters,
+  workspaceGlobalParametersHTML,
+} from "./workspace-global-parameters.js";
 import { mountVariableEditor } from "./variable-editor.js";
+import {
+  mountWorkspaceGlobalVariables,
+  workspaceGlobalVariablesHTML,
+} from "./workspace-global-variables.js";
 import {
   inferSchemaFromJSON,
   inferSchemaFromMySQL,
@@ -98,21 +365,45 @@ import {
   removeEmptyModelFolder,
 } from "./model-folder-actions.js";
 import { saveModel } from "./model-edit.js";
+import { setWorkspaceModelFieldRequired } from "./model-workspace-required.js";
+import {
+  bindModelFieldTypeMenu,
+  changeWorkspaceModelFieldType,
+} from "./model-workspace-type.js";
+import {
+  WorkspaceModelDrafts,
+  modelDraftPanel,
+  modelDraftTab,
+} from "./model-workspace.js";
 import { modelCards, modelFolderPath } from "./model-folders.js";
 import { bindMCPSettings } from "./mcp-settings-view.js";
 import { scriptDialectOptions, scriptDialectNotice } from "./script-dialect.js";
 import { mountVisualization } from "./visualizer-view.js";
-import { inlineImageURI } from "./inline-image.js";
-import { folderTree, moveFolderTree } from "./folder-tree.js";
+import { bindLocalDocumentImage } from "./document-local-image.js";
+import { moveFolderTree } from "./folder-tree.js";
 import { loadTiming } from "./load-timing.js";
+import { loadWorkspace } from "./load-workspace.js";
 import { parseLoadCSV } from "./load-data.js";
 import { builtinVariableNames } from "./builtin-variable-catalog.js";
 import {
   schemaEditor,
   bindSchemaEditor,
   editRequestResponseDefinition,
+  editRequestResponseSettings,
 } from "./schema-editor.js";
-import { authPanel } from "./auth-view.js";
+import { httpAuthPane, httpRequestAuthPane } from "./auth-view.js";
+import {
+  createDesignPathDrafts,
+  designPathTabLabel,
+  designPathTable,
+  usesDesignPathDraft,
+} from "./design-path-draft.js";
+import {
+  captureDebugAuthOperation,
+  debugAuthChoice,
+  updateDebugAuthChoice,
+  usesDebugAuthChoice,
+} from "./debug-auth-choice.js";
 import { renderMarkdown } from "./vendor/markdown-renderer.js";
 import { attributeFields, attributeChooser } from "./attribute-view.js";
 import {
@@ -127,21 +418,43 @@ import { adoptVariableWrites } from "./variable-write-receipt.js";
 import { stepEditor, bindStepEditor } from "./step-editor.js";
 import {
   dictionaryPanel,
+  dictionaryEntryEditor,
+  dictionarySidebar,
+  dictionaryViewPosition,
+  bindDictionaryView,
   dictionaryValue,
   insertDictionaryField,
   effectiveParameterDictionary,
 } from "./dictionary-view.js";
 import { clientConfiguration, mcpClients } from "./mcp-client-config.js";
 import { renderPlans, renderRuns } from "./plan-view.js";
+import { bindPlanInspection } from "./plan-inspection.js";
+import {
+  bindRawHelper,
+  bindRawHelperFixedChooser,
+  bindRawHelperMockChooser,
+  bindRawHelperVariableChooser,
+  bodyDynamicToken,
+  rawHelperFixedChooser,
+  rawHelperMockChooser,
+  rawHelperTabs,
+  rawHelperVariableChooser,
+  rawHelperVariableNames,
+} from "./raw-helper-view.js";
 import { createPlanHistoryRefresh } from "./plan-history-refresh.js";
 const refreshPlanHistory = createPlanHistoryRefresh();
 import { resources, settingsSidebar } from "./resource-view.js";
 import { highlightJSON } from "./code-format.js";
+import {
+  bindModelRawEditor,
+  modelRawEditorMarkup,
+} from "./model-raw-editor.js";
 import { snapshotInterfaceForPlan } from "./plan-snapshots.js";
 import {
   exportDocumentation,
   requestDocumentationHTML,
 } from "./document-export.js";
+import { createCurlPreview } from "./http-curl-preview.js";
 import { icon as lineIcon } from "./icons.js";
 const $ = (s) => document.querySelector(s),
   esc = (v) =>
@@ -158,9 +471,47 @@ const $ = (s) => document.querySelector(s),
     );
 const uid = () => crypto.randomUUID();
 const responses = new Map();
+const debugExampleSelections = new WeakMap();
+const debugExampleDrafts = createDebugExampleDrafts();
+const graphqlResponseFence = createGraphQLResponseFence();
+const openDesignDescriptions = new WeakMap();
+const designPathDrafts = createDesignPathDrafts();
+const designDescriptionScroll = new WeakMap();
+let rememberDesignDescriptionScroll;
+const designParameterTabs = [
+  ["headers", "Header"],
+  ["query", "Query"],
+  ["path", "Path"],
+  ["body", "Body"],
+  ["auth", "认证"],
+];
+let designParameter = "headers";
+const designResponseSelections = new Map();
+const collapsedDesignResponseRoots = new WeakMap();
+const debugAuthDrafts = new WeakMap();
+const provisionalQuery = createProvisionalQuery();
+const graphqlDrafts = createGraphQLWorkspaceDrafts();
+const graphqlSchemaDirectory = createGraphQLSchemaDirectory();
+let debugParameterOwner = "";
+const designResponseKey = (r) => JSON.stringify([project?.id, r.id]);
+const designResponseSettingsDrafts = createDesignResponseSettingsDrafts();
 const caseResults = createCaseResultStore();
+const sseCaptures = createSSECaptureOwner();
 const caseSelections = new Map();
 let caseBatch = null;
+let singleCaseRun = null;
+let genericProtocolCapture = null;
+function caseCancellationOwner() {
+  return caseBatch?.running ? caseBatch : singleCaseRun;
+}
+function canCancelCurrentCase() {
+  const owner = caseCancellationOwner();
+  return (
+    mode === "cases" &&
+    owner?.projectId === project.id &&
+    owner?.sourceRequestId === current
+  );
+}
 function selectedInterfaceCases() {
   const key = project.id + ":" + current;
   const eligible = new Set(
@@ -177,14 +528,20 @@ function selectedInterfaceCases() {
 function caseSelectionToolbar() {
   const selected = selectedInterfaceCases(),
     all = (project.cases || []).filter((c) => c.sourceRequestId === current);
-  return `<div class="toolbar case-selection"><label><input type="checkbox" id="select-all-cases" ${all.length && selected.size === all.length ? "checked" : ""} ${busy || !all.length ? "disabled" : ""}> 全选</label><span role="status">已选 ${selected.size} 项</span><button id="run-selected-cases" ${busy || !selected.size ? "disabled" : ""}>运行所选</button><button id="run-all-cases" ${busy || !all.length ? "disabled" : ""}>全部运行</button><button id="move-selected-cases" ${busy || !selected.size ? "disabled" : ""}>移动所选</button><button id="delete-selected-cases" class="danger" ${busy || !selected.size ? "disabled" : ""}>删除所选</button></div><p class="muted">单次最多100个、请求快照总量4MiB，按当前列表顺序串行运行；用例未通过会继续，调用错误会停止且不重试。取消会停止后续用例。</p>${caseBatch?.projectId === project.id && caseBatch?.sourceRequestId === current ? `<p id="case-batch-status" role="status">${caseBatch.running ? "运行中" : caseBatch.cancelled ? "已取消" : caseBatch.stoppedOnError ? "已停止（调用错误）" : "已完成"} ${caseBatch.completed} / ${caseBatch.total} · 通过 ${caseBatch.passed} · 未通过 ${caseBatch.failed}${caseBatch.currentName ? " · " + esc(caseBatch.currentName) : ""}</p>` : ""}`;
+  return `<div class="toolbar case-selection"><div class="case-batch-selection"><label><input type="checkbox" id="select-all-cases" ${all.length && selected.size === all.length ? "checked" : ""} ${busy || !all.length ? "disabled" : ""}> 全选</label><span role="status" data-case-selection-count${selected.size ? "" : " data-empty"}>已选 ${selected.size} 项</span><div class="case-selected-actions"${selected.size ? "" : " hidden"}><button id="run-selected-cases" ${busy || !selected.size ? "disabled" : ""}>运行所选</button><button id="move-selected-cases" ${busy || !selected.size ? "disabled" : ""}>移动所选</button><button id="delete-selected-cases" class="danger" ${busy || !selected.size ? "disabled" : ""}>删除所选</button></div></div><div class="case-list-actions"><button id="new-case-folder" ${busy ? "disabled" : ""}>添加分组</button><button id="new-interface-case" ${busy ? "disabled" : ""}>添加用例</button><button id="run-all-cases" class="primary" ${busy || !all.length ? "disabled" : ""}>全部运行</button>${canCancelCurrentCase() ? '<button type="button" id="cancel-case-run">取消运行</button>' : ""}</div></div>${caseBatch?.projectId === project.id && caseBatch?.sourceRequestId === current ? `<p id="case-batch-status" role="status">${caseBatch.running ? "运行中" : caseBatch.cancelled ? "已取消" : caseBatch.stoppedOnError ? "已停止（调用错误）" : "已完成"} ${caseBatch.completed} / ${caseBatch.total} · 通过 ${caseBatch.passed} · 未通过 ${caseBatch.failed}${caseBatch.currentName ? " · " + esc(caseBatch.currentName) : ""}</p>` : ""}`;
 }
 const temporaryParameters = new Map();
+const workspaceModelDrafts = new WorkspaceModelDrafts();
 const collapsedFolders = new Set();
 const loadOptions = new Map();
 const parameterScopes = new Map();
 const pendingOAuth1 = new Set();
+let openedDocuments = [];
+let activeDocumentId = null;
+const documentModes = new Map();
 let modalRevision = 0;
+const curlPreview = createCurlPreview();
+let modalFocusHandlers;
 let opened = [],
   token = "",
   projects = [],
@@ -217,6 +574,8 @@ let opened = [],
     canStop: false,
   },
   mcpState = { enabled: false, activities: [] },
+  mcpTopStatusUnavailable = false,
+  mcpTopStatusKnown = false,
   updateMCPPanel = null,
   mcpPollSequence = 0,
   helperOpen = false,
@@ -224,6 +583,52 @@ let opened = [],
   responseLayout = "stacked",
   compactUI = false,
   settingsSection = "settings-basic";
+const httpResponseLayoutMedia = globalThis.matchMedia?.(responseLayoutMedia);
+let releaseHTTPResponseLayout,
+  releaseHTTPRequestOverflow,
+  releaseHTTPPostActions,
+  releaseHTTPPreActions;
+const httpPreEditors = new WeakMap();
+const httpSnippetEditors = new WeakMap();
+const httpPreWaitDrafts = createHTTPPreWaitDrafts();
+let httpPreOwner;
+const httpPostAdvanced = new Set();
+const httpPostAdvancedKey = (r) => JSON.stringify([project?.id, r.id]);
+const activeHTTPResponseLayout = () =>
+  effectiveResponseLayout(
+    responseLayout,
+    httpResponseLayoutMedia?.matches ?? true,
+  );
+const rawHelperMedia = globalThis.matchMedia?.(
+  "(min-width: 1000px) and (min-height: 720px)",
+);
+let currentBuild = productBuild();
+const manualResponseView = createManualResponseView();
+let rawHelperOwner = null;
+let rawHelperState = { tab: "dictionary", query: "" };
+const useTabbedRawHelper = () =>
+  rawHelperMedia?.matches &&
+  activeHTTPResponseLayout() !== "split" &&
+  !bodyExpanded &&
+  !document.body.classList.contains("dark");
+function bodyHelperState(owner) {
+  if (rawHelperOwner !== owner) {
+    rawHelperOwner = owner;
+    rawHelperState = { tab: "dictionary", query: "" };
+  }
+  return rawHelperState;
+}
+function refreshResponsiveRawHelper() {
+  if (!helperOpen || !$(".debug-raw-helper")) return;
+  const before = $(".raw-helper-open");
+  if (Boolean(before) === Boolean(useTabbedRawHelper())) return;
+  const restoreToggle = before?.contains(document.activeElement);
+  collect();
+  render(true);
+  if (restoreToggle)
+    $("#toggle-parameter-helper")?.focus({ preventScroll: true });
+}
+rawHelperMedia?.addEventListener("change", refreshResponsiveRawHelper);
 let socketioWorkbenchState = null,
   socketioWorkbenchProject = "",
   socketioNavigationGeneration = 0,
@@ -855,19 +1260,26 @@ const methodOptions = [
   "OPTIONS",
 ];
 const env = () => {
-  const selected = $("#env")?.value || project?.currentEnvironmentId;
+  const selected = project?.currentEnvironmentId;
   return project?.environments.some((e) => e.id === selected)
     ? selected
     : project?.environments[0]?.id;
 };
-async function api(path, method = "GET", data) {
+async function api(
+  path,
+  method = "GET",
+  data,
+  { signal, expectedStatus, protocolReceiptRunId } = {},
+) {
   const r = await fetch("/api" + path, {
     method,
     headers: { "content-type": "application/json", "x-local-token": token },
     body: data === undefined ? undefined : JSON.stringify(data),
+    signal,
   });
   const b = await r.json();
   if (!r.ok) {
+    if (protocolReceiptRunId && b?.runId === protocolReceiptRunId) return b;
     const error = Error(b.error || r.statusText);
     error.projectCommitOutcome = {
       project_id: b.project_id,
@@ -876,6 +1288,8 @@ async function api(path, method = "GET", data) {
     };
     throw error;
   }
+  if (expectedStatus && r.status !== expectedStatus)
+    throw Error("服务未返回预期回执");
   return b;
 }
 function toast(s) {
@@ -886,6 +1300,20 @@ function toast(s) {
 }
 function request() {
   return project?.requests.find((r) => r.id === current);
+}
+function workspaceDocument() {
+  return page === "apis"
+    ? workspaceDocumentById(project, activeDocumentId)
+    : null;
+}
+function openWorkspaceDocument(id) {
+  collect();
+  if (!workspaceDocumentById(project, id))
+    throw Error("文档标识不存在或重复，请从文档总览查看");
+  if (!openedDocuments.includes(id)) openedDocuments.push(id);
+  activeDocumentId = id;
+  page = "apis";
+  render();
 }
 function defaultRequest(name = "新建接口") {
   return {
@@ -925,11 +1353,26 @@ async function save() {
   if (project) projectImports.assertCanSave(project.id);
   if (!project) return;
   if (saving) throw Error("保存尚未完成，请等待");
+  if (debugExampleDrafts.pending(project.requests))
+    throw Error("请修正或撤回无效的响应示例正文后再保存");
+  if (httpPreWaitDrafts.pending(project.requests)) throw Error(waitDraftError);
+  if (changedProvisionalQuery(provisionalQuery.read(project, request())))
+    throw Error(
+      "待命名 Query 参数选项未保存：请返回设计 Query 填写参数名，或重置待命名选项。",
+    );
+  if (
+    project.requests.some((r) => r.graphqlEditorVersion === 1) &&
+    graphqlDrafts.hasProject(project)
+  )
+    throw Error(unappliedGraphQL);
   collect();
+  if (project.literalQueryEditor) pruneLiteralURLQueryRows(project);
   const owner = project,
     snapshot = structuredClone(project),
     version = editVersion,
     operation = projectImports.beginSave(project.id);
+  const exampleReceipt = debugExampleDrafts.pinSave(owner, snapshot);
+  let applied = null;
   snapshot.history = [];
   snapshot.runs = [];
   saving = true;
@@ -938,6 +1381,7 @@ async function save() {
   try {
     const saved = await api("/projects/" + snapshot.id, "PUT", snapshot);
     assertProjectSaveReceipt(saved, snapshot);
+    exampleReceipt.confirm(saved);
     const metadata = projects.find((item) => item.id === saved.id);
     if (metadata)
       Object.assign(metadata, {
@@ -947,8 +1391,19 @@ async function save() {
       });
     if (project === owner) {
       if (editVersion === version) {
+        const previousRequests = new Map(owner.requests.map((r) => [r.id, r]));
+        for (const savedRequest of saved.requests) {
+          const previous = previousRequests.get(savedRequest.id);
+          const drafts = debugAuthDrafts.get(previous);
+          if (
+            drafts &&
+            JSON.stringify(savedRequest.auth) === JSON.stringify(previous.auth)
+          )
+            debugAuthDrafts.set(savedRequest, drafts);
+        }
         project = saved;
         dirty = false;
+        applied = saved;
       } else {
         project.revision = saved.revision;
         project.configRevision = saved.configRevision;
@@ -958,6 +1413,7 @@ async function save() {
       }
     }
     toast(dirty ? "已保存本次快照，后续修改仍未保存" : "已保存到本地");
+    return applied && { owner, applied, version };
   } catch (error) {
     const outcome = error?.projectCommitOutcome;
     const rejected =
@@ -965,6 +1421,7 @@ async function save() {
       outcome.commit_outcome === "not_committed" &&
       outcome.retry_safe === false;
     if (rejected) {
+      exampleReceipt.reject();
       error.projectSaveRollback = { owner, version };
       throw error;
     }
@@ -1019,6 +1476,11 @@ function assertProjectSaveReceipt(saved, snapshot) {
     JSON.parse(JSON.stringify(snapshot)),
   )) {
     if (omitted.has(key)) continue;
+    if (key === "literalQueryEditor") {
+      if (!value.entries?.length && saved[key] === undefined) continue;
+      if (JSON.stringify(saved[key]) !== JSON.stringify(value)) fail();
+      continue;
+    }
     if (
       !Object.hasOwn(saved, key) ||
       (Array.isArray(value) && !Array.isArray(saved[key])) ||
@@ -1040,7 +1502,9 @@ function rollbackProjectSave(error, rollback) {
 
 function collect() {
   const r = request();
-  if (!r || page !== "apis") return;
+  if (!r || page !== "apis" || workspaceDocument()) return;
+  const responseDraftNotice = designResponseSettingsDrafts.notice(project);
+  if (responseDraftNotice) throw Error(responseDraftNotice);
   for (const [selector, key] of [
     ["#request-name", "name"],
     ["#url", "url"],
@@ -1094,7 +1558,16 @@ async function changeNativeRequestLifecycle(requestId, restore) {
     },
   });
 }
-async function openProject(id) {
+async function openProject(
+  id,
+  { fromPicker = false, pickerGuard, targetSignal, creationSelection } = {},
+) {
+  if (
+    targetSignal?.aborted ||
+    (pickerGuard && !pickerGuard()) ||
+    (creationSelection && !creationSelection.current())
+  )
+    return false;
   if (
     socketioWorkbenchState?.draftDirty &&
     socketioWorkbenchProject === project?.id &&
@@ -1110,19 +1583,38 @@ async function openProject(id) {
   )
     return false;
   if (busy || saving) throw Error("请先结束当前请求或保存，再切换项目");
-  if (dirty && !confirm("当前修改尚未保存，确定切换项目？")) return;
+  if (project && debugExampleDrafts.pending(project.requests))
+    throw Error("请先修正或撤回无效的响应示例正文，再切换或重新加载项目");
+  if (
+    project?.requests?.some((r) => r.graphqlEditorVersion === 1) &&
+    graphqlDrafts.hasProject(project)
+  )
+    throw Error(unappliedGraphQL);
+  if (dirty && !pickerGuard && !confirm("当前修改尚未保存，确定切换项目？"))
+    return;
   const reloadCheckpoint = nativeRequestLifecycle.reloadCheckpoint();
   const importCheckpoint = projectImports.reloadCheckpoint();
-  const sequence = ++projectOpenSequence,
+  const intent = ++projectOpenRequestSequence,
+    sequence = targetSignal ? projectOpenSequence : ++projectOpenSequence,
     previousProject = project,
     version = editVersion,
     previousDirty = dirty;
-  const loaded = await api("/projects/" + id);
-  if (sequence !== projectOpenSequence) return false;
+  const path = "/projects/" + id;
+  const loaded = targetSignal
+    ? await api(path, "GET", undefined, { signal: targetSignal })
+    : await api(path);
+  if (
+    targetSignal?.aborted ||
+    intent !== projectOpenRequestSequence ||
+    sequence !== projectOpenSequence
+  )
+    return false;
   if (
     project !== previousProject ||
     editVersion !== version ||
     dirty !== previousDirty ||
+    (pickerGuard && !pickerGuard()) ||
+    (creationSelection && !creationSelection.current()) ||
     busy ||
     saving
   )
@@ -1148,11 +1640,33 @@ async function openProject(id) {
     );
   }
   socketioNavigationGeneration++;
+  const resetWorkspace =
+    fromPicker && previousProject && previousProject.id !== id;
+  if (targetSignal) projectOpenSequence++;
+  if (creationSelection) projects = creationSelection.registry;
   project = loaded;
   nativeRequestLifecycle.acknowledgeReload(id, reloadCheckpoint);
   projectImports.acknowledgeReload(id, importCheckpoint);
-  current = project.requests.find((r) => !r.deletedAt)?.id;
+  if (resetWorkspace) {
+    page = "apis";
+    search = "";
+    searchType = "all";
+    mode = "debug";
+    param = "body";
+    responseTab = "body";
+    helperOpen = false;
+    bodyExpanded = false;
+    rawHelperOwner = null;
+    planTab = "plans";
+    designParameter = "headers";
+  }
+  current = resetWorkspace
+    ? null
+    : project.requests.find((r) => !r.deletedAt)?.id;
   opened = current ? [current] : [];
+  openedDocuments = [];
+  activeDocumentId = null;
+  documentModes.clear();
   dirty = false;
   response = null;
   lastRun = null;
@@ -1161,6 +1675,7 @@ async function openProject(id) {
   selectedProtocolId = "";
   sessionStorage.setItem("project", id);
   render();
+  return true;
 }
 // A preview is read-only; its result may write only the draft and dialog that
 // requested it. Rebind only when synchronously advancing to confirmation.
@@ -1187,6 +1702,200 @@ function previewDraftOwner() {
       projectImports.assertCanSave(owner.id);
     },
   };
+}
+// The classic import modes stay independent. This review lane only consumes the
+// explicitly selected OpenAPI file, never the paste buffer or another project.
+function bindOpenAPIFileReview(shell) {
+  const button = shell.querySelector("#local-import-preview-file");
+  const file = shell.querySelector("#import-file");
+  const mode = shell.querySelector("#import-mode");
+  const status = shell.querySelector("#local-import-preview-status");
+  let sourceGeneration = 0;
+  for (const name of ["input", "change"])
+    shell.addEventListener(name, () => sourceGeneration++);
+  button.addEventListener("click", async () => {
+    const selected = file.files[0];
+    if (button.disabled || mode.value !== "interfaces" || !selected) return;
+    const source = sourceGeneration;
+    const originalRevision = modalRevision;
+    const classicApply = $("#dialog-save");
+    button.disabled = true;
+    classicApply.disabled = true;
+    status.textContent = "正在读取并预览所选文件…";
+    const isOriginal = () =>
+      shell.isConnected &&
+      $("#dialog").open &&
+      modalRevision === originalRevision;
+    try {
+      collect();
+      const owner = project;
+      const configRevision = owner.configRevision ?? owner.revision;
+      const version = editVersion;
+      const opening = projectOpenRequestSequence;
+      const importCheckpoint = projectImports.reloadCheckpoint();
+      const nativeCheckpoint = nativeRequestLifecycle.reloadCheckpoint();
+      const assertOwner = (dialogRevision, beforeApply = true) => {
+        if (
+          project !== owner ||
+          (project.configRevision ?? project.revision) !== configRevision ||
+          editVersion !== version ||
+          projectOpenRequestSequence !== opening ||
+          modalRevision !== dialogRevision ||
+          !$("#dialog").open
+        )
+          throw Error("项目、草稿或导入窗口已变化，请重新预览");
+        if (dirty || busy || saving)
+          throw Error("请先结束请求并另行保存草稿，再预览或导入；未自动保存");
+        nativeRequestLifecycle.assertReloadCurrent(nativeCheckpoint);
+        nativeRequestLifecycle.assertCanSave(owner.id);
+        if (beforeApply) {
+          projectImports.assertReloadCurrent(importCheckpoint);
+          projectImports.assertCanStart(owner.id, "interfaces");
+        }
+      };
+      const assertSource = () => {
+        assertOwner(originalRevision);
+        if (
+          !isOriginal() ||
+          source !== sourceGeneration ||
+          mode.value !== "interfaces" ||
+          file.files[0] !== selected
+        )
+          throw Error("所选文件或导入方式已变化，请重新预览");
+      };
+      assertSource();
+      const input = await readOpenAPIReviewInput(selected);
+      assertSource();
+      const route = "/projects/" + owner.id;
+      const preview = await api(route + "/import-preview", "POST", input);
+      assertSource();
+      const allowed = assertOpenAPIReview(preview, configRevision);
+      const scope = allowed
+        ? openAPISelectionScope(input.document, preview)
+        : null;
+      const initialKeys = scope ? [...scope.labels.keys()] : null;
+      const canApply =
+        allowed &&
+        (!scope ||
+          scope.selectedClosure(initialKeys).size === scope.inventory.size);
+      let pending = canApply ? { input, preview, keys: initialKeys } : null;
+      let reviewRevision, choices;
+      modal(
+        "预览 Swagger / OpenAPI",
+        openAPIReviewMarkup({
+          projectName: owner.name,
+          fileName: selected.name,
+          preview,
+          input,
+          canApply,
+          scope,
+        }),
+        async () => {
+          const alert = $("#openapi-file-review-error");
+          try {
+            assertOwner(reviewRevision);
+            if (
+              !pending ||
+              pending.preview.expiresAt <= Date.now() ||
+              (choices && !choices.matches(pending.keys))
+            )
+              throw Error("预览已失效，请关闭后重新选择文件并预览");
+            const accept = pending;
+            pending = null; // Never replay the attempted write or use its token again.
+            choices?.lock();
+            const operation = projectImports.begin(owner.id, "interfaces");
+            try {
+              const receipt = await api(route + "/import-apply", "POST", {
+                input: accept.input,
+                token: accept.preview.token,
+              });
+              assertOpenAPIApplyReceipt(receipt, accept.preview);
+              assertOwner(reviewRevision, false);
+              const loaded = await api(route);
+              assertOwner(reviewRevision, false);
+              assertProjectSaveReceipt(loaded, owner);
+              if (
+                loaded.configRevision !== receipt.configRevision ||
+                loaded.revision !== receipt.revision
+              )
+                throw Error("导入后的项目版本已变化");
+              project = loaded;
+              if (!current) {
+                current = project.requests.find((item) => !item.deletedAt)?.id;
+                if (current && !opened.includes(current)) opened.push(current);
+              }
+              render();
+              toast("导入完成");
+            } catch {
+              operation.requireReconciliation();
+              throw Error(
+                "导入结果未能核对。请重新加载原项目核对，勿重复导入；当前草稿仍保留。",
+              );
+            } finally {
+              operation.finish();
+            }
+          } catch (error) {
+            pending = null;
+            if (
+              $("#dialog").open &&
+              modalRevision === reviewRevision &&
+              alert?.isConnected
+            ) {
+              alert.textContent = error.message;
+              // The shared modal resets the button after its callback rejects.
+              setTimeout(() => {
+                if (
+                  $("#dialog").open &&
+                  modalRevision === reviewRevision &&
+                  !pending
+                )
+                  $("#dialog-save").disabled = true;
+              }, 0);
+            }
+            throw error;
+          }
+        },
+        "确认导入",
+        () => {
+          pending = null;
+          choices?.lock();
+          $("#import")?.focus();
+        },
+      );
+      reviewRevision = modalRevision;
+      $("#dialog-save").disabled = !canApply;
+      if (scope) {
+        choices = bindOpenAPISelection($(".openapi-file-review"), canApply, {
+          invalidate() {
+            pending = null;
+            $("#dialog-save").disabled = true;
+          },
+          async preview(keys) {
+            assertOwner(reviewRevision);
+            const scoped = scopedOpenAPIInput(input, keys);
+            const plan = await api(route + "/import-preview", "POST", scoped);
+            assertOwner(reviewRevision);
+            const excluded = assertOpenAPISubsetPlan(scope, keys, plan);
+            if (!assertOpenAPIReview(plan, configRevision, excluded))
+              throw Error("所选范围包含不可导入的变更；未导入任何内容");
+            return { input: scoped, preview: plan, keys };
+          },
+          accept(current) {
+            pending = current;
+            $("#dialog-save").disabled = false;
+          },
+        });
+      }
+      $(".openapi-file-review").focus();
+    } catch (error) {
+      if (isOriginal()) status.textContent = error.message;
+    } finally {
+      if (isOriginal()) {
+        button.disabled = false;
+        classicApply.disabled = false;
+      }
+    }
+  });
 }
 function openScopedDefinitionExport() {
   const context = previewDraftOwner();
@@ -1250,11 +1959,45 @@ function openScopedDefinitionExport() {
     "预览范围",
   );
   context.bindDialog();
+  bindScopedExportSelection($("#dialog-content"));
 }
-function modal(title, html, onSave, label = "确定") {
+function modal(title, html, onSave, label = "确定", afterClose) {
+  curlPreview.dismiss();
   const d = $("#dialog"),
     revision = ++modalRevision;
   let submitting = false;
+  modalFocusHandlers?.abort();
+  modalFocusHandlers = undefined;
+  let handlers;
+  const closeThisModal = (returnValue) => {
+    if (modalRevision !== revision || !d.open) return;
+    handlers?.abort();
+    if (returnValue === undefined) d.close();
+    else d.close(returnValue);
+    if (modalRevision === revision && !d.open) afterClose?.();
+  };
+  if (afterClose) {
+    // Native "close" is queued and can belong to the previous invocation of
+    // this shared element. Deliver focus only from this invocation's close.
+    handlers = modalFocusHandlers = new AbortController();
+    const options = { signal: handlers.signal };
+    d.addEventListener(
+      "cancel",
+      (event) => {
+        event.preventDefault();
+        closeThisModal();
+      },
+      options,
+    );
+    d.querySelector(":scope > form").addEventListener(
+      "submit",
+      (event) => {
+        event.preventDefault();
+        closeThisModal(event.submitter?.value);
+      },
+      options,
+    );
+  }
   $("#dialog-save").disabled = false;
   $("#dialog-title").textContent = title;
   $("#dialog-content").innerHTML = html;
@@ -1267,7 +2010,7 @@ function modal(title, html, onSave, label = "确定") {
     $("#dialog-save").disabled = true;
     try {
       await onSave();
-      if (modalRevision === revision) d.close();
+      closeThisModal();
     } catch (e) {
       if (modalRevision === revision) toast(e.message);
     } finally {
@@ -1276,15 +2019,6 @@ function modal(title, html, onSave, label = "确定") {
     }
   };
   d.showModal();
-  if ($("#pick-directory"))
-    $("#pick-directory").onclick = async () => {
-      if (!window.desktop?.chooseDirectory) {
-        toast("浏览器模式请直接填写绝对路径；桌面版支持选择文件夹");
-        return;
-      }
-      const directory = await window.desktop.chooseDirectory();
-      if (directory) $("#new-directory").value = directory;
-    };
   $("#dialog-content input")?.focus();
 }
 const jsonEditor = (value, id = "modal-json") =>
@@ -1293,96 +2027,84 @@ function nav() {
   return [
     ["history", "◷", "最近"],
     ["apis", "▤", "APIs"],
-    ["grpc", "↗", "gRPC"],
-    ["socketio", "↗", "Socket.IO"],
     ["docs", "▧", "文档"],
     ["dictionary", "♧", "字典"],
     ["settings", "⚙", "配置"],
     ["git", "⑂", "Git"],
+    ["grpc", "↗", "gRPC"],
+    ["socketio", "↗", "Socket.IO"],
   ]
-    .map(
-      ([key, icon, title]) =>
-        `<button data-page="${key}" class="${page === key ? "active" : ""}" title="${title}"><span class="icon">${lineIcon(icon)}</span>${title}</button>`,
-    )
+    .map(([key, icon, title]) => {
+      const active =
+        page === key || (key === "dictionary" && page === "database-manager");
+      return `<button data-page="${key}" class="${active ? "active" : ""}" ${active ? 'aria-current="page"' : ""} title="${title}"><span class="icon">${lineIcon(icon)}</span>${title}</button>`;
+    })
     .join("");
 }
 function tree() {
-  const items = [
-    ...(project?.requests || [])
-      .filter((item) => !item.deletedAt)
-      .map((item) => ({
-        ...item,
-        kind: "http",
-        label: item.method === "DELETE" ? "DEL" : item.method,
-        attribute: 'data-request="' + esc(item.id) + '"',
-      })),
-    ...(project?.documents || []).map((item, index) => ({
-      ...item,
-      name: item.title,
-      url: "",
-      kind: "document",
-      label: "MD",
-      attribute: 'data-document-index="' + index + '"',
-    })),
-    ...(project?.settings?.grpcDefinitions || []).map((item) => ({
-      ...item,
-      kind: "grpc",
-      label: "gRPC",
-      url: item.target,
-      attribute: 'data-grpc-definition="' + esc(item.id) + '"',
-    })),
-    ...(project?.settings?.socketioDefinitions || []).map((item) => ({
-      ...item,
-      kind: "socketio",
-      label: "Socket.IO",
-      attribute: 'data-socketio-definition="' + esc(item.id) + '"',
-    })),
-    ...(project?.protocols || []).map((item) => ({
-      ...item,
-      kind: item.type,
-      label: item.type === "websocket" ? "WS" : item.type.toUpperCase(),
-      attribute: 'data-protocol-id="' + esc(item.id) + '"',
-    })),
-  ].filter(
-    (item) =>
-      (searchType === "all" || item.kind === searchType) &&
-      (item.name + " " + (item.url || "") + " " + (item.folder || ""))
-        .toLowerCase()
-        .includes(search.toLowerCase()),
-  );
-  const folders = [
-    ...new Set([
-      ...(project?.folders || []),
-      ...items.map((item) => item.folder || ""),
-    ]),
-  ];
-  const renderFolder = (node) => {
-    const folder = node.path;
-    const direct = items.filter((item) => (item.folder || "") === folder);
-    const total = items.filter(
-      (item) =>
-        (item.folder || "") === folder ||
-        (folder && (item.folder || "").startsWith(folder + "/")),
-    ).length;
-    return `<details class="tree-folder" data-tree-folder="${esc(folder)}" ${search || !collapsedFolders.has(project.id + ":" + folder) ? "open" : ""}><summary class="folder"><span>${esc(node.name)}</span> <span>(${total})</span>${folder ? `<button class="ghost folder-edit" data-edit-folder="${esc(folder)}" aria-label="编辑目录 ${esc(folder)}">设置</button>` : ""}</summary>${direct.map((item) => `<button class="tree-item ${(item.kind === "http" && item.id === current && page === "apis") || (item.kind !== "http" && item.id === selectedProtocolId && page === "protocols") ? "active" : ""}" ${item.attribute}><span class="method ${esc(item.method || item.label)}">${esc(item.label)}</span><span>${esc(item.name)}</span></button>`).join("")}${node.children.map(renderFolder).join("")}</details>`;
-  };
-  return (
-    [
-      ...folderTree(folders),
-      ...(items.some((item) => !item.folder)
-        ? [{ path: "", name: "未分组", children: [] }]
-        : []),
-    ]
-      .map(renderFolder)
-      .join("") || '<div class="notice">没有匹配的项目内容。</div>'
-  );
+  return renderWorkspaceTree({
+    project,
+    search,
+    searchType,
+    page,
+    current,
+    activeDocumentId: workspaceDocument()?.id,
+    selectedProtocolId,
+    collapsedFolders,
+  });
 }
 
 function render(preserveEditingFocus = false) {
+  curlPreview.dismiss();
+  provisionalQuery.observe(
+    project,
+    page === "apis" && mode === "design" && !workspaceDocument()
+      ? request()
+      : null,
+  );
+  releaseHTTPResponseLayout?.();
+  releaseHTTPResponseLayout = undefined;
+  releaseHTTPRequestOverflow?.();
+  releaseHTTPRequestOverflow = undefined;
+  releaseHTTPPostActions?.();
+  releaseHTTPPostActions = undefined;
+  releaseHTTPPreActions?.();
+  releaseHTTPPreActions = undefined;
+  rememberDesignDescriptionScroll?.();
+  rememberDesignDescriptionScroll = undefined;
+  const namedDelete = $("#graphql-named-delete-confirm");
+  if (namedDelete?.matches(":popover-open")) namedDelete.hidePopover();
+  manualResponseView.observe(
+    page === "apis" && mode === "debug" && !workspaceDocument()
+      ? project
+      : null,
+    current,
+  );
   syncGrpcWorkbench();
   syncSocketIOWorkbench();
   syncGrpcStreamWorkbench();
   const active = document.activeElement;
+  const responseTabsPosition = readResponseTabsPosition(
+    $(".response-tabs"),
+    active,
+  );
+  const parameterStrip = $(".param-tabs");
+  const oldParameterScroll = parameterStrip?.scrollLeft || 0;
+  const oldParameterFocus =
+    active?.closest(".param-tabs") && active.dataset.param;
+  const oldParameterSelection =
+    parameterStrip?.querySelector(".active")?.dataset.param;
+  const oldTabs = $(".tab-scroll");
+  const oldTabScroll = oldTabs?.scrollLeft || 0;
+  const tabIdentity = (button) =>
+    button?.dataset.openDocumentTab !== undefined
+      ? "doc:" + button.dataset.openDocumentTab
+      : button?.dataset.openTab !== undefined
+        ? "http:" + button.dataset.openTab
+        : null;
+  const oldSelectedTab = tabIdentity(
+    oldTabs?.querySelector(".selected .tab-switch"),
+  );
   const editing =
     preserveEditingFocus &&
     active &&
@@ -1408,52 +2130,116 @@ function render(preserveEditingFocus = false) {
       }
     : null;
   const r = request();
+  const doc = workspaceDocument();
+  const nextPreOwner = page === "apis" && !doc ? r : undefined;
+  if (httpPreOwner && httpPreOwner !== nextPreOwner)
+    httpPreEditors.delete(httpPreOwner);
+  httpPreOwner = nextPreOwner;
+  if (page === "apis" && !doc && r) {
+    const nextOwner = JSON.stringify([project.id, r.id]);
+    const switched = debugParameterOwner !== nextOwner;
+    debugParameterOwner = nextOwner;
+    if (r.graphqlEditorVersion === 1 && (switched || param === "body")) {
+      param = "graphql";
+      bodyExpanded = false;
+    } else if (r.graphqlEditorVersion !== 1 && param === "graphql") {
+      param = "body";
+      bodyExpanded = false;
+    }
+  }
+  const dictionaryPosition = dictionaryViewPosition(
+    $(".dictionary-page"),
+    project?.id,
+  );
   document.body.classList.toggle("compact-ui", compactUI);
   $("#app").innerHTML =
-    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div><button id="new-project" ${busy || saving ? "disabled" : ""} class="ghost">＋ 新建/导入项目</button></div><div class="top-group project-group"><select id="project-select" ${busy || saving ? "disabled" : ""} aria-label="项目">${projects
-      .filter((p) => !p.archived && !p.error)
+    `<header class="top"><div class="top-group"><div class="brand"><span class="logo">↗</span>Local API <span class="subtle">单机版</span></div>${projectTopMenu(busy || saving)}</div><div class="top-group project-group"><select id="project-select" ${busy || saving ? "disabled" : ""} aria-label="项目">${selectableProjects(
+      projects,
+    )
       .map(
         (p) =>
           `<option value="${p.id}" ${p.id === project?.id ? "selected" : ""}>${esc(p.name)}</option>`,
       )
       .join(
         "",
-      )}</select><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button><button id="open-location" class="ghost">打开位置</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost ${page === "plans" ? "active" : ""}">执行计划</button><button id="mcp-status" data-page="settings" data-settings-target="settings-mcp" class="offline">MCP · ${mcpState.enabled ? "已开启" : "未开启"}</button><button id="theme" class="ghost" aria-label="切换主题">◐</button></div></header><div class="shell"><nav class="rail">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}"><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar">${
+      )}</select>${projectSwitcherHTML(busy || saving)}<button id="open-location" class="ghost">打开位置</button><button id="save-project" ${saving ? "disabled" : ""} class="${dirty ? "primary" : "ghost"}">保存项目</button></div><div class="top-group top-actions"><button data-page="plans" class="ghost top-plan ${page === "plans" ? "active" : ""}"><span class="icon">${lineIcon("plan-play")}</span>执行计划</button>${mcpTopStatusButton(mcpTopStatusKnown ? mcpState : null, mcpTopStatusUnavailable)}<button id="theme" class="ghost" aria-label="切换主题">◐</button><button type="button" id="appearance-settings" class="ghost" title="全局外观设置" aria-label="全局外观设置" aria-haspopup="dialog">${lineIcon("⚙")}</button></div></header><div class="shell"><nav class="rail" aria-label="工作区导航">${nav()}<button data-page="trash" class="bottom ${page === "trash" ? "active" : ""}" ${page === "trash" ? 'aria-current="page"' : ""}><span class="icon">${lineIcon("♲")}</span>回收站</button></nav><aside class="sidebar" data-sidebar-page="${page}">${
       page === "settings"
         ? settingsSidebar(settingsSection)
-        : `<div class="search"><div class="search-filter"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><select id="tree-type" aria-label="内容类型">${[
-            ["all", "全部"],
-            ["http", "HTTP"],
-            ["sse", "SSE"],
-            ["websocket", "WebSocket"],
-            ["tcp", "TCP"],
-            ["grpc", "gRPC"],
-            ["socketio", "Socket.IO"],
-            ["document", "文档"],
-          ]
-            .map(
-              ([value, label]) =>
-                `<option value="${value}" ${value === searchType ? "selected" : ""}>${label}</option>`,
-            )
-            .join(
-              "",
-            )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="定位当前接口" aria-label="定位当前接口">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div><details class="tree-create"><summary class="new-item">＋ 新建</summary><div><button id="new-request">HTTP 接口</button><button data-page="protocols">SSE / WebSocket / TCP</button><button data-page="grpc">gRPC unary</button><button data-page="socketio">Socket.IO</button><button id="new-folder">新建目录</button></div></details>`
+        : page === "dictionary" || page === "database-manager"
+          ? dictionarySidebar(page === "database-manager")
+          : `<div class="search"><div class="search-filter"><input id="search" placeholder="⌕ 关键字 / URL" aria-label="搜索接口" value="${esc(search)}"><select id="tree-type" aria-label="内容类型">${[
+              ["all", "全部"],
+              ["http", "HTTP"],
+              ["sse", "SSE"],
+              ["websocket", "WebSocket"],
+              ["tcp", "TCP"],
+              ["grpc", "gRPC"],
+              ["socketio", "Socket.IO"],
+              ["document", "文档"],
+            ]
+              .map(
+                ([value, label]) =>
+                  `<option value="${value}" ${value === searchType ? "selected" : ""}>${label}</option>`,
+              )
+              .join(
+                "",
+              )}</select></div><button id="add-request" class="primary" aria-label="新建接口">＋</button></div><div class="section-label"><span>全部接口</span><div><button id="locate-request" class="ghost" title="${doc ? "定位当前文档" : "定位当前接口"}" aria-label="${doc ? "定位当前文档" : "定位当前接口"}">定位</button><button id="import" class="ghost" title="导入" aria-label="导入项目">导入</button><button id="export" class="ghost" title="导出项目" aria-label="导出项目">导出</button></div></div><div id="tree">${tree()}</div>${apiCreateMenu()}`
     }</aside><main class="workspace">${
       page === "apis"
-        ? `<div class="tabs">${opened
+        ? `<div class="tabs"><div class="tab-scroll">${opened
             .filter((id) =>
               project.requests.some((r) => r.id === id && !r.deletedAt),
             )
             .map((id) => {
               const item = project.requests.find((r) => r.id === id);
-              return `<div class="tab ${current === id ? "selected" : ""}"><button class="ghost tab-switch" data-open-tab="${id}"><span class="method ${item.method}">${item.method}</span> <span data-tab-name="${id}">${esc(item.name)}</span></button><button class="ghost tab-close" data-close-tab="${id}" aria-label="关闭 ${esc(item.name)}">×</button></div>`;
+              const graphql = item.graphqlEditorVersion === 1;
+              const graphqlName = graphql ? esc("GraphQL " + item.name) : "";
+              return `<div class="tab ${!doc && current === id ? "selected" : ""}"><button class="ghost tab-switch" data-open-tab="${id}"${graphql ? ` title="${graphqlName}" aria-label="${graphqlName}"` : ""}><span class="method ${graphql ? "graphql-badge" : item.method}"${graphql ? ' aria-hidden="true" title="GraphQL"' : ""}>${graphql ? "GQL" : item.method}</span> <span data-tab-name="${id}">${esc(item.name)}</span></button><button class="ghost tab-close" data-close-tab="${id}" aria-label="关闭 ${esc(item.name)}">×</button></div>`;
             })
             .join(
               "",
-            )}<button id="tab-add" class="ghost">＋</button><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button data-page="settings" data-settings-target="settings-environments" class="ghost" title="环境设置">☷</button></div></div>${r ? editor(r) : '<div class="empty"><span class="empty-symbol">↗</span><p>从一个请求开始</p><small>创建或导入接口，所有数据只留在本机。</small><button id="welcome-add" class="primary">＋ 新建接口</button></div>'}`
+            )}${documentWorkspaceTabs(project, openedDocuments, doc?.id)}<button id="tab-add" class="ghost" aria-label="新建接口标签页">＋</button></div><div class="tools"><select id="env" aria-label="执行环境">${project?.environments.map((e) => `<option value="${e.id}" ${e.id === env() ? "selected" : ""}>${esc(e.name)}</option>`).join("") || ""}</select><button id="open-environment-settings" type="button" class="ghost" title="环境设置" aria-label="环境设置" aria-haspopup="dialog">☷</button></div></div>${doc ? workspaceDocumentHTML(doc, { editing: documentModes.get(doc.id)?.view === "edit", saving, synchronized: documentModes.get(doc.id)?.synchronized !== false, status: (project.settings?.statuses || []).find((item) => item.id === doc.statusId)?.name }) : r ? editor(r) : apiWelcome()}`
         : renderPage()
-    }</main></div><footer class="statusbar"><span>◈ 本地工作空间 &nbsp; / &nbsp; ${esc(project?.name || "")} &nbsp; <span id="saved-state">${dirty ? "● 未保存" : "✓ 已保存"}</span></span><span class="status-actions"><button id="compact-ui" aria-pressed="${compactUI}" title="隐藏项目树，保留导航和工作区">${compactUI ? "完整模式" : "精简模式"}</button><button id="response-layout" ${page !== "apis" || mode !== "debug" ? "disabled" : ""} aria-pressed="${responseLayout === "split"}">${responseLayout === "split" ? "上下布局" : "左右布局"}</button><span>Local API 0.1.0</span></span></footer>`;
+    }</main></div><footer class="statusbar"><span>◈ 本地工作空间 &nbsp; / &nbsp; ${esc(project?.name || "")} &nbsp; <span id="saved-state">${dirty ? "● 未保存" : "✓ 已保存"}</span></span><span class="status-actions"><button id="compact-ui" aria-pressed="${compactUI}" title="隐藏项目树，保留导航和工作区">${compactUI ? "完整模式" : "精简模式"}</button><button id="response-layout" ${page !== "apis" || doc || mode !== "debug" ? "disabled" : ""} aria-pressed="${responseLayout === "split"}">${responseLayout === "split" ? "上下布局" : "左右布局"}</button><span id="product-version-footer"></span></span></footer>`;
+  updateProductVersion(document, currentBuild);
   bind();
+  if (page === "dictionary")
+    bindDictionaryView($(".dictionary-page"), dictionaryPosition);
+  if (page === "dictionary") bindWorkspaceModel();
+  if (page === "database-manager" && project) {
+    const owner = project;
+    bindDatabaseManager($(".database-manager"), {
+      owns: () => project === owner && page === "database-manager",
+      list: () => api("/projects/" + owner.id + "/database-connections"),
+    });
+  }
+  const tabScroll = $(".tab-scroll");
+  if (tabScroll) {
+    tabScroll.scrollLeft = oldTabScroll;
+    const selectedTab = tabScroll.querySelector(".selected .tab-switch");
+    if (selectedTab && tabIdentity(selectedTab) !== oldSelectedTab)
+      selectedTab.parentElement.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+  }
+  restoreResponseTabsPosition($(".response-tabs"), responseTabsPosition);
+  const nextParameterStrip = $(".param-tabs");
+  if (nextParameterStrip) {
+    nextParameterStrip.scrollLeft = oldParameterScroll;
+    const restored =
+      oldParameterFocus &&
+      [...nextParameterStrip.querySelectorAll("[data-param]")].find(
+        (item) => item.dataset.param === oldParameterFocus,
+      );
+    const selected = nextParameterStrip.querySelector(".active");
+    if (restored) {
+      restored.focus({ preventScroll: true });
+      revealParameterTab(nextParameterStrip, restored);
+    } else if (selected && selected.dataset.param !== oldParameterSelection) {
+      revealParameterTab(nextParameterStrip, selected);
+    }
+  }
   if (focusState) {
     const replacement = focusKey.id
       ? document.getElementById(focusKey.id)
@@ -1464,6 +2250,8 @@ function render(preserveEditingFocus = false) {
       replacement &&
       replacement.tagName === active.tagName &&
       replacement.type === active.type &&
+      replacement.closest("[data-graphql-owner]")?.dataset.graphqlOwner ===
+        active.closest("[data-graphql-owner]")?.dataset.graphqlOwner &&
       !replacement.disabled
     ) {
       replacement.value = focusState.value;
@@ -1480,7 +2268,9 @@ function render(preserveEditingFocus = false) {
   }
 }
 function editor(r) {
-  return `<section class="editor ${mode === "debug" && responseLayout === "split" ? "split-layout" : ""}"><div class="subnav">${[
+  const httpLayout = mode === "debug" && r.graphqlEditorVersion !== 1;
+  const responseHeaders = httpLayout ? httpResponseHeaderRows(response) : null;
+  return `<section data-editor-mode="${esc(mode)}"${httpLayout ? " data-http-response-layout" : ""} class="editor ${mode === "debug" && (httpLayout ? activeHTTPResponseLayout() : responseLayout) === "split" ? "split-layout" : ""}"><div class="subnav"><div class="request-modes" role="group" aria-label="接口工作模式">${[
     ["design", "设计"],
     ["debug", "调试"],
     ["cases", "接口用例"],
@@ -1489,76 +2279,230 @@ function editor(r) {
   ]
     .map(
       ([key, label]) =>
-        `<button data-mode="${key}" class="${mode === key ? "active" : ""}">${label}</button>`,
+        `<button data-mode="${key}" class="${mode === key ? "active" : ""}" aria-pressed="${mode === key}">${label}</button>`,
     )
     .join(
       "",
-    )}<select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button><button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法">${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div><button id="send" class="primary" ${busy ? "disabled" : ""}>${busy ? "请求中…" : "发 送"}</button><details class="button-menu"><summary aria-label="发送更多操作">▾</summary><div><button id="send-menu-curl">生成 cURL</button><button id="send-menu-plan">创建执行计划</button></div></details>${busy ? '<button id="cancel">取消</button>' : ""}<button id="save" class="${dirty ? "primary" : ""}">保存</button><details class="button-menu"><summary aria-label="保存更多操作">▾</summary><div><button id="save-menu-copy">创建接口副本</button><button id="save-menu-project">保存整个项目</button></div></details><button id="curl" title="生成 cURL">⌘</button></div>${
+    )}</div><select id="request-status" aria-label="接口状态"><option value="">未设置状态</option>${(project.settings?.statuses || []).map((status) => `<option value="${esc(status.id)}" ${r.statusId === status.id ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><input id="request-name" class="request-name" aria-label="接口名称" value="${esc(r.name)}"><button id="share-api">分享</button>${requestCurlAction(mode === "debug")}<button id="duplicate" title="复制接口">⧉</button><button id="delete" title="删除接口" class="danger">×</button></div><div class="urlbar"><div class="url-input"><select id="method" aria-label="请求方法"${r.graphqlEditorVersion === 1 ? " disabled" : ""}>${methodOptions.map((m) => `<option ${r.method === m ? "selected" : ""}>${m}</option>`).join("")}</select><input id="url" aria-label="请求 URL" placeholder="输入请求地址，支持 {{变量}}" value="${esc(r.url)}"><select id="http-version" aria-label="HTTP协议版本"><option value="1.1" ${r.httpVersion !== "2" ? "selected" : ""}>http/1.1</option><option value="2" ${r.httpVersion === "2" ? "selected" : ""}>http/2</option></select></div>${mode === "design" ? `<button id="request-design-preview">预 览</button><button id="save" class="primary">保 存</button>${busy && !caseCancellationOwner() ? '<button id="cancel">取消</button>' : ""}` : httpRequestActions({ debug: mode === "debug", busy, cancel: busy && mode !== "cases" && !caseCancellationOwner(), dirty })}</div>${
     mode === "debug"
-      ? `<div class="param-tabs">${[
-          ["headers", "Header"],
-          ["query", "Query"],
-          ["path", "Path"],
-          ["body", "Body"],
-          ["auth", "认证"],
-          ["cookies", "Cookie"],
-          ["examples", "响应示例"],
-          ["before", "前执行操作"],
-          ["after", "后执行操作"],
-          ["assertions", "断言"],
-          ["extract", "提取变量"],
-        ]
-          .map(
-            ([key, label]) =>
-              `<button data-param="${key}" class="${param === key ? "active" : ""}">${label}${key === "body" ? (r.bodyType !== "none" ? " (1)" : "") : Array.isArray(r[key]) && r[key].length ? " (" + r[key].length + ")" : ""}</button>`,
-          )
-          .join(
-            "",
-          )}</div><div class="request-panel ${bodyExpanded && param === "body" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r)}</div><div class="response"><div class="response-top"><div class="response-tabs">${[
-          ["body", "实时响应"],
-          ["visualization", "可视化"],
-          ["scriptResponse", "脚本视图"],
-          ["headers", "响应头"],
-          ["cookies", "Cookie"],
-          ["examples", "响应示例"],
-          ["request", "实际请求"],
-          ["assertions", "断言结果"],
-          ["extracted", "提取变量"],
-          ["logs", "控制台"],
-          ...(response?.subrequests?.length
-            ? [["subrequests", "脚本子请求"]]
-            : []),
-        ]
-          .map(
-            ([key, label]) =>
-              `<button data-response="${key}" class="${responseTab === key ? "active" : ""}">${label}</button>`,
-          )
-          .join(
-            "",
-          )}</div><div class="metrics">${response ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent()}</div></div>`
+      ? `${requestParameterTabs(r, param, usesDesignPathDraft(project, r))}${httpLayout ? requestParameterOverflowHTML() : ""}<div class="request-panel ${["headers", "query", "path", "cookies"].includes(param) ? "request-pairs-panel" : ""} ${bodyExpanded && param === "body" && r.bodyType !== "binary" ? "body-expanded" : ""} ${param === "body" && !["none", "form-data", "urlencoded", "binary"].includes(r.bodyType) ? "body-panel" : ""}">${paramPanel(r, param)}</div><div class="response${responseTab === "body" && isPopulatedHTTPResponse(response) ? " http-success-response-active" : ""}"><div class="response-top">${httpResponseTabs(responseTab, response?.subrequests?.length, responseHeaders?.length)}<div class="metrics">${response && !(httpLayout && responseTab === "examples") ? `<span class="${response.status < 400 ? "success" : "failed"}">${response.status || "ERROR"} ${esc(project.settings?.statusCodes?.find((item) => item.httpHint === true && String(item.code) === String(response.status))?.label || "")}</span><span>${response.duration ?? 0} ms</span><span>${response.size ?? 0} B</span>` : ""}</div></div><div class="response-body">${responseContent(responseHeaders)}</div>${httpLayout ? httpResponseLayoutHTML(!busy && !response && responseTab === "body") : ""}</div>`
       : modePanel(r)
   }</section>`;
 }
-function pairs(rows, key) {
-  return `<table class="pairs-table"><thead><tr><th class="pair-enabled-heading"></th><th class="pair-name-heading">参数名</th><th>参数值</th><th class="pair-actions-heading">操作</th></tr></thead><tbody>${rows
+function pairs(rows, key, designOptions, debugOptions, formBodyType) {
+  const debugComposer = Boolean(debugOptions);
+  const debugCookie = debugComposer && key === "cookies";
+  const debugHeader = key === "headers" && debugOptions?.ordinaryHeader;
+  const compactDebug = debugCookie || debugHeader;
+  const debugGroup = debugHeader ? "header" : "cookie";
+  const debugLabel = debugHeader ? "Header" : "Cookie";
+  const design = Boolean(designOptions);
+  const metadataColumn = ["headers", "query", "path", "cookies"].includes(key);
+  const queryEquality =
+    key !== "query"
+      ? ""
+      : debugComposer
+        ? debugQueryEquality(debugOptions.queryAddEqual)
+        : design
+          ? `<label class="design-query-equality" title="空值 Query 参数添加等号（仅参数表）"><input id="query-add-equal" type="checkbox" ${designOptions.queryAddEqual !== false ? "checked" : ""} aria-label="空值 Query 参数添加等号"><span aria-hidden="true">=</span></label>`
+          : "";
+  const valueHeading =
+    debugComposer && key === "query"
+      ? `<span class="debug-query-value-heading">${queryEquality}参数值</span>`
+      : queryEquality + "参数值";
+  if (debugComposer && !compactDebug && !rows.length)
+    return `<table class="pairs-table request-pairs-table debug-pairs-table debug-pairs-empty"><colgroup><col span="3"></colgroup><thead><tr><th scope="col" class="debug-pair-name-heading">参数名</th><th scope="col">${valueHeading}</th><th scope="col">描述</th></tr></thead><tbody>${debugPairComposer(key, true)}</tbody></table>`;
+  const designComposer = design && isDesignPairKind(key);
+  const compactEmpty = designComposer && !rows.length;
+  const queryMetadata = design && key === "query";
+  const inlineQuery =
+    queryMetadata &&
+    rows.some((row) => typeof row.key === "string" && row.key.trim());
+  const queryDraft =
+    compactEmpty && queryMetadata
+      ? provisionalQuery.read(project, request())
+      : null;
+  const rowsHTML = rows
     .map((p, i) => {
+      const form = key === "form";
+      const fileLike = form ? formFileRepresentation(p) : p.type === "file";
+      const allowFile = form && formBodyType === "form-data";
       const selector =
-        key === "form"
-          ? `<select data-field-type="${i}" aria-label="字段类型"><option value="text" ${p.type !== "file" ? "selected" : ""}>文本</option><option value="file" ${p.type === "file" ? "selected" : ""}>文件</option></select>`
+        form && (allowFile || fileLike)
+          ? `<select data-field-type="${i}" aria-label="字段类型"><option value="text" ${fileLike ? "" : "selected"}>文本</option><option value="file" ${fileLike ? "selected" : ""} ${allowFile ? "" : "disabled"}>文件</option></select>`
           : "";
       const value =
-        p.type === "file"
-          ? `<span class="pair-file"><input type="file" data-field-file="${i}"><small title="${esc(p.filename || "未选择文件")}">${esc(p.filename || "未选择文件")}</small></span>`
-          : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`;
-      return `<tr><td><input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数"></td><td><input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"></td><td><div class="pair-value">${selector}${value}</div></td><td><div class="pair-row-actions"><button data-dynamic-pair="${key}:${i}">${p.dynamic ? "动态✓" : "动态"}</button><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></div></td></tr>`;
+        fileLike && (!allowFile || p.type !== "file")
+          ? '<span class="muted">文件数据未作为文本显示；请转换字段或保留为 multipart 文件。</span>'
+          : fileLike
+            ? `<span class="pair-file"><input type="file" data-field-file="${i}"><small title="${esc(p.filename || "未选择文件")}">${esc(p.filename || "未选择文件")}</small></span>`
+            : `<input data-pair="${key}:${i}:value" placeholder="参数值 / {{变量}}" value="${esc(p.value)}">`;
+      const name = `<input data-pair="${key}:${i}:key" placeholder="参数名" value="${esc(p.key)}"${debugHeader ? ' list="debug-header-names" autocomplete="off" spellcheck="false"' : ""}>`;
+      const metadata = inlineQuery ? designQueryMetadataHTML(p, i, esc) : "";
+      const enabled = `<input type="checkbox" data-pair-enabled="${key}:${i}" ${p.enabled !== false ? "checked" : ""} aria-label="启用参数">`;
+      const actions = `<div class="pair-row-actions"><button data-dynamic-pair="${key}:${i}">${p.dynamic ? "动态✓" : "动态"}</button><button data-dictionary-pair="${key}:${i}">字典</button><button data-define-pair="${key}:${i}" title="参数类型、必填与说明">定义</button><button data-remove-pair="${key}:${i}" aria-label="删除参数">×</button></div>`;
+      const description = esc(p.description || "");
+      if (compactDebug)
+        return `<tr><td><div class="debug-${debugGroup}-name">${enabled}${name}</div></td><td>${value}</td><td class="pair-description" title="${description}">${description}${actions}</td></tr>`;
+      return `<tr><td>${enabled}</td><td>${metadata ? `<div class="design-query-name">${name}${metadata}</div>` : name}</td><td><div class="pair-value">${selector}${value}</div></td>${metadataColumn ? `<td class="pair-description" title="${description}">${description}</td>` : ""}<td>${actions}</td></tr>`;
     })
-    .join(
-      "",
-    )}</tbody></table><div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`;
+    .join("");
+  if (compactDebug) {
+    const { checked, disabled } = debugPairSelection(rows);
+    return `<table class="pairs-table request-pairs-table debug-pairs-table debug-${debugGroup}-pairs" aria-label="${debugLabel} 请求参数"><colgroup><col span="3"></colgroup><thead><tr><th scope="col"><div class="debug-${debugGroup}-name"><input type="checkbox" id="debug-${debugGroup}-enable-all" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} aria-label="启用全部 ${debugLabel} 参数（仅参数表）"><span>参数名</span></div></th><th scope="col">参数值</th><th scope="col">描述</th></tr></thead><tbody>${rowsHTML}${debugPairComposer(key, false, debugHeader)}</tbody></table>${debugHeader ? debugHeaderNameListHTML() : ""}`;
+  }
+  return `<table class="pairs-table ${metadataColumn ? "request-pairs-table" : ""}${debugComposer ? " debug-pairs-table" : ""}${compactEmpty ? " design-pairs-empty" : ""}${compactEmpty && queryMetadata ? " design-pairs-query-empty" : ""}${inlineQuery ? " design-query-metadata-table" : ""}">${compactEmpty ? '<colgroup class="design-empty-pair-columns"><col><col><col><col></colgroup>' : ""}<thead><tr><th class="pair-enabled-heading" aria-label="启用">${queryDraft ? provisionalQueryEnabled(queryDraft, true) : ""}</th><th class="pair-name-heading">参数名</th><th>${valueHeading}</th>${metadataColumn ? '<th class="pair-description-heading">描述</th>' : ""}${compactEmpty ? "" : '<th class="pair-actions-heading">操作</th>'}</tr></thead><tbody>${rowsHTML}${debugComposer ? debugPairComposer(key, false) : designComposer ? designPairComposer(key, compactEmpty, queryDraft) : ""}</tbody></table>${inlineQuery || queryDraft ? designQueryTypeMenuHTML() : ""}${queryDraft ? provisionalQueryNotice(queryDraft) : ""}${designComposer || debugComposer ? "" : `<div class="pair-actions"><button data-add-pair="${key}">＋ 添加参数</button></div>`}`;
 }
-function paramPanel(r) {
+function bindBodyParameterHelper() {
+  const panel = $("#body-parameter-helper");
+  if (!panel) return;
+  const onHelper = (selector, event, fn) =>
+    on("#body-parameter-helper " + selector, event, fn);
+  if (panel.classList.contains("raw-helper-open"))
+    bindRawHelper(panel, bodyHelperState(request()));
+  onHelper("#raw-helper-reference-variable", "click", () =>
+    openRawHelperVariableChooser(),
+  );
+  onHelper("#raw-helper-insert-fixed", "click", openRawHelperFixedChooser);
+  onHelper("#raw-helper-insert-mock", "click", openRawHelperMockChooser);
+  onHelper("#new-body-dynamic", "click", () => editDynamicValue("body"));
+  onHelper("[data-edit-body-dynamic]", "click", (_, element) =>
+    editDynamicValue("body", element.dataset.editBodyDynamic),
+  );
+  onHelper("#insert-builtin-variable", "click", () => {
+    const name = $("#builtin-variable").value;
+    insertVariable(name);
+    if ($("#builtin-variable")) $("#builtin-variable").value = name;
+  });
+  onHelper("[data-insert-variable]", "click", (_, element) => {
+    insertVariable(element.dataset.insertVariable);
+  });
+  onHelper("[data-insert-dictionary]", "click", (_, element) => {
+    if (!element.isConnected || request()?.bodyType === "binary") return;
+    collect();
+    const entry = effectiveParameterDictionary(project).find(
+      (item) => item.id === element.dataset.insertDictionary,
+    );
+    if (!entry) throw Error("字典参数已不存在");
+    request().body = insertDictionaryField(request().body, entry);
+    request().bodyType = "json";
+    mark();
+    render();
+  });
+}
+
+function refreshHTTPLayoutRawHelper() {
+  const toggle = $("#toggle-parameter-helper.debug-raw-helper");
+  const panel = $("#body-parameter-helper");
+  if (!toggle || !panel) return;
+  const tabbed = Boolean(useTabbedRawHelper());
+  if (panel.classList.contains("raw-helper-open") === tabbed) return;
+
+  // This helper has two presentations. Keep its owner/filter/tab state and do
+  // not replace the request textarea, response, or live layout menu.
+  const restoreFocus = panel.contains(document.activeElement);
+  panel.outerHTML = bodyParameterHelper(request(), tabbed);
+  const marker = toggle.querySelector(".helper-pane-chevron");
+  if (tabbed && !marker)
+    toggle
+      .querySelector(".helper-rail-chevron")
+      .insertAdjacentHTML(
+        "afterend",
+        `<span class="helper-pane-chevron">${lineIcon("helper-pane-right")}</span>`,
+      );
+  else if (!tabbed) marker?.remove();
+  bindBodyParameterHelper();
+  if (restoreFocus) toggle.focus({ preventScroll: true });
+}
+
+function bodyParameterHelper(r, tabbed) {
+  const reference = `<button type="button" class="raw-helper-action-card" id="raw-helper-reference-variable" aria-label="引用变量"><span class="raw-helper-variable-icon">${lineIcon("helper-variable")}</span><span><strong>引用变量</strong><small>引用已配置的环境、集合或全局变量</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
+  const fixed = `<button type="button" class="raw-helper-action-card" id="raw-helper-insert-fixed" aria-label="固定值"><span class="raw-helper-fixed-icon">${lineIcon("helper-fixed")}</span><span><strong>固定值</strong><small>插入固定文本</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
+  const mock = `<button type="button" class="raw-helper-action-card" id="raw-helper-insert-mock" aria-label="Mock数据"><span class="raw-helper-mock-icon">${lineIcon("helper-mock")}</span><span><strong>Mock数据</strong><small>选择 Workbench 内置生成规则</small></span><span class="raw-helper-variable-next">${lineIcon("helper-pane-right")}</span></button>`;
+  const dynamic = `${tabbed ? reference + mock + fixed : ""}<h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
+    r.bodyDynamic || {},
+  )
+    .map(
+      (id) =>
+        `<button data-edit-body-dynamic="${esc(id)}">编辑 ${esc(id.slice(0, 8))}</button>`,
+    )
+    .join("")}${
+    tabbed
+      ? ""
+      : `<h4>插入环境变量</h4>${
+          Object.keys({
+            ...project.globalVariables,
+            ...project.environments.find((item) => item.id === env())
+              ?.variables,
+          })
+            .map(
+              (key) =>
+                `<button data-insert-variable="${esc(key)}">{{${esc(key)}}}</button>`,
+            )
+            .join("") || "<p>暂无变量</p>"
+        }`
+  }<h4>内置动态变量</h4><select id="builtin-variable" aria-label="内置动态变量">${builtinVariableNames.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join("")}</select><button id="insert-builtin-variable">插入占位符</button><small>每次发送生成；JSON字符串值须加引号。</small>`;
+  const more = `<h4>共享函数</h4><p class="muted">供前后置脚本调用</p>${(project.settings?.functions || []).map((fn) => `<code>utils.${esc(fn.name)}(...)</code>`).join("<br>")}<h4>请求结构</h4><pre>${esc(JSON.stringify(r.schema, null, 2))}</pre>`;
+  const contents = tabbed
+    ? rawHelperTabs(
+        effectiveParameterDictionary(project),
+        dynamic + more,
+        bodyHelperState(r),
+      )
+    : dynamic +
+      `<h4>参数字典 · 插入 JSON 字段</h4>${
+        effectiveParameterDictionary(project)
+          .map(
+            (entry) =>
+              `<button data-insert-dictionary="${esc(entry.id)}" title="${esc(entry.description)}">${esc(entry.key)} · ${esc(entry.type)}</button>`,
+          )
+          .join("") || "<p>暂无字典参数</p>"
+      }` +
+      more;
+  return `<aside id="body-parameter-helper" class="parameter-helper${tabbed ? " raw-helper-open" : ""}">${contents}</aside>`;
+}
+function paramPanel(r, param, design = false) {
+  if (
+    (design || mode === "debug") &&
+    param === "path" &&
+    usesDesignPathDraft(project, r)
+  )
+    return designPathTable(
+      r.path,
+      (row) => designPathDrafts.isLinked(project, r, row),
+      esc,
+      { debug: !design },
+    );
+  if (r.graphqlEditorVersion === 1 && param === "graphql" && !design)
+    return graphqlWorkspaceHTML(r, graphqlDrafts, esc, project.id);
+  if (r.graphqlEditorVersion === 1 && param === "body")
+    return '<p class="notice">此接口使用 GraphQL 请求编辑器。切到调试可编辑 Query / Variables，或保留完整正文并打开原始 HTTP 编辑器。</p><button type="button" id="graphql-design-debug" class="ghost">打开 GraphQL 调试</button>';
   if (["headers", "query", "path", "cookies"].includes(param))
     return (
+      (param === "headers"
+        ? `<div class="header-common-parameters"><button type="button" class="ghost" data-page="settings" data-settings-target="settings-global-parameters" title="管理项目及目录公共请求参数">${lineIcon("⚙")}公共参数（Header）</button></div>`
+        : "") +
+      (!design &&
+      mode === "debug" &&
+      param === "query" &&
+      r.graphqlEditorVersion !== 1
+        ? (() => {
+            const contents = debugURLQueryContents(project, r, esc);
+            return `<section class="debug-literal-query-origin" ${contents ? "" : "hidden"}>${contents}</section>`;
+          })()
+        : "") +
+      pairs(
+        r[param],
+        param,
+        design ? { queryAddEqual: r.queryAddEqual } : null,
+        !design && ownsDebugPairComposer(param, page, mode, param, r)
+          ? {
+              queryAddEqual: r.queryAddEqual,
+              ordinaryHeader:
+                param === "headers" && r.graphqlEditorVersion !== 1,
+            }
+          : null,
+      ) +
       (param === "cookies"
         ? `<div class="cookie-toolbar"><div class="cookie-manager-row"><button id="cookie-manager">Cookie管理器</button><span class="muted">按项目与环境隔离，默认关闭</span></div><label class="cookie-encoding-field">参数表 Cookie 编码<select id="cookie-encoding">${[
             ["raw", "保持原值"],
@@ -1571,58 +2515,51 @@ function paramPanel(r) {
             )
             .join(
               "",
-            )}</select></label></div><p class="muted">只作用于下方参数表，不重写显式 Cookie 请求头或 Cookie 管理器内容。</p>`
-        : param === "query"
-          ? `<label><input id="query-add-equal" type="checkbox" ${r.queryAddEqual !== false ? "checked" : ""}>空值 Query 参数添加等号</label><p class="muted">只控制下方参数表的空值；URL 内已有查询保持原样。</p>`
-          : "") + pairs(r[param], param)
+            )}</select></label></div><p class="muted">只作用于参数表，不重写显式 Cookie 请求头或 Cookie 管理器内容。</p>`
+        : "")
     );
-  if (param === "body")
-    return `<div class="body-types">${["none", "form-data", "urlencoded", "binary", "msgpack", "raw"].map((type) => `<label><input type="radio" name="body-type" value="${type}" ${(r.bodyType === "json" ? "raw" : r.bodyType) === type ? "checked" : ""}>${type}</label>`).join("")}${["json", "raw"].includes(r.bodyType) ? `<select id="raw-format" aria-label="Raw格式"><option value="json" ${r.bodyType === "json" ? "selected" : ""}>JSON</option><option value="raw" ${r.bodyType === "raw" ? "selected" : ""}>Text</option></select>` : ""}</div><div class="body-actions"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">${r.bodyType === "binary" ? "输入 Base64 编码的二进制数据" : "请求体 · 保存在本地"}</span><button id="format-json" class="ghost">格式化 JSON</button><button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${bodyExpanded ? "收起编辑器" : "展开编辑器"}</button></div>${
-      ["form-data", "urlencoded"].includes(r.bodyType)
-        ? pairs(r.form, "form")
-        : r.bodyType === "none"
-          ? '<div class="empty"><p>此请求没有 Body</p></div>'
-          : `<div class="body-editor-shell"><div class="code-editor"><pre id="code-gutter" aria-hidden="true">${r.body
-              .split("\n")
-              .map((_, i) => i + 1)
-              .join(
-                "\n",
-              )}</pre><pre id="code-highlight" aria-hidden="true">${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体">${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle" aria-label="参数助手" aria-expanded="${helperOpen}"><span class="helper-label" aria-hidden="true"><span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
-              helperOpen
-                ? `<aside class="parameter-helper"><h4>动态值</h4><button id="new-body-dynamic">插入动态值</button>${Object.keys(
-                    r.bodyDynamic || {},
-                  )
-                    .map(
-                      (id) =>
-                        `<button data-edit-body-dynamic="${esc(id)}">编辑 ${esc(id.slice(0, 8))}</button>`,
-                    )
-                    .join("")}<h4>插入环境变量</h4>${
-                    Object.keys({
-                      ...project.globalVariables,
-                      ...project.environments.find((item) => item.id === env())
-                        ?.variables,
-                    })
-                      .map(
-                        (key) =>
-                          `<button data-insert-variable="${esc(key)}">{{${esc(key)}}}</button>`,
-                      )
-                      .join("") || "<p>暂无变量</p>"
-                  }<h4>内置动态变量</h4><select id="builtin-variable" aria-label="内置动态变量">${builtinVariableNames.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join("")}</select><button id="insert-builtin-variable">插入占位符</button><small>每次发送生成；JSON字符串值须加引号。</small><h4>参数字典 · 插入 JSON 字段</h4>${
-                    effectiveParameterDictionary(project)
-                      .map(
-                        (entry) =>
-                          `<button data-insert-dictionary="${esc(entry.id)}" title="${esc(entry.description)}">${esc(entry.key)} · ${esc(entry.type)}</button>`,
-                      )
-                      .join("") || "<p>暂无字典参数</p>"
-                  }<h4>共享函数</h4><p class="muted">供前后置脚本调用</p>${(project.settings?.functions || []).map((fn) => `<code>utils.${esc(fn.name)}(...)</code>`).join("<br>")}<h4>请求结构</h4><pre>${esc(JSON.stringify(r.schema, null, 2))}</pre></aside>`
-                : ""
-            }</div>`
+  if (param === "body") {
+    const debugRawJSON = !design && r.bodyType === "json";
+    const multipart =
+      !design && isDebugMultipart(page, mode, param, r.bodyType);
+    const urlencoded = !design && isDebugURLencoded(page, mode, param, r);
+    const binary = r.bodyType === "binary";
+    const expandLabel = bodyExpanded ? "收起编辑器" : "展开编辑器";
+    const tabbedHelper = helperOpen && debugRawJSON && useTabbedRawHelper();
+    return `${httpBodyModesHTML(r.bodyType, {
+      polish:
+        !design &&
+        (r.bodyType === "none" ||
+          debugRawJSON ||
+          multipart ||
+          urlencoded ||
+          binary),
+      compact: !design && mode === "debug" && r.graphqlEditorVersion !== 1,
+    })}${r.bodyType === "none" || multipart || urlencoded || binary ? "" : `<div class="body-actions${debugRawJSON ? " http-debug-raw-actions" : ""}"><button id="generate-body" class="ghost">基于数据结构生成</button><span class="grow">请求体 · 保存在本地</span><button id="format-json" class="ghost"${debugRawJSON ? ' aria-label="格式化 JSON"' : ""}>${debugRawJSON ? "美化" : "格式化 JSON"}</button>${design ? "" : `<button id="expand-body" class="ghost" ${["none", "form-data", "urlencoded"].includes(r.bodyType) ? "disabled" : ""} aria-pressed="${bodyExpanded}" title="展开编辑器，Esc 收起">${debugRawJSON ? `<span class="debug-raw-expand-icon">${lineIcon("editor-expand")}</span><span class="debug-raw-expand-label">${expandLabel}</span>` : expandLabel}</button>`}</div>`}${
+      binary
+        ? binaryBodyHTML(r, { debug: !design, icon: lineIcon })
+        : multipart
+          ? debugMultipartEditor(r.form, esc)
+          : urlencoded
+            ? debugURLencodedEditor(r.form, esc)
+            : ["form-data", "urlencoded"].includes(r.bodyType)
+              ? pairs(r.form, "form", undefined, undefined, r.bodyType)
+              : r.bodyType === "none"
+                ? `<div class="body-none"><span class="body-none-icon">${lineIcon("body-empty")}</span><p>当前请求未包含 Body</p>${design ? "" : '<button id="generate-body" class="ghost">基于数据结构生成</button>'}</div>`
+                : `<div class="body-editor-shell"><div class="code-editor"><pre id="code-gutter" aria-hidden="true">${r.body
+                    .split("\n")
+                    .map((_, i) => i + 1)
+                    .join(
+                      "\n",
+                    )}</pre><pre id="code-highlight" aria-hidden="true"${debugRawJSON ? ' class="debug-raw-json-highlight"' : ""}>${highlightJSON(r.body)}\n</pre><textarea id="body-code" class="code" wrap="off" spellcheck="false" aria-label="请求体"${debugRawJSON ? ' placeholder=" "' : ""}>${esc(r.body)}</textarea></div><button id="toggle-parameter-helper" class="helper-toggle${debugRawJSON ? " debug-raw-helper" : ""}" aria-label="参数助手" aria-expanded="${helperOpen}"${helperOpen ? ' aria-controls="body-parameter-helper"' : ""}><span class="helper-label" aria-hidden="true">${debugRawJSON ? `<span class="helper-rail-chevron">${lineIcon("helper-rail-left")}</span>` : ""}${tabbedHelper ? `<span class="helper-pane-chevron">${lineIcon("helper-pane-right")}</span>` : ""}<span>参</span><span>数</span><span>助</span><span>手</span></span></button>${
+                    helperOpen ? bodyParameterHelper(r, tabbedHelper) : ""
+                  }</div>`
     }`;
+  }
   if (param === "auth")
-    return (
-      `<label class="notice"><input id="inherit-auth" type="checkbox" ${r.inheritAuth !== false ? "checked" : ""}>接口认证为 none 时继承项目/目录认证；取消勾选则明确不使用共享认证。</label>` +
-      authPanel(r.auth)
-    );
+    return (design || mode === "debug") && usesDebugAuthChoice(project, r)
+      ? httpRequestAuthPane(r, design ? "design" : "debug")
+      : httpAuthPane(r.auth, r.inheritAuth);
   if (param === "assertions")
     return `<table><thead><tr><th>目标</th><th>操作</th><th>预期值（JSON 或文本）</th><th></th></tr></thead><tbody>${r.assertions.map((a, i) => `<tr><td><input data-rule="${i}:target" value="${esc(a.target)}" placeholder="status / $.data.id / duration"></td><td><select data-rule="${i}:op">${["eq", "neq", "contains", "exists", "lt", "gt"].map((op) => `<option ${a.op === op ? "selected" : ""}>${op}</option>`).join("")}</select></td><td><input data-rule="${i}:value" value="${esc(JSON.stringify(a.value))}"></td><td><button data-remove-rule="${i}">×</button></td></tr>`).join("")}</tbody></table><p><button id="add-assertion">＋ 添加断言</button> <button id="edit-operations">JSON 高级编辑</button></p><div class="notice">status 为状态码，duration 为毫秒，body 为原文；JSON 路径如 $.data.id；响应头使用 header:content-type。</div>`;
   if (param === "extract")
@@ -1659,8 +2596,77 @@ function paramPanel(r) {
       .join(
         "",
       )}</tbody></table><p><button id="add-extract">＋ 提取变量</button><button id="edit-operations">JSON 高级编辑</button></p><div class="notice">默认运行时变量可传递给后续步骤；本请求变量不跨请求。环境/全局目的层会保存到项目，同名并发变更报错。响应时间与完整文本不需要路径；正则在隔离 VM 执行，文本上限 256 KiB，捕获组 0 为完整匹配；XML/XPath 上限 1 MiB，禁止 DTD；索引从 1 开始，多节点取首个，可使用 /root/item[1]/text()。命名空间映射可在高级 JSON 中设置 namespaces。</div>`;
-  if (param === "before" || param === "after")
-    return `<div class="script-mode-controls"><label>脚本兼容模式<select id="script-dialect">${scriptDialectOptions(r.scriptDialect)}</select></label><label>URL脚本模式<select id="script-url-mode">${scriptURLModeOptions(r.scriptURLMode)}</select></label></div><p class="script-actions"><button id="expand-script" aria-haspopup="dialog">展开脚本编辑器</button> <button id="edit-operations">声明式操作（高级）</button> <button id="add-db-operation">添加数据库查询</button></p><textarea id="script-code" class="full-code" aria-label="接口脚本" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea><p class="muted">${scriptDialectNotice}</p><label class="notice"><input id="inherit-shared-scripts" type="checkbox" ${r.inheritSharedScripts !== false ? "checked" : ""}>调试继承项目/当前目录脚本；执行计划不自动继承。</label><details class="notice script-policy"><summary>JavaScript 沙箱 · 无文件访问 · 250ms计算 / 2s总截止</summary><p>JavaScript 在独立 QuickJS 沙箱中执行，无文件/Node或任意模块访问。支持Promise/await、有界定时器及pm.sendRequest(config[, callback]) HTTP子请求（最多10次/并发4次、总计仍限2秒），以及 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test/Chai断言、CryptoJS（含受限安全随机数）、lodash（_）、moment、uuid、JSON5（输入/输出各64KiB）、有界 csv2array(text) / xml2Json(text) 和 console.log；累计250ms脚本运行预算（墙钟时间，不含HTTP等待）、2秒worker总截止、16MiB VM 内存限制。前置 getFinalRequestRawBody() 支持至多64KiB的 raw/JSON正文及已有变量替换，写回后避免发送时重复替换；暂不支持表单和声明式动态正文。后置脚本可用 apt.visualizer.set(template, data) 生成隔离的静态表格/列表；数据库操作须单独授权会话连接。</p><p>表单支持 pm.request.body.update 和 urlencoded/formdata 集合；one/all/each 的文本项可赋值或 update。最多1000项，单值64KiB、文本合计256KiB；文件仅提供已选择的元数据，不接受路径或新增文件。后置 setBody/setCode 仅生成独立脚本视图，不改写网络证据。</p></details>${r[param]?.length ? `<details class="operation-summary" open><summary>${r[param].length} 条声明式操作（先于本阶段 JavaScript）</summary>${r[param].map((operation, index) => `<div class="operation-card" data-operation-index="${index}"><div class="row"><strong class="grow">${index + 1}. ${esc(operation.name || operation.type)} · ${operation.type === "database" ? "数据库只读" : esc(operation.type)}${operation.enabled === false && operation.type === "database" ? "（停用）" : ""}</strong>${operation.type === "database" ? `<button data-edit-db-operation="${index}">编辑 / 重新绑定</button><button data-toggle-db-operation="${index}" title="启停查询不会清除已有运行时变量">${operation.enabled === false ? "启用" : "停用"}</button>` : ""}<button data-move-operation="${index}:-1" ${index === 0 ? "disabled" : ""}>上移</button><button data-move-operation="${index}:1" ${index === r[param].length - 1 ? "disabled" : ""}>下移</button><button data-remove-operation="${index}">移除</button></div><pre>${esc(operation.type === "database" ? operation.sql : JSON.stringify(operation))}</pre></div>`).join("")}</details>` : ""}`;
+  if (param === "before" || param === "after") {
+    const preWorkspace =
+      !design &&
+      mode === "debug" &&
+      param === "before" &&
+      r.graphqlEditorVersion !== 1;
+    const scriptControls = `<div class="script-mode-controls"><label>脚本兼容模式<select id="script-dialect">${scriptDialectOptions(r.scriptDialect)}</select></label><label>URL脚本模式<select id="script-url-mode">${scriptURLModeOptions(r.scriptURLMode)}</select></label></div><p class="script-actions">${preWorkspace ? "" : '<button id="expand-script" aria-haspopup="dialog">展开脚本编辑器</button> '}<button id="edit-operations">声明式操作（高级）</button> <button id="add-db-operation">添加数据库查询</button></p>`;
+    const inlineScript = `<textarea id="script-code" class="full-code" aria-label="接口脚本" spellcheck="false" placeholder="${param === "before" ? "apt.setVar('requestId', 'demo');" : "pm.test('status', () => pm.expect(pm.response.code).to.equal(200));"}">${esc(r[param + "Script"] || "")}</textarea>`;
+    const postWorkspace =
+      !design &&
+      mode === "debug" &&
+      param === "after" &&
+      r.graphqlEditorVersion !== 1;
+    const snippetEditor =
+      page === "apis" &&
+      (preWorkspace || postWorkspace) &&
+      r.nativeTasks === undefined &&
+      r.nativeInheritance === undefined &&
+      r.importedNativeTaskSource === undefined &&
+      r.importedScriptTasks === undefined &&
+      r.graphqlVariableTemplate === undefined
+        ? httpScriptSnippetWorkspaceHTML(
+            inlineScript,
+            param,
+            httpSnippetEditors.get(r)?.[param] === true,
+          )
+        : inlineScript;
+    const scriptHelp = `<p class="muted">${scriptDialectNotice}</p><label class="notice"><input id="inherit-shared-scripts" type="checkbox" ${r.inheritSharedScripts !== false ? "checked" : ""}>调试继承项目/当前目录脚本；执行计划不自动继承。</label><details class="notice script-policy"><summary>JavaScript 沙箱 · 无文件访问 · 250ms计算 / 2s总截止</summary><p>JavaScript 在独立 QuickJS 沙箱中执行，无文件/Node或任意模块访问。支持Promise/await、有界定时器及pm.sendRequest(config[, callback]) HTTP子请求（最多10次/并发4次、总计仍限2秒），以及 apt.setVar/getVar、set/removeRequestQuery/Header/Body、pm.environment/pm.globals（持久化）、pm.variables（仅当前请求）、pm.response、pm.test/Chai断言、CryptoJS（含受限安全随机数）、lodash（_）、moment、uuid、JSON5（输入/输出各64KiB）、有界 csv2array(text) / xml2Json(text) 和 console.log；累计250ms脚本运行预算（墙钟时间，不含HTTP等待）、2秒worker总截止、16MiB VM 内存限制。前置 getFinalRequestRawBody() 支持至多64KiB的 raw/JSON正文及已有变量替换，写回后避免发送时重复替换；暂不支持表单和声明式动态正文。后置脚本可用 apt.visualizer.set(template, data) 生成隔离的静态表格/列表；数据库操作须单独授权会话连接。</p><p>表单支持 pm.request.body.update 和 urlencoded/formdata 集合；one/all/each 的文本项可赋值或 update。最多1000项，单值64KiB、文本合计256KiB；文件仅提供已选择的元数据，不接受路径或新增文件。后置 setBody/setCode 仅生成独立脚本视图，不改写网络证据。</p></details>`;
+    const operations = r[param] || [];
+    const hasWaits =
+      preWorkspace && supportsHTTPPreWait(r) && operations.some(isHTTPPreWait);
+    const cards = operations
+      .map((operation, index) =>
+        hasWaits && isHTTPPreWait(operation)
+          ? httpPreWaitHTML(
+              operation,
+              index,
+              operations.length,
+              httpPreWaitDrafts.read(operation),
+              esc,
+            )
+          : `<div class="operation-card" data-operation-index="${index}"><div class="row"><strong class="grow">${index + 1}. ${esc(operation.name || operation.type)} · ${operation.type === "database" ? "数据库只读" : esc(operation.type)}${operation.enabled === false && operation.type === "database" ? "（停用）" : ""}</strong>${operation.type === "database" ? `<button data-edit-db-operation="${index}">编辑 / 重新绑定</button><button data-toggle-db-operation="${index}" title="启停查询不会清除已有运行时变量">${operation.enabled === false ? "启用" : "停用"}</button>` : ""}<button data-move-operation="${index}:-1" ${index === 0 ? "disabled" : ""}>上移</button><button data-move-operation="${index}:1" ${index === r[param].length - 1 ? "disabled" : ""}>下移</button><button data-remove-operation="${index}">移除</button></div><pre>${esc(operation.type === "database" ? operation.sql : JSON.stringify(operation))}</pre></div>`,
+      )
+      .join("");
+    const configured = !operations.length
+      ? ""
+      : hasWaits
+        ? `<div class="http-pre-operation-list" aria-label="声明式前置操作">${cards}<p class="http-pre-safety">等待仅支持普通 HTTP 手动调试；计划、用例和压测不执行此定义。</p></div>`
+        : `<details class="operation-summary" open><summary>${operations.length} 条声明式操作（先于本阶段 JavaScript）</summary>${cards}</details>`;
+    if (preWorkspace) {
+      const editor = httpPreEditors.get(r);
+      const hasScript = Boolean(r.beforeScript);
+      return httpPreActionsHTML({
+        configured,
+        advanced: scriptControls + scriptHelp,
+        script: snippetEditor,
+        scriptOpen: editor?.scriptOpen ?? hasScript,
+        advancedOpen: editor?.advancedOpen,
+        canWait: supportsHTTPPreWait(r),
+        hasScript,
+      });
+    }
+    return postWorkspace
+      ? httpPostActionsHTML({
+          configured,
+          advanced: snippetEditor + scriptControls + scriptHelp,
+          open: httpPostAdvanced.has(httpPostAdvancedKey(r)),
+          hasScript: Boolean(r.afterScript),
+        })
+      : scriptControls + inlineScript + scriptHelp + configured;
+  }
   const descriptions = {
     assertions:
       "状态码 / JSON 路径 / 响应时间断言。支持 eq、neq、contains、exists、lt、gt。",
@@ -1670,8 +2676,22 @@ function paramPanel(r) {
   };
   return `<div class="notice">${descriptions[param]}</div><pre>${esc(JSON.stringify(r[param], null, 2))}</pre><button id="edit-operations">编辑${param === "assertions" ? "断言" : param === "extract" ? "提取规则" : "操作"}</button>`;
 }
-function responseContent() {
-  if (responseTab === "examples")
+const unsentActualRequestSections = new WeakMap();
+function responseContent(responseHeaders) {
+  if (responseTab === "examples") {
+    const r = request();
+    if (
+      page === "apis" &&
+      mode === "debug" &&
+      r.graphqlEditorVersion !== 1 &&
+      r.graphqlVariableTemplate === undefined
+    )
+      return debugExamplesHTML(
+        r,
+        debugExampleSelections.get(r),
+        debugExampleDrafts,
+        esc,
+      );
     return (
       request()
         .examples.map(
@@ -1680,8 +2700,31 @@ function responseContent() {
         )
         .join("") || '<div class="empty"><p>在 Mock 页添加响应示例</p></div>'
     );
-  if (!response)
-    return `<div class="empty"><div class="empty-symbol">${lineIcon("rocket")}</div><p>输入 URL 后点击发送获取响应结果</p><small>Ctrl + Enter 发送请求 · Ctrl + S 保存接口</small></div>`;
+  }
+  if (!response) {
+    const owner = request();
+    if (
+      !busy &&
+      responseTab === "request" &&
+      owner &&
+      owner.graphqlEditorVersion !== 1
+    )
+      return unsentActualRequestHTML(
+        owner?.method,
+        unsentActualRequestSections.get(owner),
+      );
+    const data = !busy && unsentResponseData(responseTab);
+    return (
+      data ||
+      `<div class="empty http-response-empty"><div class="empty-symbol">${lineIcon("rocket")}</div><p>输入 URL 后点击发送获取响应结果</p><small>Ctrl + Enter 发送请求 · Ctrl + S 保存接口</small></div>`
+    );
+  }
+  if (
+    mode === "debug" &&
+    responseTab === "body" &&
+    isPopulatedHTTPResponse(response)
+  )
+    return httpSuccessResponseHTML();
   if (responseTab === "scriptResponse") {
     if (!response.scriptResponse)
       return '<div class="notice">后置脚本可用 pm.response.setBody(value) / setCode(code) 创建处理视图；不改写原始网络证据。</div>';
@@ -1711,48 +2754,91 @@ function responseContent() {
       v = JSON.stringify(JSON.parse(v), null, 2);
     } catch {}
   }
-  return `${failure}${response.rawBodyBase64 ? '<button id="download-response-binary">下载原始二进制响应</button>' : ""}${response.codecError ? `<div class="notice">解码失败，以下为 Base64：${esc(response.codecError)}</div>` : ""}<pre>${esc(typeof v === "string" ? v : JSON.stringify(v, null, 2))}</pre>`;
+  const content =
+    responseTab === "headers" && responseHeaders
+      ? httpResponseHeadersHTML(responseHeaders, esc)
+      : `<pre>${esc(typeof v === "string" ? v : JSON.stringify(v, null, 2))}</pre>`;
+  return `${failure}${response.rawBodyBase64 ? '<button id="download-response-binary">下载原始二进制响应</button>' : ""}${response.codecError ? `<div class="notice">解码失败，以下为 Base64：${esc(response.codecError)}</div>` : ""}${content}`;
+}
+function designParameterPanel(r) {
+  return `<div class="design-parameter-tabs" role="tablist" aria-label="设计请求参数标签">${designParameterTabs
+    .map(([key, label]) => {
+      const selected = key === designParameter;
+      const path = key === "path" && usesDesignPathDraft(project, r);
+      return `<button type="button" class="ghost" id="design-tab-${key}" role="tab" aria-selected="${selected}" tabindex="${selected ? 0 : -1}" aria-controls="design-parameter-panel" data-design-parameter="${key}"${path ? ' aria-label="Path"' : ""}>${path ? designPathTabLabel(r) : label}</button>`;
+    })
+    .join(
+      "",
+    )}</div><div id="design-parameter-panel" class="design-parameter-panel" role="tabpanel" aria-labelledby="design-tab-${designParameter}" tabindex="0">${paramPanel(r, designParameter, true)}</div>`;
 }
 function modePanel(r) {
-  if (mode === "design")
-    return `<div class="page">${r.importNotes?.length ? `<div class="notice import-notes" role="region" aria-label="导入兼容性提示" tabindex="0">导入提示：${r.importNotes.map(esc).join("<br>")}</div>` : ""}${importedScriptTasksHTML(r.importedScriptTasks)}<div class="form-grid"><label>全局请求参数</label><label><input id="inherit-global-parameters" type="checkbox" ${r.inheritGlobalParameters !== false ? "checked" : ""}>继承项目及目录 Header / Query / Cookie / 表单参数</label><label>接口描述</label><textarea id="description">${esc(r.description)}</textarea><label>所属目录</label><input id="folder" value="${esc(r.folder)}"><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>HTTPS代理 CA（PEM，与目标站点CA分开）</label><textarea data-tls="proxyCa">${esc(r.tls?.proxyCa || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}"><label>绑定服务</label><select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select>${attributeFields(project.settings?.attributes || [], r.attributes)}<label>请求 JSON Schema</label><div><button id="visual-schema" type="button">可视化编辑结构</button><textarea id="schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div><label>响应定义（状态、描述、Content 与 Schema）</label><div><div class="response-schema-actions"><button id="new-response-schema" type="button">新增响应结构</button>${(r.responses || []).flatMap((definition, index) => (Object.keys(definition.content || {}).length ? Object.keys(definition.content) : ["application/json"]).map((media) => `<button type="button" data-response-schema="${esc(JSON.stringify([index, media]))}">编辑 ${esc(definition.status)} · ${esc(media)}</button>`)).join("")}</div>${r.openapiExampleBindingsVersion === 1 ? '<p class="muted">此处可修改 Schema。绑定示例请用示例编辑器，响应状态请用可视编辑按钮；直接改源示例注解会产生导出冲突。</p>' : ""}<textarea id="response-definitions">${esc(JSON.stringify(r.responses || [], null, 2))}</textarea></div></div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div>`;
+  if (mode === "design") {
+    const descriptionOpen =
+      openDesignDescriptions.get(r) ?? Boolean(r.description);
+    return `<div class="page http-design-canvas">${r.importNotes?.length ? `<div class="notice import-notes" role="region" aria-label="导入兼容性提示" tabindex="0">导入提示：${r.importNotes.map(esc).join("<br>")}</div>` : ""}${importedScriptTasksHTML(r.importedScriptTasks)}<div class="design-meta"><label for="folder">目录<input id="folder" value="${esc(r.folder)}" placeholder="根目录"></label><label for="request-service">绑定服务<select id="request-service"><option value="">完整 URL 直连 / 相对路径继承目录</option>${(project.servers || []).map((server) => `<option value="${server.id}" ${r.serviceId === server.id ? "selected" : ""}>${esc(server.name)}</option>`).join("")}</select></label></div>
+    <section class="request-description-section" aria-label="详细说明"><h2><span>${lineIcon("▧")}</span>详细说明</h2><details id="design-description" ${descriptionOpen ? "open" : ""}><summary><span class="design-description-closed">＋ 添加详细说明</span><span class="design-description-open">收起</span></summary><div class="design-description-toolbar" role="group" aria-label="说明格式工具">${markdownTools.map(([key, glyph, label]) => `<button type="button" class="ghost" data-design-markdown="${key}" aria-label="${label}" title="${label}">${esc(glyph)}</button>`).join("")}</div><div class="design-description-editor"><textarea id="description" aria-label="接口详细说明" spellcheck="false">${esc(r.description)}</textarea><div id="design-description-preview" class="markdown-content" role="region" aria-label="说明预览" tabindex="0">${descriptionOpen ? renderMarkdown(r.description) : ""}</div></div><div class="design-description-footer"><small id="design-description-count">${documentCounts(r.description || "")}</small><div class="design-description-scroll-controls"><label><input type="checkbox" id="design-description-sync"${designDescriptionScroll.get(r)?.linked === false ? "" : " checked"}>同步滚动</label><button type="button" class="ghost" id="design-description-top">回到顶部</button></div></div></details></section>
+    <section class="design-request-parameters" aria-label="设计请求参数"><h2><span>${lineIcon("☷")}</span>设计请求参数</h2>${designParameterPanel(r)}</section>
+    <section class="design-response-structure" aria-label="设计响应参数"><h2><span>${lineIcon("▤")}</span>设计响应参数</h2>${designResponsePanel(r.responses || [], designResponseSelections.get(designResponseKey(r)), r.openapiExampleBindingsVersion === 1, r.examples, collapsedDesignResponseRoots.get(r), designResponseSettingsDrafts.get(r))}</section>
+    <section class="design-request-structure" aria-label="请求数据结构"><h2><span>${lineIcon("☷")}</span>请求数据结构</h2><div><button id="visual-schema" type="button">可视化编辑结构</button>${r.graphqlEditorVersion === 1 || r.bodyType === "binary" || (designParameter === "body" && r.bodyType !== "none") ? "" : '<button id="generate-body" type="button" class="ghost">基于数据结构生成</button>'}<textarea id="schema" aria-label="请求 JSON Schema">${esc(JSON.stringify(r.schema, null, 2))}</textarea></div></section>
+    <section class="design-advanced" aria-label="请求选项"><h2><span>${lineIcon("⚙")}</span>请求选项</h2><div class="form-grid"><label>全局请求参数</label><label><input id="inherit-global-parameters" type="checkbox" ${r.inheritGlobalParameters !== false ? "checked" : ""}>继承项目及目录 Header / Query / Cookie / 表单参数</label><label>超时（ms）</label><input id="timeout" type="number" min="100" max="60000" value="${r.timeout}"><label>HTTP/HTTPS 代理</label><input id="request-proxy" value="${esc(r.proxy)}" placeholder="http://127.0.0.1:8080"><label>自定义 CA（PEM）</label><textarea data-tls="ca">${esc(r.tls?.ca || "")}</textarea><label>HTTPS代理 CA（PEM，与目标站点CA分开）</label><textarea data-tls="proxyCa">${esc(r.tls?.proxyCa || "")}</textarea><label>客户端证书（PEM）</label><textarea data-tls="cert">${esc(r.tls?.cert || "")}</textarea><label>客户端私钥（PEM）</label><textarea data-tls="key">${esc(r.tls?.key || "")}</textarea><label>私钥口令</label><input data-tls="passphrase" type="password" value="${esc(r.tls?.passphrase || "")}">${attributeFields(project.settings?.attributes || [], r.attributes)}</div><div class="notice">TLS 校验始终开启，可粘贴自定义 CA。保存接口会将证书/私钥写入本地项目；导出前务必删除敏感凭据。执行计划保存独立快照。</div></div></section></div>`;
+  }
   if (mode === "mock")
     return `<div class="page"><h2>本地 Mock 与响应示例</h2><button id="edit-mock-rules">编辑条件响应期望规则</button><button data-page="settings" data-settings-target="settings-mock-fields">配置智能字段 Mock</button><p class="muted">指定示例时直接返回该示例；否则按顺序匹配规则，不匹配时返回首个示例；没有示例时按 2xx JSON 响应 Schema 和项目字段规则生成。</p><p class="muted">Mock 地址只在本机应用运行时可用。切换调试会先保存当前改动；指定示例会停用请求中同名 example 参数，其他全局参数与脚本仍会执行。HTML 响应隔离展示，不运行页面脚本；禁止 Set-Cookie 等修改浏览器状态的头。</p><input class="mock-url" readonly value="${esc(mockURL(location.origin, project.id, r.id))}"><div class="toolbar"><button id="add-example">＋ 新增示例</button><button id="use-mock">用 Mock 地址调试</button></div>${r.examples.map((e, i) => `<div class="card"><div class="row"><strong class="grow">${esc(e.name)} · ${esc(e.status)}</strong><button data-use-example="${i}">调试此示例</button><button data-edit-example="${i}">编辑</button><button data-delete-example="${i}">删除</button></div><pre>${esc(e.body)}</pre></div>`).join("")}</div>`;
+  if (
+    mode === "cases" &&
+    !(
+      caseBatch?.projectId === project.id && caseBatch?.sourceRequestId === r.id
+    )
+  ) {
+    const empty = emptyCasePanel(project, r.id, busy);
+    if (empty) return empty;
+  }
   if (mode === "cases")
-    return `<div class="page"><h2>接口用例</h2><p class="muted">每个用例保存独立请求快照，可覆盖参数、断言和脚本。原接口修改不会自动覆盖用例。分组仅组织用例，移动分组不会改写已保存的请求快照。</p><button id="new-interface-case" class="primary" ${busy ? "disabled" : ""}>＋ 新建接口用例</button><button id="new-case-folder" ${busy ? "disabled" : ""}>＋ 新建用例分组</button><button id="create-case">从当前接口创建执行计划</button>${caseSelectionToolbar()}${caseCards(project, r.id, caseResults.results(project.id), busy, selectedInterfaceCases(), caseResults.collapsed(project.id))}</div>`;
-  return `<div class="page"><h2>一键压测</h2><p class="muted">仅对你有权测试的接口使用。最多100次主请求执行、并发10，支持取消。包含脚本、动态值和断言；每次执行的变量独立，不回写项目。脚本子请求另计（各自受沙箱上限约束），HTTP调用数不等于网络往返次数。P50/P95是主请求耗时，逐次elapsed另含脚本等待；脚本与子请求也可能产生副作用。</p><p class="muted">按时长模式限定1至60秒，仍受请求上限约束；先到时长或请求上限即停止，不保证持续到指定秒数。到时会中断尚未完成的请求和脚本，并保留记录。</p><div class="row load-controls"><label>模式 <select id="load-mode" ${busy ? "disabled" : ""}><option value="count" ${loadOptions.get(project.id + ":" + r.id)?.mode !== "duration" ? "selected" : ""}>按请求数</option><option value="duration" ${loadOptions.get(project.id + ":" + r.id)?.mode === "duration" ? "selected" : ""}>按持续时长</option></select></label><label>时长（秒，仅时长模式） <input id="load-duration" type="number" min="1" max="60" value="${esc(loadOptions.get(project.id + ":" + r.id)?.durationSeconds ?? 10)}" ${busy ? "disabled" : ""}></label><label>请求数 / 上限 <input id="load-count" type="number" value="${esc(loadOptions.get(project.id + ":" + r.id)?.count ?? 10)}" min="1" max="100"></label><label>并发 <input id="load-concurrency" type="number" value="${esc(loadOptions.get(project.id + ":" + r.id)?.concurrency ?? 1)}" min="1" max="10"></label><button id="load-run" class="primary" ${busy ? "disabled" : ""}>开始压测</button>${busy ? '<button id="cancel">停止</button>' : ""}</div><div class="load-data-panel"><label for="load-data">参数化数据（UTF-8 CSV，可选）</label><p class="muted">首行为变量名，后续行依次循环供 {{变量名}} 使用，仅覆盖本次运行。最多64 KiB、100行、50列；数据只保留在当前页面会话，不保存到项目。</p><textarea id="load-data" rows="4" spellcheck="false" ${busy ? "disabled" : ""} placeholder="id,name&#10;1,示例">${esc(loadOptions.get(project.id + ":" + r.id)?.dataCSV ?? "")}</textarea><label>导入 CSV <input id="load-data-file" type="file" accept=".csv,text/csv" ${busy ? "disabled" : ""}></label></div>${
-    loadResult
-      ? `<div class="grid-stats">${[
-          ["已记录", loadResult.count],
-          [
-            "停止原因",
-            {
-              count: "请求数完成",
-              "count-limit": "达到请求上限",
-              duration: "达到持续时长",
-              cancelled: "手动取消",
-            }[loadResult.stopReason] || "未知",
-          ],
-          ["通过", loadResult.passed],
-          ["未通过（含中断）", loadResult.count - loadResult.passed],
-          ["总耗时", loadResult.elapsed + " ms"],
-          ["主请求调用", loadResult.mainRequests ?? loadResult.count],
-          ["脚本子请求", loadResult.scriptRequests ?? 0],
-          [
-            "P50",
-            loadResult.timingSamples === 0 ? "—" : loadResult.p50 + " ms",
-          ],
-          [
-            "P95",
-            loadResult.timingSamples === 0 ? "—" : loadResult.p95 + " ms",
-          ],
-        ]
-          .map(([l, v]) => `<div class="stat">${l}<strong>${v}</strong></div>`)
-          .join(
-            "",
-          )}</div><pre>${esc(JSON.stringify(loadResult.results, null, 2))}</pre>`
-      : ""
-  }</div>`;
+    return populatedCasePanel(
+      caseSelectionToolbar(),
+      caseCards(
+        project,
+        r.id,
+        caseResults.results(project.id),
+        busy,
+        selectedInterfaceCases(),
+        caseResults.collapsed(project.id),
+      ),
+    );
+  return loadWorkspace(
+    loadOptions.get(project.id + ":" + r.id),
+    loadResult?.projectId === project.id && loadResult.requestId === r.id
+      ? loadResult.result
+      : null,
+    busy,
+  );
+}
+function selectedSSEOwner(
+  item = project?.protocols?.find((entry) => entry.id === selectedProtocolId),
+) {
+  if (page !== "protocols" || !project || item?.type !== "sse") return null;
+  return {
+    projectId: project.id,
+    definitionId: item.id,
+    definitionUrl: item.url,
+  };
+}
+function paintSSECapture() {
+  const owner = selectedSSEOwner();
+  const status = $("#sse-capture-status");
+  if (!owner || !status) return;
+  const view = sseCaptureView(sseCaptures.current(owner), owner.definitionUrl);
+  status.textContent = view.notice;
+  const targetNote = $("#sse-capture-target-note");
+  targetNote.textContent = view.targetNote;
+  targetNote.hidden = !view.targetNote;
+  $("#protocol-result").textContent = view.result;
+  $("#cancel").disabled = !view.canCancel;
+  $("#protocol-run").disabled = busy || view.blocksStart;
+  for (const selector of ["#sse-capture-check", "#sse-capture-abandon"]) {
+    $(selector).hidden = !view.needsCheck;
+    $(selector).disabled = !view.canCheck;
+  }
 }
 function renderPage() {
   if (page === "socketio")
@@ -1781,7 +2867,10 @@ function renderPage() {
   if (page === "plans")
     return renderPlans({ project, planId, lastRun, busy, tab: planTab });
   if (page === "history")
-    return `<div class="page"><div class="page-head"><h1>最近请求</h1><button id="history-project-reload" ${busy || saving ? "disabled" : ""}>重新加载项目记录（不重发）</button><span class="muted">本地保留最近 50 条</span></div>${project.history.map((h) => `<div class="card"><div class="row"><span class="method ${h.request?.method}">${h.request?.method}</span><strong class="grow">${esc(h.name)}</strong><span class="${h.response?.status < 400 ? "success" : "failed"}">${h.response?.status || "ERROR"}</span><button data-history="${h.id}">查看</button></div><p class="subtle">${esc(h.createdAt)} · ${esc(h.request?.url)}</p></div>`).join("") || '<div class="empty"><p>暂无请求历史</p></div>'}${protocolHistoryView(project)}</div>`;
+    return recentHistoryPage(project.history, {
+      disabled: busy || saving,
+      protocol: protocolHistoryView(project),
+    });
   if (page === "trash")
     return `<div class="page"><h1>回收站</h1>${projects
       .filter((p) => p.archived)
@@ -1798,8 +2887,26 @@ function renderPage() {
         )
         .join("") || '<div class="empty"><p>回收站为空</p></div>'
     }</div>`;
-  if (page === "dictionary")
-    return `<div class="page">${dictionaryPanel(project, temporaryParameters.get(project.id) || [])}<div class="page-head"><div><h1>数据模型</h1><span class="muted">统一管理可复用的字段定义与枚举</span></div><div class="toolbar"><button id="add-model-folder">＋ 新建目录</button><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div></div>${modelCards(project)}</div>`;
+  if (page === "database-manager") return databaseManagerHTML();
+  if (page === "dictionary") {
+    const draft = workspaceModelDrafts.get(project.id);
+    return `<div class="page dictionary-page" data-dictionary-project="${esc(project.id)}">${dictionaryPanel(project, temporaryParameters.get(project.id) || [], { tab: modelDraftTab(draft), active: draft?.active, editor: draft?.active ? modelDraftPanel(project, draft) : "" })}<section class="dictionary-models" aria-labelledby="dictionary-models-heading"${draft?.active ? " hidden" : ""}><div class="page-head"><div><h2 id="dictionary-models-heading" tabindex="-1">数据模型</h2><span class="muted">统一管理可复用的字段定义与枚举</span></div><div class="toolbar"><button id="add-model-folder">＋ 新建目录</button><button id="add-dictionary" class="primary">＋ 新建数据模型</button></div></div>${modelCards(project)}</section></div>`;
+  }
+  if (page === "protocols") {
+    const selected = project.protocols?.find(
+      (item) => item.id === selectedProtocolId,
+    );
+    const sse = selectedSSEWorkbench(selected, {
+      busy,
+      capture: sseCaptures.current(selectedSSEOwner(selected)),
+      session: sessionState,
+      status: sessionLabel(),
+      events: activeSession?.events
+        ?.map((event) => `${event.at} ${event.direction} ${event.data}`)
+        .join("\n"),
+    });
+    if (sse) return sse;
+  }
   if (page === "protocols")
     return `<div class="page"><h1>实时协议调试</h1><div class="row"><input id="protocol-name" placeholder="连接名称" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.name || "")}"><button id="save-protocol">保存连接定义</button><button id="delete-protocol" class="danger">删除连接定义</button></div><p class="muted">支持短时采集与交互会话。交互会话最长 15 分钟、8 MiB，保留最近 200 条消息。</p><div class="form-grid"><label>协议</label><select id="protocol-type">${[
       ["sse", "SSE"],
@@ -1813,8 +2920,7 @@ function renderPage() {
       .join(
         "",
       )}</select><label>URL / TCP Host</label><input id="protocol-url" placeholder="http://localhost:8080/events" value="${esc(project.protocols?.find((item) => item.id === selectedProtocolId)?.url || "")}"><label>TCP 端口</label><input id="protocol-port" type="number" value="${project.protocols?.find((item) => item.id === selectedProtocolId)?.port || 8080}"><label>采集时长 ms</label><input id="protocol-duration" type="number" value="3000" min="100" max="30000"><label>发送消息</label><textarea id="protocol-message"></textarea></div><p><button id="protocol-run" class="primary" ${busy ? "disabled" : ""}>连接并采集</button> <button id="cancel">断开</button></p><pre id="protocol-result"></pre><div class="card"><div class="toolbar"><strong>当前全局会话</strong><button id="session-connect" class="primary" ${sessionState.canConnect ? "" : "disabled"}>建立交互会话</button><button id="session-send" ${sessionState.canSend ? "" : "disabled"}>发送消息</button><button id="session-stop" ${sessionState.canStop ? "" : "disabled"}>断开会话</button><button id="session-refresh">核对会话</button><button id="session-export">导出消息</button><span id="session-status">${esc(sessionLabel())}</span></div><pre id="session-events">${esc(activeSession?.events?.map((event) => `${event.at} ${event.direction} ${event.data}`).join("\n") || "")}</pre></div></div>`;
-  if (page === "database")
-    return `<div class="page"><h1>数据库连接</h1><p class="muted">SQLite / PostgreSQL / MySQL / Redis / MongoDB / ClickHouse · 默认只读 · 最多返回 1000 行</p><div class="form-grid"><label>类型</label><select id="db-type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option><option value="mysql">MySQL</option><option value="clickhouse">ClickHouse（HTTP只读）</option><option value="redis">Redis（默认只读）</option><option value="mongodb">MongoDB（find只读）</option></select><label>主机</label><input id="db-host" value="127.0.0.1"><label>端口</label><input id="db-port" placeholder="5432 / 3306 / 6379"><label>用户名</label><input id="db-user" autocomplete="off"><label>密码</label><input id="db-password" type="password" autocomplete="off"><label>数据库名 / Redis数据库索引</label><input id="db-name"><label>MongoDB认证库</label><input id="db-auth-source" value="admin"><label>TLS</label><input id="db-tls" type="checkbox"><label>自定义CA（PEM，可选）</label><textarea id="db-ca" placeholder="留空使用系统信任的证书"></textarea><label>达梦客户端证书链（PEM，双向 TLS）</label><textarea id="db-client-cert" spellcheck="false" autocomplete="off"></textarea><label>达梦客户端私钥（PEM，双向 TLS）</label><textarea id="db-client-key" spellcheck="false" autocomplete="off"></textarea><label>服务端证书 DN</label><input id="db-server-dn" placeholder="CN=db.example.com"><label>授权表（每行一个 SCHEMA.TABLE，有效期 15 分钟）</label><textarea id="db-relations" placeholder="APP.ITEMS"></textarea><label>SQLite 文件路径</label><input id="db-path" placeholder="C:\\data\\app.db 或 /data/app.db"><label>SQL / Redis命令JSON数组（如 ["GET","key"]）</label><textarea id="db-sql">SELECT name FROM sqlite_master WHERE type = 'table'</textarea><label>绑定参数 JSON</label><input id="db-params" value="[]"></div><p><label id="db-write-label"><input id="db-write" type="checkbox"><span id="db-write-description">仅本次允许SQLite写入（INSERT / UPDATE / DELETE）</span></label></p><p><button id="db-query" class="primary">执行只读查询</button> <button id="db-register">授权为本项目会话连接</button> <button id="db-connections">管理会话连接</button></p><p id="db-sqlserver-notice" class="notice" hidden>SQL Server 只读预览：必须验证TLS，目标数据库须为 READ_ONLY；仅显式 schema.table 列查询，参数使用 @p0。最多1000行，不支持写入/SSH。尚未完成真实服务与 Windows 验收。</p><pre id="db-result"></pre><div class="notice">连接凭据仅本次使用，不自动保存。仅连接你有权访问的数据库；只读事务不能保证数据库自定义函数无外部副作用。</div></div>`;
+  if (page === "database") return databaseConnectionHTML();
   if (page === "git")
     return `<div class="page"><h1>Git 协同</h1><p><button id="git-terminal" class="primary">在项目位置打开终端</button></p><p class="muted">本地项目是格式化 JSON 文件，可以纳入你自己的 Git 仓库。</p><div class="card"><h3>推荐流程</h3><ol class="markdown"><li>导出项目，检查并移除环境密钥与历史中的敏感信息。</li><li>把接口定义文件放入项目仓库。</li><li>通过 Git diff 审查变更，通过 PR 协作。</li><li>其他成员导入同一文件，继续本地编辑。</li></ol><button id="export">导出项目文件</button></div><div class="notice">打开终端后由你执行 Git 命令；本应用不会自动提交凭据或推送代码。执行记录与历史可能含敏感数据，请勿公开提交。</div></div>`;
   return `<div class="page"><div class="page-head"><div><h1>接口文档</h1><span class="muted">从当前项目定义生成，离线阅读与导出</span></div><div class="toolbar"><button id="new-document">＋ 新建文档</button><button id="export-docs" class="primary">导出文档</button></div></div>${
@@ -1834,8 +2940,8 @@ function renderPage() {
         .join("") || '<div class="empty"><p>创建接口后自动生成文档</p></div>'
   }</div>`;
 }
-function on(selector, event, fn) {
-  document.querySelectorAll(selector).forEach((el) =>
+function on(selector, event, fn, root = document) {
+  root.querySelectorAll(selector).forEach((el) =>
     el.addEventListener(event, async (e) => {
       try {
         await fn(e, el);
@@ -1859,10 +2965,21 @@ function download(name, data, type = "application/json") {
   setTimeout(() => URL.revokeObjectURL(u), 1000);
 }
 function addRequest() {
+  addHTTPDraft(false);
+}
+function addHTTPDraft(graphql) {
   collect();
-  const r = defaultRequest();
+  const r = defaultRequest(graphql ? "未命名 GraphQL 查询" : undefined);
+  if (graphql) {
+    Object.assign(r, newGraphQLEditorRequest(), { url: "" });
+    param = "graphql";
+    responseTab = "body";
+    bodyExpanded = false;
+  }
+  r.timeout = readNewHTTPTimeout(localStorage);
   project.requests.push(r);
   current = r.id;
+  activeDocumentId = null;
   if (!opened.includes(r.id)) opened.push(r.id);
   page = "apis";
   mode = "debug";
@@ -1887,7 +3004,7 @@ async function prepareProjectWrite(mode) {
       throw Error("项目或草稿在保存期间已变化，未开始后续操作");
     const owner = project,
       version = editVersion,
-      openingSequence = projectOpenSequence,
+      openingSequence = projectOpenRequestSequence,
       plans = JSON.stringify(project.plans);
     return {
       projectId,
@@ -1900,7 +3017,7 @@ async function prepareProjectWrite(mode) {
           project !== owner ||
           editVersion !== version ||
           dirty ||
-          projectOpenSequence !== openingSequence ||
+          projectOpenRequestSequence !== openingSequence ||
           saving ||
           planChanged ||
           (updated && updated.id !== projectId)
@@ -1961,8 +3078,9 @@ async function savePlan(plan) {
   }
 }
 
-function editRules() {
-  const r = request();
+function editRules(ownsWorkspace) {
+  const r = request(),
+    stage = param;
   const sample = {
     assertions: [{ target: "status", op: "eq", value: 200 }],
     extract: [
@@ -1982,9 +3100,12 @@ function editRules() {
     "编辑 " + param,
     `<p>示例</p><pre>${esc(JSON.stringify(sample[param], null, 2))}</pre>${jsonEditor(r[param])}`,
     () => {
+      if (ownsWorkspace && !ownsWorkspace())
+        throw Error("接口或阶段已切换，请重新打开操作编辑器");
       const value = JSON.parse($("#modal-json").value);
       if (!Array.isArray(value)) throw Error("必须是数组");
-      r[param] = value;
+      if (ownsWorkspace && stage === "before") validateHTTPPreWaits(r, value);
+      r[ownsWorkspace ? stage : param] = value;
       mark();
       render();
     },
@@ -2013,6 +3134,72 @@ function showMCPClientConfiguration(configuration) {
     };
 }
 function bind() {
+  // Path URL edits replace only their parameter panel, never the URL input.
+  const pathBindings = [];
+  const onPair = (selector, event, fn) => {
+    on(selector, event, fn);
+    pathBindings.push([selector, event, fn]);
+  };
+  const preWorkspace = $(".http-pre-actions");
+  const preProject = project;
+  const preRequest = request();
+  const ownsPre = () =>
+    preWorkspace?.isConnected &&
+    project === preProject &&
+    request() === preRequest &&
+    page === "apis" &&
+    mode === "debug" &&
+    param === "before";
+  const stalePre = () => preWorkspace && !ownsPre();
+  const waitOps = preWorkspace ? preRequest?.before : undefined;
+  const waitRows = waitOps ? [...waitOps] : [];
+  const ownedWait = (element, index) =>
+    ownsPre() &&
+    element.isConnected &&
+    supportsHTTPPreWait(preRequest) &&
+    preRequest.before === waitOps &&
+    waitOps?.[index] === waitRows[index] &&
+    isHTTPPreWait(waitRows[index])
+      ? waitRows[index]
+      : null;
+
+  const planEditor = $(".plans-page .plan-editor");
+  if (planEditor)
+    bindPlanInspection(
+      planEditor,
+      project,
+      project.plans.find((item) => item.id === planId),
+    );
+  const unsentActualRequest = $(".actual-request-unsent");
+  if (unsentActualRequest) {
+    const owner = project;
+    const ownedRequest = request();
+    bindUnsentActualRequest(
+      unsentActualRequest,
+      () =>
+        project === owner &&
+        request() === ownedRequest &&
+        page === "apis" &&
+        mode === "debug" &&
+        responseTab === "request" &&
+        !busy &&
+        !response,
+      (section) => unsentActualRequestSections.set(ownedRequest, section),
+    );
+  }
+  const successBody = $(".http-success-response");
+  if (successBody) {
+    const ownedResponse = response;
+    bindHTTPSuccessResponse(
+      successBody,
+      ownedResponse,
+      () =>
+        response === ownedResponse &&
+        page === "apis" &&
+        mode === "debug" &&
+        responseTab === "body",
+    );
+  }
   bindSocketIOWorkbench();
   on("#socketio-project-reload", "click", () => openProject(project.id));
   bindGrpcWorkbench();
@@ -2048,34 +3235,94 @@ function bind() {
       visualizationFrame.replaceWith(document.createTextNode(error.message));
     }
   }
-  on("#cookie-manager", "click", openCookieManager);
+  on("#cookie-manager", "click", () => openCookieManager());
   on("#compact-ui", "click", () => {
     collect();
     compactUI = !compactUI;
     localStorage.setItem("compact-ui", String(compactUI));
     render();
   });
-  on("#response-layout", "click", () => {
-    collect();
-    responseLayout = responseLayout === "split" ? "stacked" : "split";
-    localStorage.setItem("response-layout", responseLayout);
-    render();
-  });
-  on("[data-page]", "click", (_, e) => {
+  const layoutEditor = $("[data-http-response-layout]");
+  if (layoutEditor) {
+    releaseHTTPResponseLayout = bindHTTPResponseLayout({
+      editor: layoutEditor,
+      fallback: $("#response-layout"),
+      media: httpResponseLayoutMedia,
+      preferred: () => responseLayout,
+      writePreference(next) {
+        localStorage.setItem("response-layout", next);
+        responseLayout = next;
+      },
+      onLayoutChange: refreshHTTPLayoutRawHelper,
+      onError: (error) => toast(error.message),
+    });
+  } else {
+    on("#response-layout", "click", () => {
+      collect();
+      responseLayout = responseLayout === "split" ? "stacked" : "split";
+      localStorage.setItem("response-layout", responseLayout);
+      render();
+    });
+  }
+  on("[data-page]", "click", (event, e) => {
+    if (
+      e.dataset.page === "trash" &&
+      project &&
+      !hasVisibleTrash(project, projects)
+    ) {
+      openEmptyTrash($("#empty-trash-dialog"), e);
+      return;
+    }
+    const fromRailKeyboard =
+      event.detail === 0 && e === document.activeElement && e.closest(".rail");
     collect();
     bodyExpanded = false;
     page = e.dataset.page;
     if (e.dataset.settingsTarget) settingsSection = e.dataset.settingsTarget;
     if (page === "plans") planTab = "plans";
     render();
+    if (e.dataset.dictionaryTarget) {
+      const target = document.getElementById(e.dataset.dictionaryTarget);
+      target?.scrollIntoView({ block: "start" });
+    }
+    if (e.id === "welcome-mcp") {
+      const heading = $(".settings-mcp-page .page-head h1");
+      if (heading) {
+        heading.tabIndex = -1;
+        heading.focus({ preventScroll: true });
+      }
+    } else if (event.detail === 0 && page === "database-manager")
+      $("#database-manager-heading")?.focus({ preventScroll: true });
+    else if (fromRailKeyboard) $(".rail [aria-current='page']")?.focus();
   });
-  on("[data-open-tab]", "click", (_, e) => {
+  bindWorkspaceDocument();
+  on("[data-open-document-tab]", "click", (event, button) => {
+    const keyboard = event.detail === 0 && button === document.activeElement;
+    openWorkspaceDocument(button.dataset.openDocumentTab);
+    if (keyboard) $(".tab.selected .tab-switch")?.focus();
+  });
+  on("[data-close-document-tab]", "click", (event, button) => {
+    const keyboard = event.detail === 0 && button === document.activeElement;
+    const id = button.dataset.closeDocumentTab;
+    openedDocuments = openedDocuments.filter((entry) => entry !== id);
+    if (activeDocumentId === id)
+      activeDocumentId = openedDocuments.at(-1) ?? null;
+    render();
+    if (keyboard) ($(".tab.selected .tab-switch") || $("#tab-add"))?.focus();
+  });
+  on("[data-open-tab]", "click", (event, e) => {
+    const fromKeyboard = event.detail === 0 && e === document.activeElement;
     collect();
     current = e.dataset.openTab;
+    activeDocumentId = null;
     response = responses.get(project.id + ":" + current) || null;
     render();
+    if (fromKeyboard) $(".tab.selected .tab-switch")?.focus();
   });
-  on("[data-close-tab]", "click", (_, e) => {
+  on("[data-close-tab]", "click", (event, e) => {
+    const fromKeyboard = event.detail === 0 && e === document.activeElement;
+    const closing = project.requests.find((r) => r.id === e.dataset.closeTab);
+    if (graphqlDrafts.pending(closing)) throw Error(unappliedGraphQL);
     collect();
     opened = opened.filter((id) => id !== e.dataset.closeTab);
     if (current === e.dataset.closeTab) {
@@ -2083,6 +3330,8 @@ function bind() {
       response = responses.get(project.id + ":" + current) || null;
     }
     render();
+    if (fromKeyboard)
+      ($(".tab.selected .tab-switch") || $("#tab-add"))?.focus();
   });
   on("#git-terminal", "click", async () => {
     if (window.desktop?.openProjectTerminal)
@@ -2124,6 +3373,9 @@ function bind() {
         });
         mcpPollSequence++;
         mcpState = result;
+        mcpTopStatusKnown = isMCPActivityReceipt(result);
+        mcpTopStatusUnavailable = !mcpTopStatusKnown;
+        updateMCPTopStatus($("#mcp-status"), result, mcpTopStatusUnavailable);
         updateMCPPanel?.(result);
         if (result.enabled) {
           setTimeout(() => showMCPClientConfiguration(result), 0);
@@ -2132,16 +3384,133 @@ function bind() {
       "应用授权",
     );
   });
-  on("#theme", "click", () => {
-    document.body.classList.toggle("dark");
-    localStorage.setItem(
-      "theme",
-      document.body.classList.contains("dark") ? "dark" : "light",
-    );
+  const readTheme = () => activeAppearanceTheme(document.body);
+  const chooseTheme = (theme) => {
+    applyAppearanceTheme(document.body, localStorage, theme);
+    refreshResponsiveRawHelper();
+  };
+  on("#theme", "click", () =>
+    chooseTheme(readTheme() === "dark" ? "light" : "dark"),
+  );
+  on("#appearance-settings", "click", (_, opener) => {
+    openAppearanceSettings($("#appearance-dialog"), {
+      opener,
+      findOpener: () => $("#appearance-settings"),
+      read: readTheme,
+      apply: chooseTheme,
+      readScale: () => readFontScale(localStorage),
+      readBuild: () => currentBuild,
+      storage: localStorage,
+      applyScale(scale) {
+        localStorage.setItem(fontScaleKey, String(scale));
+        applyFontScale(document.documentElement, scale);
+      },
+    });
   });
-  on("#project-select", "change", (_, e) => openProject(e.value));
-  on("#env", "change", (_, e) => {
-    project.currentEnvironmentId = e.value;
+  const openFromProjectPicker = (
+    id,
+    focusSelector = "#project-search-trigger",
+  ) => {
+    const owner = project;
+    if (graphqlDrafts.hasProject(owner)) throw Error(unappliedGraphQL);
+    if (debugExampleDrafts.pending(owner.requests))
+      throw Error("请先修正或撤回无效的响应示例正文，再切换或重新加载项目");
+    const responseDraftNotice = designResponseSettingsDrafts.notice(owner);
+    if (responseDraftNotice) throw Error(responseDraftNotice);
+    const opening = projectOpenRequestSequence,
+      version = editVersion;
+    const pendingProtocol =
+      (socketioWorkbenchState?.draftDirty &&
+        socketioWorkbenchProject === owner.id) ||
+      (grpcWorkbenchState?.draftDirty && grpcWorkbenchProject === owner.id);
+    if (
+      id === owner.id ||
+      !dirty ||
+      pendingProtocol ||
+      owner.settings?.nativeInheritance
+    )
+      return openProject(id, { fromPicker: true });
+    const dialog = $("#project-switch-confirmation");
+    if (dialog.open || $("#dialog").open || busy || saving) return;
+    const isCurrent = () =>
+      dialog.open && editVersion === version && !busy && !saving;
+    confirmDirtyProjectSwitch(dialog, {
+      restoreFocus(switched) {
+        if (switched) {
+          const heading = $("#api-welcome-title");
+          if (heading) {
+            heading.tabIndex = -1;
+            heading.focus({ preventScroll: true });
+          }
+        } else $(focusSelector)?.focus({ preventScroll: true });
+      },
+      async run(decision, readTarget) {
+        if (
+          !isCurrent() ||
+          project !== owner ||
+          projectOpenRequestSequence !== opening ||
+          !dirty
+        )
+          throw Error("项目或草稿已变化，请重新选择目标项目");
+        if (decision === "discard") {
+          // A different project cannot reconcile an uncertain save on this owner.
+          nativeRequestLifecycle.assertCanSave(owner.id);
+          projectImports.assertCanSave(owner.id);
+          return readTarget((targetSignal) =>
+            openProject(id, {
+              fromPicker: true,
+              targetSignal,
+              pickerGuard: () => isCurrent() && project === owner && dirty,
+            }),
+          );
+        }
+        const receipt = await save();
+        if (
+          !receipt ||
+          receipt.owner !== owner ||
+          receipt.version !== version ||
+          projectOpenRequestSequence !== opening ||
+          project !== receipt.applied ||
+          dirty ||
+          !isCurrent()
+        )
+          throw Error("保存未应用到当前草稿，未切换项目");
+        return readTarget((targetSignal) =>
+          openProject(id, {
+            fromPicker: true,
+            targetSignal,
+            pickerGuard: () =>
+              isCurrent() && project === receipt.applied && !dirty,
+          }),
+        );
+      },
+    });
+  };
+  on("#project-select", "change", (_, element) => {
+    if (!element.isConnected) return;
+    const target = element.value;
+    // Keep the control showing the actual owner until openProject adopts a receipt.
+    element.value = project.id;
+    return openFromProjectPicker(target, "#project-select");
+  });
+  const switcherOwner = project;
+  bindProjectSwitcher($(".project-group"), {
+    projects,
+    current: switcherOwner?.id,
+    allowed: () =>
+      project === switcherOwner && !busy && !saving && !$("#dialog").open,
+    open: openFromProjectPicker,
+    notify: toast,
+  });
+  const environmentOwner = project;
+  on("#env", "change", (_, element) => {
+    if (
+      !element.isConnected ||
+      project !== environmentOwner ||
+      !environmentOwner.environments.some(({ id }) => id === element.value)
+    )
+      return;
+    project.currentEnvironmentId = element.value;
     mark();
   });
   on("#search", "input", (_, e) => {
@@ -2150,6 +3519,31 @@ function bind() {
     bindTree();
   });
   bindTree();
+  bindApiCreateMenu($(".tree-create"));
+  on("[data-tree-protocol]", "click", (_, button) => {
+    const type = button.dataset.treeProtocol;
+    if (!["sse", "websocket", "tcp"].includes(type)) return;
+    collect();
+    selectedProtocolId = "";
+    page = "protocols";
+    render();
+    $("#protocol-type").value = type;
+    $("#protocol-name").focus();
+  });
+  on("[data-tree-import]", "click", (_, button) => {
+    $("#import")?.click();
+    const selector =
+      button.dataset.treeImport === "file" ? "#import-file" : "#import-text";
+    const input = $(selector);
+    if (button.dataset.treeImport === "curl" && input)
+      input.placeholder = "粘贴 cURL 命令。导入只解析定义，不执行命令。";
+    input?.focus({ preventScroll: true });
+  });
+  on("#new-graphql-request", "click", (event) => {
+    addHTTPDraft(true);
+    if (event.detail === 0) $("#graphql-query")?.focus({ preventScroll: true });
+  });
+  on("#new-tree-document", "click", () => editDocument());
   on("#new-folder", "click", () =>
     modal("新建目录", '<label>目录名称</label><input id="folder-name">', () => {
       const name = $("#folder-name").value.trim();
@@ -2169,42 +3563,248 @@ function bind() {
     mark();
     render();
   });
-  on("#new-project", "click", () =>
-    modal(
-      "新建本地项目",
-      '<label>项目名称</label><input id="new-name" placeholder="例如：商城服务"><label>存储目录（留空使用默认目录）</label><input id="new-directory" placeholder="绝对路径"><button id="pick-directory" type="button">选择本地文件夹</button>',
-      async () => {
-        const p = await api("/projects", "POST", {
-          name: $("#new-name").value,
-          directory: $("#new-directory").value || undefined,
-        });
-        projects = await api("/projects");
-        await openProject(p.id);
-      },
-    ),
+  const topProjectOwner = project;
+  bindProjectTopMenu(
+    $("#new-project"),
+    $("#project-top-menu"),
+    () =>
+      project === topProjectOwner &&
+      !busy &&
+      !saving &&
+      !$("#dialog").open &&
+      !$("#project-switch-confirmation")?.open,
   );
-  on("#add-request,#new-request,#tab-add,#welcome-add", "click", addRequest);
-  on("#save,#save-project", "click", save);
-  on("#request-name,#url,#body-code,#description", "input", (_, element) => {
-    collect();
-    mark();
-    if (element.id === "request-name") {
-      const id = CSS.escape(current);
-      document
-        .querySelectorAll('[data-tab-name="' + id + '"]')
-        .forEach((label) => {
-          label.textContent = request().name;
-        });
-      document
-        .querySelector('[data-close-tab="' + id + '"]')
-        ?.setAttribute("aria-label", "关闭 " + request().name);
-      if ($("#tree")) {
-        $("#tree").innerHTML = tree();
-        bindTree();
+  on("#project-menu-create", "click", (_, button) => {
+    if (!button.isConnected || $("#dialog").open || busy || saving) return;
+    if (project && debugExampleDrafts.pending(project.requests))
+      throw Error("请先修正或撤回无效的响应示例正文，再新建项目");
+    const owner = project,
+      view = page,
+      requestId = current,
+      documentId = activeDocumentId,
+      version = editVersion,
+      opening = projectOpenRequestSequence;
+    let registry = projects,
+      closeSettlement;
+    modal(
+      "新建项目",
+      projectCreateForm(),
+      () => {},
+      "确定",
+      () => {
+        closeSettlement?.();
+        if (project === owner)
+          $("#new-project")?.focus({ preventScroll: true });
+      },
+    );
+    const dialog = $("#dialog"),
+      revision = modalRevision;
+    const form = $(".project-create-form");
+    const currentForm = () =>
+      dialog.open && modalRevision === revision && form.isConnected;
+    const workspaceOwner = () =>
+      project === owner &&
+      registry === projects &&
+      version === editVersion &&
+      view === page &&
+      requestId === current &&
+      documentId === activeDocumentId &&
+      !busy &&
+      !saving;
+    closeSettlement = bindProjectCreationForm(dialog, {
+      flow: projectCreationFlow,
+      currentForm,
+      currentOwner: () =>
+        workspaceOwner() && opening === projectOpenRequestSequence,
+      oldIds: () => new Set(projects.map(({ id }) => id)),
+      create: (input) =>
+        api("/projects", "POST", input, { expectedStatus: 201 }),
+      readRegistry: () => api("/projects"),
+      adopt: (id, list, owns) =>
+        openProject(id, {
+          creationSelection: {
+            registry: list,
+            current: () => owns() && workspaceOwner(),
+          },
+        }),
+      publishRegistry(list) {
+        registry = projects = list;
+        render();
+      },
+    });
+    const picker = $("#pick-directory"),
+      field = $("#new-directory");
+    picker.onclick = async () => {
+      if (
+        !currentForm() ||
+        !workspaceOwner() ||
+        picker.disabled ||
+        projectCreationFlow.current
+      )
+        return;
+      if (!window.desktop?.chooseDirectory) {
+        toast("浏览器模式请直接填写绝对路径；桌面版支持选择文件夹");
+        return;
       }
-    }
+      const before = field.value;
+      const stillOwns = () =>
+        project === owner &&
+        modalRevision === revision &&
+        $("#dialog").open &&
+        picker.isConnected &&
+        field.isConnected &&
+        !projectCreationFlow.current;
+      picker.disabled = true;
+      try {
+        const directory = await window.desktop.chooseDirectory();
+        if (
+          stillOwns() &&
+          field.value === before &&
+          typeof directory === "string" &&
+          directory
+        )
+          field.value = directory;
+      } catch (error) {
+        if (stillOwns()) toast(error.message);
+      } finally {
+        if (stillOwns()) picker.disabled = false;
+      }
+    };
   });
-  on("#method", "change", () => {
+  on("#add-request,#new-request,#tab-add", "click", addRequest);
+  on("#welcome-add", "click", () => {
+    addRequest();
+    $("#request-name")?.focus({ preventScroll: true });
+  });
+  on("#save,#save-project", "click", save);
+  const pathProject = project;
+  const pathRequest = request();
+  const pathMode = mode;
+  const inPathDesign = pathMode === "design";
+  const ownsPathURL = (element) =>
+    element.isConnected &&
+    page === "apis" &&
+    mode === pathMode &&
+    (inPathDesign || pathMode === "debug") &&
+    !workspaceDocument() &&
+    project === pathProject &&
+    request() === pathRequest &&
+    usesDesignPathDraft(project, pathRequest);
+  const updatePathFromURL = (element) => {
+    if (!ownsPathURL(element) || !designPathDrafts.sync(project, pathRequest))
+      return;
+    const tab = $(
+      inPathDesign ? "#design-tab-path" : '.param-tabs [data-param="path"]',
+    );
+    tab.textContent = designPathTabLabel(pathRequest, { debug: !inPathDesign });
+    if ((inPathDesign ? designParameter : param) !== "path") return;
+    const surface = $(
+      inPathDesign ? "#design-parameter-panel" : ".request-panel",
+    );
+    surface.innerHTML = paramPanel(pathRequest, "path", inPathDesign);
+    for (const [selector, event, fn] of pathBindings)
+      on(selector, event, fn, surface);
+  };
+  const expireOwnedLiteralURL = (element) => {
+    if (
+      element.isConnected &&
+      project === pathProject &&
+      request() === pathRequest &&
+      page === "apis" &&
+      !workspaceDocument() &&
+      expireLiteralURLQueryRows(project, pathRequest)
+    )
+      toast("请求地址已替换，原来未启用的 URL 查询项不再保留。");
+  };
+  let composingPathURL = false;
+  on("#url", "compositionstart", (_, element) => {
+    if (ownsPathURL(element)) composingPathURL = true;
+  });
+  on("#url", "compositionend", (_, element) => {
+    if (!ownsPathURL(element)) {
+      expireOwnedLiteralURL(element);
+      return;
+    }
+    composingPathURL = false;
+    if (pathRequest.url !== element.value) {
+      pathRequest.url = element.value;
+      mark();
+    }
+    updatePathFromURL(element);
+    expireOwnedLiteralURL(element);
+  });
+  on(
+    "#request-name,#url,#body-code,#description",
+    "input",
+    (event, element) => {
+      if (
+        element.id === "url" &&
+        (!element.isConnected ||
+          project !== pathProject ||
+          request() !== pathRequest)
+      )
+        return;
+      if (designResponseSettingsDrafts.get(request())) {
+        const field = {
+          "request-name": "name",
+          url: "url",
+          "body-code": "body",
+          description: "description",
+        }[element.id];
+        request()[field] = element.value;
+      } else collect();
+      mark();
+      if (element.id === "url" && !event.isComposing && !composingPathURL) {
+        updatePathFromURL(element);
+        expireOwnedLiteralURL(element);
+      }
+      if (element.id === "request-name") {
+        const id = CSS.escape(current);
+        document
+          .querySelectorAll('[data-tab-name="' + id + '"]')
+          .forEach((label) => {
+            label.textContent = request().name;
+          });
+        document
+          .querySelector('[data-close-tab="' + id + '"]')
+          ?.setAttribute("aria-label", "关闭 " + request().name);
+        if ($("#tree")) {
+          $("#tree").innerHTML = tree();
+          bindTree();
+        }
+      }
+    },
+  );
+  const urlQueryRegion = $(".debug-literal-query-origin");
+  if (urlQueryRegion) {
+    const urlField = $("#url");
+    const refreshURLQuery = bindDebugURLQuery(urlQueryRegion, {
+      project: pathProject,
+      request: pathRequest,
+      urlField,
+      owns: () =>
+        urlQueryRegion.isConnected &&
+        urlField.isConnected &&
+        project === pathProject &&
+        request() === pathRequest &&
+        page === "apis" &&
+        mode === "debug" &&
+        param === "query" &&
+        !workspaceDocument(),
+      esc,
+      changed: mark,
+      reject: toast,
+    });
+    on("#url", "input", (event) => {
+      if (!event.isComposing && !composingPathURL) refreshURLQuery();
+    });
+    on("#url", "compositionend", refreshURLQuery);
+  }
+  on("#method", "change", (_, element) => {
+    if (designResponseSettingsDrafts.get(request())) {
+      element.value = request().method;
+      throw Error(designResponseSettingsDrafts.notice(project));
+    }
     collect();
     mark();
     render();
@@ -2231,7 +3831,7 @@ function bind() {
         esc(media) +
         '"></label><label>说明<input id="schema-response-description" value="' +
         esc(definition.description || "") +
-        '"></label></div><p class="muted">更换Content-Type会新增该类型，不删除原有类型及示例。</p><div id="schema-editor">' +
+        '"></label></div><p class="muted">更换 Content-Type 会添加新类型。已有类型请切换后直接编辑，原有类型及示例不会被覆盖。</p><div id="schema-editor">' +
         schemaEditor(schema) +
         "</div>",
       () => {
@@ -2241,15 +3841,737 @@ function bind() {
             status: $("#schema-response-status").value,
             description: $("#schema-response-description").value,
             mediaType: $("#schema-response-media").value,
+            sourceMediaType: media,
             schema: readSchema(),
           }),
         );
+        const r = request();
+        const edited = index < 0 ? r.responses.at(-1) : r.responses[index];
+        designResponseSelections.set(designResponseKey(r), {
+          status: String(edited.status),
+          media: $("#schema-response-media").value.trim(),
+        });
         mark();
         render();
       },
     );
     readSchema = bindSchemaEditor($("#schema-editor"), schema);
   };
+  const selectDesignResponse = (index, media, focus) => {
+    const r = request();
+    const before = r.responses?.[index];
+    const status = before ? String(before.status) : undefined;
+    const top = $(".http-design-canvas").scrollTop;
+    collect();
+    const key = designResponseKey(r);
+    const current = designResponseSelections.get(key);
+    const selection = responseSelection(r.responses, { status, media });
+    designResponseSelections.set(key, {
+      view: current?.view,
+      bodyView: current?.bodyView,
+      status: selection.definition
+        ? String(selection.definition.status)
+        : undefined,
+      media: selection.media,
+    });
+    render();
+    $(".http-design-canvas").scrollTop = top;
+    $(
+      focus === "media"
+        ? "#design-response-media"
+        : "#design-response-" + selection.index,
+    )?.focus();
+  };
+  on("[data-design-response]", "click", (_, e) =>
+    selectDesignResponse(Number(e.dataset.designResponse), undefined, "tab"),
+  );
+  on("[data-design-response]", "keydown", (event, e) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const size = request().responses.length;
+    const index = Number(e.dataset.designResponse);
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? size - 1
+          : (index + (event.key === "ArrowRight" ? 1 : size - 1)) % size;
+    selectDesignResponse(next, undefined, "tab");
+  });
+  on("#design-response-media", "change", (_, e) => {
+    const r = request();
+    const previous = responseSelection(
+      r.responses,
+      designResponseSelections.get(designResponseKey(r)),
+    );
+    try {
+      selectDesignResponse(previous.index, e.value, "media");
+    } catch (error) {
+      e.value = previous.media;
+      throw error;
+    }
+  });
+  on("[data-response-view]", "click", (_, e) => {
+    const r = request();
+    collect();
+    const key = designResponseKey(r);
+    const top = $(".http-design-canvas").scrollTop;
+    designResponseSelections.set(key, {
+      ...designResponseSelections.get(key),
+      view: e.dataset.responseView,
+    });
+    render();
+    $(".http-design-canvas").scrollTop = top;
+    $("#design-response-view-" + e.dataset.responseView)?.focus();
+  });
+  on("[data-response-body-view]", "click", (_, e) => {
+    const r = request();
+    collect();
+    const key = designResponseKey(r);
+    const top = $(".http-design-canvas").scrollTop;
+    designResponseSelections.set(key, {
+      ...designResponseSelections.get(key),
+      bodyView: e.dataset.responseBodyView,
+    });
+    render();
+    $(".http-design-canvas").scrollTop = top;
+    $("#design-body-view-" + e.dataset.responseBodyView)?.focus();
+  });
+  const rootSelector = "[data-design-response-root]";
+  const rootState = (root) => {
+    const r = request();
+    const raw = $("#response-definitions");
+    let rawDraft;
+    try {
+      rawDraft = JSON.parse(raw.value);
+    } catch {
+      throw Error("响应定义必须是有效JSON数组");
+    }
+    if (JSON.stringify(rawDraft) !== JSON.stringify(r.responses))
+      throw Error(
+        "响应定义 JSON 有未应用的修改，请先保存或切换响应后再编辑根节点",
+      );
+    collect();
+    const selection = designResponseSelections.get(designResponseKey(r));
+    const { definition, index, media } = responseSelection(
+      r.responses,
+      selection,
+    );
+    const scope = [index, String(definition?.status), media];
+    if (JSON.stringify(scope) !== root.dataset.designResponseRoot)
+      throw Error("响应根节点已变化，请重新打开");
+    const snapshot = raw.value;
+    const owner = project;
+    return {
+      definition,
+      media,
+      apply(action, value, focus, deferFocus = false) {
+        if (
+          project !== owner ||
+          request() !== r ||
+          !root.isConnected ||
+          raw.value !== snapshot ||
+          r.responses[index] !== definition
+        )
+          throw Error("响应草稿已变化，请重新打开");
+        if (
+          action === "type" &&
+          value !== definition.content[media].schema.type &&
+          scopedResponseExamples(r.examples, definition.status, media).length
+        )
+          throw Error("此根类型变更可能影响现有示例，请使用响应定义 JSON");
+        const next = editDesignResponseRoot(definition, media, action, value);
+        if (next === definition) return false;
+        r.responses[index] = next;
+        if (action === "add")
+          collapsedDesignResponseRoots
+            .get(r)
+            ?.delete(JSON.stringify(scope.slice(1)));
+        const top = $(".http-design-canvas").scrollTop;
+        mark();
+        render();
+        $(".http-design-canvas").scrollTop = top;
+        if (!deferFocus) $(focus)?.focus({ preventScroll: true });
+        return true;
+      },
+    };
+  };
+  on("#design-response-root-toggle", "click", (_, button) => {
+    const r = request();
+    const root = button.closest(rootSelector);
+    const [, status, media] = JSON.parse(root.dataset.designResponseRoot);
+    const key = JSON.stringify([status, media]);
+    const scopes = collapsedDesignResponseRoots.get(r) || new Set();
+    const collapse = button.getAttribute("aria-expanded") === "true";
+    if (collapse) scopes.add(key);
+    else scopes.delete(key);
+    collapsedDesignResponseRoots.set(r, scopes);
+    button.setAttribute("aria-expanded", String(!collapse));
+    $("#design-response-root-children").hidden = collapse;
+  });
+  let descriptionEdit;
+  let originalRootDescription;
+  const disableOtherRootEdits = (disabled) => {
+    for (const control of document.querySelectorAll(
+      "#design-response-root-add,#design-response-root-type",
+    ))
+      control.disabled = disabled;
+  };
+  const closeRootDescription = () => {
+    const button = $("#design-response-root-description");
+    $("#design-response-root-form").hidden = true;
+    button.setAttribute("aria-expanded", "false");
+    disableOtherRootEdits(false);
+    button.focus();
+    descriptionEdit = undefined;
+  };
+  on("#design-response-root-description", "click", (_, button) => {
+    if (descriptionEdit) return closeRootDescription();
+    descriptionEdit = rootState(button.closest(rootSelector));
+    const description = $("#design-response-root-description-value");
+    description.value =
+      descriptionEdit.definition.content[descriptionEdit.media].schema
+        .description ?? "";
+    originalRootDescription = description.value;
+    $("#design-response-root-form").hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    disableOtherRootEdits(true);
+    description.focus();
+  });
+  on("#design-response-root-form", "submit", (event) => {
+    event.preventDefault();
+    const value = $("#design-response-root-description-value").value;
+    if (value === originalRootDescription) return closeRootDescription();
+    const changed = descriptionEdit?.apply(
+      "description",
+      value,
+      "#design-response-root-description",
+    );
+    if (!changed) closeRootDescription();
+  });
+  on("#design-response-root-form", "keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    closeRootDescription();
+  });
+  on("#design-response-root-cancel", "click", closeRootDescription);
+
+  const editRootInModal = (button, action) => {
+    const owner = project,
+      requestOwner = request();
+    const root = button.closest(rootSelector);
+    const scope = root.dataset.designResponseRoot;
+    const edit = rootState(root);
+    const schema = edit.definition.content[edit.media].schema;
+    const type = action === "type";
+    const focus = "#" + button.id;
+    modal(
+      type ? "编辑根节点类型" : "添加根字段",
+      type
+        ? responseRootTypeFields(schema)
+        : '<label for="design-response-root-field">根字段名称</label><input id="design-response-root-field" maxlength="200" autocomplete="off">',
+      () =>
+        edit.apply(
+          action,
+          $(
+            type
+              ? "#design-response-root-type-value"
+              : "#design-response-root-field",
+          ).value,
+          focus,
+          true,
+        ),
+      "应用到草稿",
+      () => {
+        if (
+          owner === project &&
+          requestOwner === request() &&
+          $(rootSelector)?.dataset.designResponseRoot === scope
+        )
+          ($(focus) || $("#design-body-view-schema"))?.focus({
+            preventScroll: true,
+          });
+      },
+    );
+    if (type) $("#design-response-root-type-value").focus();
+  };
+  on("#design-response-root-type", "click", (_, button) =>
+    editRootInModal(button, "type"),
+  );
+  on("#design-response-root-add", "click", (_, button) =>
+    editRootInModal(button, "add"),
+  );
+  const openDesignExample = (index) => {
+    const r = request();
+    collect();
+    const selected = responseSelection(
+      r.responses,
+      designResponseSelections.get(designResponseKey(r)),
+    );
+    const { definition, media } = selected;
+    if (
+      !supportsDesignExamples(
+        definition,
+        media,
+        r.openapiExampleBindingsVersion === 1,
+      )
+    )
+      throw Error("当前状态或媒体类型不支持在此编辑示例");
+    if (
+      index !== undefined &&
+      !scopedResponseExamples(r.examples, definition.status, media).some(
+        (row) => row.index === index,
+      )
+    )
+      throw Error("示例不属于当前状态或媒体类型");
+    editExample(index, { definition, media });
+  };
+  on("#new-design-example", "click", () => openDesignExample());
+  on("[data-edit-design-example]", "click", (_, e) =>
+    openDesignExample(Number(e.dataset.editDesignExample)),
+  );
+  const inlineExamplePane = $(".design-example-pane");
+  if (inlineExamplePane) {
+    const owner = project;
+    const r = request();
+    const key = designResponseKey(r);
+    const selection = designResponseSelections.get(key);
+    const { definition, index, media } = responseSelection(
+      r.responses,
+      selection,
+    );
+    const status = String(definition.status);
+    const managed = r.openapiExampleBindingsVersion === 1;
+    const rows = scopedResponseExamples(r.examples, status, media);
+    const target = designExampleTarget(rows, selection?.exampleChoice);
+    const form = $("#design-inline-example-form");
+    const body = $("#design-inline-example-body");
+    const apply = $("#design-inline-example-apply");
+    const cancel = $("#design-inline-example-cancel");
+    const raw = $("#response-definitions");
+    const owns = () => {
+      if (
+        !inlineExamplePane.isConnected ||
+        project !== owner ||
+        request() !== r ||
+        page !== "apis" ||
+        mode !== "design" ||
+        workspaceDocument()
+      )
+        return false;
+      const current = designResponseSelections.get(key);
+      const selected = responseSelection(r.responses, current);
+      return (
+        (current?.view || "body") === "body" &&
+        current?.bodyView === "examples" &&
+        selected.index === index &&
+        String(selected.definition?.status) === status &&
+        selected.media === media &&
+        supportsDesignExamples(selected.definition, media, managed)
+      );
+    };
+    const redraw = (selector) => {
+      const top = $(".http-design-canvas").scrollTop;
+      render();
+      $(".http-design-canvas").scrollTop = top;
+      $(selector)?.focus({ preventScroll: true });
+    };
+    on("#design-inline-example-choice", "change", (_, picker) => {
+      if (!owns()) return;
+      const next = picker.value;
+      try {
+        collect();
+        const match = rows.find((row) => String(row.index) === next);
+        if (
+          next !== "new" &&
+          (!match || r.examples[match.index] !== match.example)
+        )
+          throw Error("响应示例已变化，请重新选择。");
+        designResponseSelections.set(key, {
+          ...selection,
+          exampleChoice: next === "new" ? "new" : match.example,
+        });
+        redraw("#design-inline-example-choice");
+      } catch (error) {
+        picker.value = target.key;
+        throw error;
+      }
+    });
+    if (form) {
+      const visible = (target.example?.body ?? "").replace(/\r\n?/g, "\n");
+      const ownsBody = () =>
+        owns() &&
+        (!target.example || r.examples[target.index] === target.example);
+      const gutter = $(".design-inline-example-gutter");
+      const drawLine = () => {
+        // Show the real first visible line, not a fictitious ruler for soft-wrapped text.
+        const lines = 1 + Math.floor(body.scrollTop / 20);
+        gutter.textContent = String(lines);
+      };
+      const reflect = () => {
+        apply.disabled = cancel.disabled = !designResponseSettingsDrafts.get(r);
+      };
+      const reset = () => {
+        if (!ownsBody()) return;
+        if (designResponseSettingsDrafts.clear(r)) editVersion++;
+        body.value = visible;
+        drawLine();
+        reflect();
+        body.focus({ preventScroll: true });
+      };
+      on("#design-inline-example-body", "scroll", drawLine);
+      on("#design-inline-example-body", "input", () => {
+        if (!ownsBody()) return;
+        if (debugExampleDrafts.read(target.example)) {
+          body.value = visible;
+          debugExampleDrafts.assertReplaceable(target.example);
+        }
+        const pending = designResponseSettingsDrafts.get(r);
+        if (!pending && !unchangedResponseDefinitions(raw.value, r.responses)) {
+          reset();
+          throw Error(
+            "响应定义 JSON 有未应用的修改，请先处理后再编辑示例正文。",
+          );
+        }
+        if (body.value === visible) designResponseSettingsDrafts.clear(r);
+        else
+          designResponseSettingsDrafts.stage(r, {
+            kind: "example",
+            body: body.value,
+            definition: pending?.definition ?? r.responses[index],
+            definitionIndex: index,
+            status,
+            media,
+            example: target.example,
+            exampleIndex: target.index,
+            raw: pending?.raw ?? raw.value,
+            rawCurrent: pending?.rawCurrent,
+          });
+        editVersion++;
+        drawLine();
+        reflect();
+      });
+      on("#design-inline-example-cancel", "click", reset);
+      on("#design-inline-example-form", "keydown", (event) => {
+        if (event.isComposing) return;
+        const pending = designResponseSettingsDrafts.get(r);
+        if (
+          (event.ctrlKey || event.metaKey) &&
+          ["enter", "s"].includes(event.key.toLowerCase())
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (pending) toast(unappliedDesignResponseExample);
+        } else if (event.key === "Escape" && pending) {
+          event.preventDefault();
+          event.stopPropagation();
+          reset();
+        }
+      });
+      on("#design-inline-example-form", "submit", (event) => {
+        event.preventDefault();
+        const draft = designResponseSettingsDrafts.get(r);
+        if (!draft || draft.kind !== "example") return;
+        if (
+          !ownsBody() ||
+          draft.definition !== r.responses[index] ||
+          draft.example !== target.example ||
+          draft.exampleIndex !== target.index ||
+          draft.raw !== raw.value ||
+          busy ||
+          saving
+        )
+          throw Error("响应示例或 JSON 草稿已变化，请取消后再编辑。");
+        debugExampleDrafts.assertReplaceable(target.example);
+        const next = prepareDesignExampleBody(
+          draft.definition,
+          media,
+          managed,
+          target.example,
+          draft.body,
+        );
+        if (target.example) r.examples[target.index] = next;
+        else r.examples.push(next);
+        designResponseSettingsDrafts.clear(r);
+        designResponseSelections.set(key, {
+          ...selection,
+          exampleChoice: next,
+        });
+        mark();
+        redraw("#design-inline-example-body");
+      });
+    }
+  }
+  const editResponseHeader = (name = null) => {
+    const r = request();
+    collect();
+    const { definition, index } = responseSelection(
+      r.responses,
+      designResponseSelections.get(designResponseKey(r)),
+    );
+    if (!definition) throw Error("请先选择响应");
+    const header =
+      name === null
+        ? { schema: { type: "string" } }
+        : definition.headers?.[name];
+    if (header === undefined) throw Error("响应头已不存在，请重新打开");
+    modal(
+      name === null ? "新增响应头" : "编辑响应头",
+      '<div class="design-response-header-fields">' +
+        headerEditorFields(name ?? "", header) +
+        "</div>",
+      () => {
+        if (request() !== r || r.responses[index] !== definition)
+          throw Error("响应草稿已变化，请重新打开");
+        let next;
+        try {
+          next = JSON.parse($("#design-header-json").value);
+        } catch {
+          throw Error("响应头定义必须是有效的 JSON 对象");
+        }
+        r.responses[index] = editDesignResponseHeader(
+          definition,
+          name,
+          $("#design-header-name").value,
+          next,
+        );
+        mark();
+        render();
+        $("#design-response-view-headers")?.focus();
+      },
+    );
+  };
+  on("#new-response-header", "click", () => editResponseHeader());
+  on("[data-response-header]", "click", (_, e) =>
+    editResponseHeader(e.dataset.responseHeader),
+  );
+  const responseHeaderForm = $("#design-response-header-form");
+  if (responseHeaderForm) {
+    const owner = project;
+    const r = request();
+    const key = designResponseKey(r);
+    const { definition, index } = responseSelection(
+      r.responses,
+      designResponseSelections.get(key),
+    );
+    const status = String(definition.status);
+    const raw = $("#response-definitions");
+    const inputs = Object.fromEntries(
+      ["name", "example", "description"].map((field) => [
+        field,
+        $("#design-new-header-" + field),
+      ]),
+    );
+    const apply = $("#design-new-header-apply");
+    const cancel = $("#design-new-header-cancel");
+    const ownsHeader = () =>
+      responseHeaderForm.isConnected &&
+      project === owner &&
+      request() === r &&
+      page === "apis" &&
+      mode === "design" &&
+      !workspaceDocument() &&
+      String(r.responses[index]?.status) === status &&
+      designResponseSelections.get(key)?.view === "headers" &&
+      responseSelection(r.responses, designResponseSelections.get(key))
+        .index === index;
+    const reflect = () => {
+      const pending = designResponseSettingsDrafts.get(r);
+      apply.disabled = !pending?.name.trim();
+      cancel.disabled = !pending;
+    };
+    const reset = () => {
+      if (!ownsHeader()) return;
+      if (designResponseSettingsDrafts.clear(r)) editVersion++;
+      for (const input of Object.values(inputs)) input.value = "";
+      reflect();
+      inputs.name.focus({ preventScroll: true });
+    };
+    on(".design-response-header-composer input", "input", () => {
+      if (!ownsHeader()) return;
+      const pending = designResponseSettingsDrafts.get(r);
+      if (!pending && !unchangedResponseDefinitions(raw.value, r.responses)) {
+        reset();
+        throw Error("响应定义 JSON 有未应用的修改，请先处理后再新增响应头。");
+      }
+      const values = Object.fromEntries(
+        Object.entries(inputs).map(([field, input]) => [field, input.value]),
+      );
+      if (values.name.trim() || values.example || values.description)
+        designResponseSettingsDrafts.stage(r, {
+          ...values,
+          kind: "header",
+          definition: pending?.definition ?? r.responses[index],
+          index,
+          status,
+          raw: pending?.raw ?? raw.value,
+          rawCurrent: pending?.rawCurrent,
+        });
+      else designResponseSettingsDrafts.clear(r);
+      editVersion++;
+      reflect();
+    });
+    const headerKeys = (event) => {
+      if (event.isComposing) return;
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        ["enter", "s"].includes(event.key.toLowerCase())
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (designResponseSettingsDrafts.get(r))
+          toast(unappliedDesignResponseHeader);
+      } else if (
+        event.key === "Escape" &&
+        designResponseSettingsDrafts.get(r)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        reset();
+      }
+    };
+    on(
+      ".design-response-header-composer input,#design-response-header-form",
+      "keydown",
+      headerKeys,
+    );
+    on("#design-new-header-cancel", "click", reset);
+    on("#design-response-header-form", "submit", (event) => {
+      event.preventDefault();
+      const draft = designResponseSettingsDrafts.get(r);
+      if (!draft || draft.kind !== "header" || !draft.name.trim()) return;
+      if (
+        !ownsHeader() ||
+        draft.definition !== r.responses[index] ||
+        draft.raw !== raw.value ||
+        busy ||
+        saving
+      )
+        throw Error("响应头或 JSON 草稿已变化，请取消后再新增。");
+      const update = addDesignResponseStringHeader(draft.definition, draft);
+      const top = $(".http-design-canvas").scrollTop;
+      r.responses[index] = update;
+      designResponseSettingsDrafts.clear(r);
+      mark();
+      render();
+      $(".http-design-canvas").scrollTop = top;
+      $("#design-new-header-name")?.focus({ preventScroll: true });
+    });
+  }
+  const responseSettingsForm = $("#design-response-settings-form");
+  if (responseSettingsForm) {
+    const owner = project;
+    const r = request();
+    const key = designResponseKey(r);
+    const selection = designResponseSelections.get(key);
+    const { definition, index } = responseSelection(r.responses, selection);
+    const status = String(definition.status);
+    const description = String(definition.description ?? "");
+    const visibleDescription = description.replace(/\r\n?/g, "\n");
+    const raw = $("#response-definitions");
+    const statusInput = $("#design-settings-status");
+    const descriptionInput = $("#design-settings-description");
+    const apply = $("#design-settings-apply");
+    const cancel = $("#design-settings-cancel");
+    const ownsSettings = () =>
+      responseSettingsForm.isConnected &&
+      project === owner &&
+      request() === r &&
+      page === "apis" &&
+      mode === "design" &&
+      !workspaceDocument() &&
+      r.responses[index] === definition &&
+      responseSelection(r.responses, designResponseSelections.get(key))
+        .index === index;
+    const reflect = () => {
+      apply.disabled = cancel.disabled = !designResponseSettingsDrafts.get(r);
+    };
+    const reset = () => {
+      if (!ownsSettings()) return;
+      if (designResponseSettingsDrafts.clear(r)) editVersion++;
+      statusInput.value = status;
+      descriptionInput.value = description;
+      reflect();
+      statusInput.focus({ preventScroll: true });
+    };
+    on("#design-settings-status,#design-settings-description", "input", () => {
+      if (!ownsSettings()) return;
+      const pending = designResponseSettingsDrafts.get(r);
+      if (!pending && !unchangedResponseDefinitions(raw.value, r.responses)) {
+        reset();
+        throw Error("响应定义 JSON 有未应用的修改，请先处理后再编辑响应设置。");
+      }
+      if (
+        statusInput.value === status &&
+        descriptionInput.value === visibleDescription
+      )
+        designResponseSettingsDrafts.clear(r);
+      else
+        designResponseSettingsDrafts.stage(r, {
+          kind: "settings",
+          definition,
+          index,
+          status,
+          value: statusInput.value,
+          description:
+            descriptionInput.value === visibleDescription
+              ? description
+              : descriptionInput.value,
+          raw: pending?.raw ?? raw.value,
+          rawCurrent: pending?.rawCurrent,
+        });
+      editVersion++;
+      reflect();
+    });
+    on("#design-settings-cancel", "click", reset);
+    on("#design-response-settings-form", "keydown", (event) => {
+      if (event.isComposing) return;
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        ["enter", "s"].includes(event.key.toLowerCase())
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (designResponseSettingsDrafts.get(r))
+          toast(unappliedDesignResponseSettings);
+      } else if (
+        event.key === "Escape" &&
+        designResponseSettingsDrafts.get(r)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        reset();
+      }
+    });
+    on("#design-response-settings-form", "submit", (event) => {
+      event.preventDefault();
+      const draft = designResponseSettingsDrafts.get(r);
+      if (!draft) return;
+      if (
+        !ownsSettings() ||
+        draft.definition !== definition ||
+        draft.raw !== raw.value ||
+        busy ||
+        saving
+      )
+        throw Error("响应设置或 JSON 草稿已变化，请取消后再编辑。");
+      const update = editRequestResponseSettings(r, index, {
+        status: draft.value,
+        description: draft.description,
+      });
+      const top = $(".http-design-canvas").scrollTop;
+      Object.assign(r, update);
+      designResponseSettingsDrafts.clear(r);
+      designResponseSelections.set(key, {
+        ...selection,
+        status: String(r.responses[index].status),
+      });
+      mark();
+      render();
+      $(".http-design-canvas").scrollTop = top;
+      $("#design-settings-status")?.focus({ preventScroll: true });
+    });
+  }
   on("#new-response-schema", "click", () => editResponseSchema());
   on("[data-response-schema]", "click", (_, element) =>
     editResponseSchema(...JSON.parse(element.dataset.responseSchema)),
@@ -2290,7 +4612,124 @@ function bind() {
     request().httpVersion = element.value;
     mark();
   });
-  on("#response-definitions", "input", () => mark());
+  on("#response-definitions", "input", (_, raw) => {
+    const pending = designResponseSettingsDrafts.get(request());
+    if (pending) pending.rawCurrent = raw.value;
+    mark();
+  });
+  const description = $("#description");
+  const descriptionPreview = $("#design-description-preview");
+  const descriptionDetails = $("#design-description");
+  const descriptionSync = $("#design-description-sync");
+  let descriptionScroll;
+  if (
+    description &&
+    descriptionPreview &&
+    descriptionDetails &&
+    descriptionSync
+  ) {
+    const target = request();
+    const owner = project;
+    const view = designDescriptionScroll.get(target) || {
+      linked: true,
+      editorTop: 0,
+      previewTop: 0,
+    };
+    designDescriptionScroll.set(target, view);
+    const active = () =>
+      descriptionDetails.isConnected &&
+      descriptionDetails.open &&
+      page === "apis" &&
+      mode === "design" &&
+      project === owner &&
+      request() === target &&
+      !workspaceDocument();
+    const remember = () => {
+      if (!descriptionDetails.isConnected || !descriptionDetails.open) return;
+      view.editorTop = description.scrollTop;
+      view.previewTop = descriptionPreview.scrollTop;
+    };
+    descriptionScroll = bindWorkspaceDocumentScroll(
+      description,
+      descriptionPreview,
+      {
+        active,
+        enabled: () => view.linked,
+      },
+    );
+    rememberDesignDescriptionScroll = remember;
+    const restore = () => {
+      if (!active()) return;
+      descriptionScroll.restore(view);
+      if (view.linked) descriptionScroll.refreshPreview();
+    };
+    restore();
+    descriptionDetails.addEventListener("toggle", restore);
+    on("#design-description-sync", "change", (_, checkbox) => {
+      if (!active() || checkbox !== descriptionSync) return;
+      view.linked = checkbox.checked;
+      if (view.linked) descriptionScroll.refreshPreview();
+      remember();
+    });
+    on("#design-description-top", "click", () => {
+      if (!active()) return;
+      descriptionScroll.top();
+      remember();
+    });
+  }
+  on("#design-description > summary", "click", (_, el) => {
+    const r = request();
+    const willOpen = !el.parentElement.open;
+    openDesignDescriptions.set(r, willOpen);
+    if (!willOpen) rememberDesignDescriptionScroll?.();
+    if (willOpen)
+      $("#design-description-preview").innerHTML = renderMarkdown(
+        r.description,
+      );
+  });
+  const applyDesignMarkdown = (action) => {
+    const input = $("#description");
+    if (!input || !$("#design-description").open) return;
+    const edit = markdownEdit(
+      action,
+      input.value,
+      input.selectionStart,
+      input.selectionEnd,
+    );
+    if (!edit || !insertTextareaText(input, edit)) return;
+    input.setSelectionRange(edit.anchor, edit.anchor + edit.length);
+  };
+  on("[data-design-markdown]", "click", (_, el) => {
+    applyDesignMarkdown(el.dataset.designMarkdown);
+  });
+  on("#description", "keydown", (event) => {
+    if (
+      event.isComposing ||
+      event.altKey ||
+      event.shiftKey ||
+      !(event.ctrlKey || event.metaKey)
+    )
+      return;
+    const action = { b: "bold", i: "italic" }[event.key.toLowerCase()];
+    if (typeof action !== "string") return;
+    event.preventDefault();
+    applyDesignMarkdown(action);
+  });
+  on("#description", "input", (_, el) => {
+    $("#design-description-preview").innerHTML = renderMarkdown(el.value);
+    $("#design-description-count").textContent = documentCounts(el.value);
+    descriptionScroll?.refreshPreview();
+  });
+  on("#request-design-preview", "click", () => {
+    collect();
+    const r = request();
+    modal(
+      "接口预览",
+      `<article class="design-preview"><h2>${esc(r.name)}</h2><p><code>${esc(r.method)} ${esc(r.url)}</code></p><div class="markdown-content">${renderMarkdown(r.description || "暂无详细说明")}</div>${requestDocumentationHTML(r, 4)}</article>`,
+      () => {},
+      "返回设计",
+    );
+  });
   on("#share-api", "click", () => {
     collect();
     modal(
@@ -2312,14 +4751,20 @@ function bind() {
     );
   });
   function editParameterEntry(id, initial) {
-    const entry = (project.parameterDictionary || []).find(
+    const owner = project,
+      version = editVersion;
+    const existing = (owner.parameterDictionary || []).find(
       (item) => item.id === id,
-    ) ||
+    );
+    if (id && !existing) throw Error("字典参数已不存在");
+    const entry = existing ||
       initial || { key: "", type: "string", description: "", note: "" };
     modal(
-      "字典参数",
-      `<label>参数名</label><input id="dict-key" value="${esc(entry.key)}"><label>类型</label><select id="dict-type">${["string", "integer", "number", "boolean", "object", "array"].map((type) => `<option ${type === entry.type ? "selected" : ""}>${type}</option>`).join("")}</select><label>说明</label><input id="dict-description" value="${esc(entry.description)}"><label>备注</label><input id="dict-note" value="${esc(entry.note)}"><label>默认值 / 示例 / 枚举（JSON对象）</label>${jsonEditor(Object.fromEntries(["default", "example", "enum"].filter((key) => entry[key] !== undefined).map((key) => [key, entry[key]])))}`,
+      existing ? "编辑字典参数" : "新建字典参数",
+      dictionaryEntryEditor(entry),
       async () => {
+        if (project !== owner || editVersion !== version)
+          throw Error("项目或字典草稿已变化，请重新打开编辑器");
         const extras = JSON.parse($("#modal-json").value);
         if (!extras || typeof extras !== "object" || Array.isArray(extras))
           throw Error("扩展定义必须是JSON对象");
@@ -2334,6 +4779,7 @@ function bind() {
           throw Error("枚举值必须是数组");
         const previous = structuredClone(project.parameterDictionary || []);
         const value = {
+          ...(entry.required !== undefined ? { required: entry.required } : {}),
           ...extras,
           id: entry.id || uid(),
           key: $("#dict-key").value,
@@ -2384,39 +4830,68 @@ function bind() {
       ],
     ),
   );
-  on("[data-dictionary-pair]", "click", (_, element) => {
-    const [kind, index] = element.dataset.dictionaryPair.split(":");
-    modal(
-      "选择字典参数",
-      `<select id="parameter-choice">${effectiveParameterDictionary(project)
-        .map(
-          (entry) =>
-            `<option value="${esc(entry.id)}">${esc(entry.key)} · ${esc(entry.type)} · ${esc(entry.note || entry.description)}</option>`,
-        )
-        .join("")}</select>`,
-      () => {
-        const entry = effectiveParameterDictionary(project).find(
-          (item) => item.id === $("#parameter-choice").value,
-        );
-        if (!entry) throw Error("请先添加字典参数");
-        const value = dictionaryValue(entry);
-        Object.assign(request()[kind][Number(index)], {
-          key: entry.key,
-          value:
-            typeof value === "object" ? JSON.stringify(value) : String(value),
-          description: entry.description,
-          required: entry.required === true,
-          schema: {
-            type: entry.type,
-            ...(entry.enum ? { enum: entry.enum } : {}),
-          },
-        });
-        delete request()[kind][Number(index)].schemaDefined;
-        mark();
-        render();
-      },
-    );
-  });
+  onPair(
+    "[data-dictionary-pair], [data-debug-pair-dictionary]",
+    "click",
+    (_, element) => {
+      const composer = element.dataset.debugPairDictionary;
+      const [kind, index] = composer
+        ? [composer, undefined]
+        : element.dataset.dictionaryPair.split(":");
+      const compactPair = compactDebugPairCapture(element, index);
+      if (compactPair && !compactPair.current()) return;
+      if (mode === "design") collect();
+      const ownerProject = project;
+      const ownerRequest = request();
+      const ownerRows = ownerRequest[kind];
+      modal(
+        "选择字典参数",
+        `<select id="parameter-choice">${effectiveParameterDictionary(project)
+          .map(
+            (entry) =>
+              `<option value="${esc(entry.id)}">${esc(entry.key)} · ${esc(entry.type)} · ${esc(entry.note || entry.description)}</option>`,
+          )
+          .join("")}</select>`,
+        () => {
+          compactPair?.assertCurrent();
+          if (
+            composer &&
+            (project !== ownerProject ||
+              request() !== ownerRequest ||
+              ownerRequest[kind] !== ownerRows ||
+              !ownsDebugPairComposer(kind, page, mode, param, request()))
+          )
+            throw Error("参数草稿已变化，请重新打开字典");
+          const entry = effectiveParameterDictionary(project).find(
+            (item) => item.id === $("#parameter-choice").value,
+          );
+          if (!entry) throw Error("请先添加字典参数");
+          const value = dictionaryValue(entry);
+          const row = composer
+            ? debugPairFromKey(entry.key)
+            : request()[kind][Number(index)];
+          if (!row) throw Error("字典参数必须包含名称");
+          if (composer && compactPair)
+            row.enabled = readCompactDebugNext(element);
+          Object.assign(row, {
+            key: entry.key,
+            value:
+              typeof value === "object" ? JSON.stringify(value) : String(value),
+            description: entry.description,
+            required: entry.required === true,
+            schema: {
+              type: entry.type,
+              ...(entry.enum ? { enum: entry.enum } : {}),
+            },
+          });
+          delete row.schemaDefined;
+          if (composer) ownerRows.push(row);
+          mark();
+          render();
+        },
+      );
+    },
+  );
   on("#import-parameter-dictionary", "click", () => {
     const context = previewDraftOwner();
     modal(
@@ -2489,10 +4964,12 @@ function bind() {
     );
     context.bindDialog();
   });
-  on("[data-dynamic-pair]", "click", (_, element) => {
-    collect();
+  onPair("[data-dynamic-pair]", "click", (_, element) => {
     const [group, index] = element.dataset.dynamicPair.split(":");
-    editDynamicValue(group, Number(index));
+    const compactPair = compactDebugPairCapture(element, index);
+    if (compactPair && !compactPair.current()) return;
+    collect();
+    editDynamicValue(group, Number(index), compactPair);
   });
   function editParameterDescription(index) {
     const existing = project.settings?.parameterDescriptions?.[index];
@@ -2547,13 +5024,17 @@ function bind() {
       throw error;
     }
   });
-  on("[data-define-pair]", "click", (_, element) => {
-    const [kind, index] = element.dataset.definePair.split(":"),
-      parameter = request()[kind][Number(index)];
+  onPair("[data-define-pair]", "click", (_, element) => {
+    const [kind, index] = element.dataset.definePair.split(":");
+    const compactPair = compactDebugPairCapture(element, index);
+    if (compactPair && !compactPair.current()) return;
+    if (mode === "design") collect();
+    const parameter = request()[kind][Number(index)];
     modal(
       "参数定义",
       `<label>说明</label><input id="parameter-description" value="${esc(parameter.description || "")}">${project.settings?.parameterDescriptions?.length ? parameterDescriptionChoices(project.settings.parameterDescriptions, parameter.key) : ""}<label><input id="parameter-required" type="checkbox" ${parameter.required ? "checked" : ""}>必填</label><label>JSON Schema</label>${jsonEditor(parameter.schema ?? { type: "string" })}`,
       () => {
+        compactPair?.assertCurrent();
         parameter.description = $("#parameter-description").value;
         parameter.required = $("#parameter-required").checked;
         parameter.schema = JSON.parse($("#modal-json").value);
@@ -2563,7 +5044,8 @@ function bind() {
             key: parameter.key,
             type: parameter.schema.type || "string",
             description: parameter.description,
-            example: parameter.value,
+            example:
+              kind === "form" ? formTextExample(parameter) : parameter.value,
           };
           const values = temporaryParameters.get(project.id) || [];
           if (
@@ -2762,26 +5244,35 @@ function bind() {
     mark();
   });
   on("#script-url-mode", "change", (_, element) => {
+    if (stalePre()) return;
     const previous = request().scriptURLMode || "string";
+    if (element.value === "sdk" && request().before?.some(isHTTPPreWait)) {
+      element.value = previous;
+      throw Error("请先删除前置等待，再切换 SDK URL 模式");
+    }
     if (!confirm(scriptURLModeNotice + " 确认切换？")) {
       element.value = previous;
       return;
     }
+    if (stalePre()) return;
     if (element.value === "sdk") request().scriptURLMode = "sdk";
     else delete request().scriptURLMode;
     delete request().scriptURLRuntime;
     mark();
   });
   on("#script-dialect", "change", (_, element) => {
+    if (stalePre()) return;
     const previous = request().scriptDialect || "legacy";
     if (!confirm(scriptDialectNotice + " 确认切换？")) {
       element.value = previous;
       return;
     }
+    if (stalePre()) return;
     request().scriptDialect = element.value;
     mark();
   });
   on("#inherit-shared-scripts", "change", (_, element) => {
+    if (stalePre()) return;
     request().inheritSharedScripts = element.checked;
     mark();
   });
@@ -2894,6 +5385,8 @@ function bind() {
   });
   on("#query-add-equal", "change", (_, element) => {
     request().queryAddEqual = element.checked;
+    if (element.closest(".debug-query-equality"))
+      element.title = debugQueryEqualityLabel(element.checked);
     mark();
   });
   on("#inherit-global-parameters", "change", (_, element) => {
@@ -2945,20 +5438,226 @@ function bind() {
     request().schema = JSON.parse(e.value);
     mark();
   });
-  on("[data-mode]", "click", (_, e) => {
+  on("[data-mode]", "click", (event, e) => {
+    const fromKeyboard = event.detail === 0 && e === document.activeElement;
     collect();
     mode = e.dataset.mode;
     render();
+    if (fromKeyboard) $('.request-modes [aria-pressed="true"]')?.focus();
   });
-  on("[data-param]", "click", (_, e) => {
+  const selectDesignParameter = (key) => {
+    if (key === designParameter) return;
     collect();
-    param = e.dataset.param;
+    const top = $(".http-design-canvas")?.scrollTop || 0;
+    const left = $(".design-parameter-tabs")?.scrollLeft || 0;
+    designParameter = key;
+    bodyGenerationSequence++;
     render();
+    $(".http-design-canvas").scrollTop = top;
+    $(".design-parameter-tabs").scrollLeft = left;
+    $("#design-tab-" + key)?.focus();
+  };
+  on("[data-design-parameter]", "click", (_, e) =>
+    selectDesignParameter(e.dataset.designParameter),
+  );
+  on("[data-design-parameter]", "keydown", (event, e) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const index = designParameterTabs.findIndex(
+      ([key]) => key === e.dataset.designParameter,
+    );
+    const size = designParameterTabs.length;
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? size - 1
+          : (index + (event.key === "ArrowRight" ? 1 : size - 1)) % size;
+    selectDesignParameter(designParameterTabs[next][0]);
   });
+  const graphqlEditor = $(".graphql-workspace");
+  if (graphqlEditor) {
+    const owner = project;
+    const target = request();
+    const owns = () =>
+      project === owner &&
+      request() === target &&
+      page === "apis" &&
+      mode === "debug" &&
+      param === "graphql" &&
+      !workspaceDocument();
+    const focusNamed = (id, menu = false) =>
+      id &&
+      $(
+        `[data-graphql-query-${menu ? "menu" : "row"}="${CSS.escape(id)}"]`,
+      )?.focus({ preventScroll: true });
+    const namedState = () => {
+      if (!owns() || !graphqlEditor.isConnected)
+        throw Error("GraphQL 查询或窗口已变化，请重新操作。");
+      if (busy || saving)
+        throw Error("请先结束请求或保存，再更改 GraphQL 查询。");
+      if ($("#dialog").open) throw Error("请先结束当前对话框。");
+      if (graphqlDrafts.pending(target)) throw Error(unappliedGraphQL);
+      const state = readGraphQLNamedQueries(target);
+      if (!state) throw Error("当前正文无法编辑命名查询。");
+      return state;
+    };
+    const changeNamed = (action, focus) => {
+      const { activeId } = namedState();
+      const next = prepareGraphQLNamedQueryChange(target, action);
+      if (!next) return false;
+      const selected = next.graphqlNamedQueries.activeId;
+      Object.assign(target, next);
+      if (activeId !== selected) {
+        const key = owner.id + ":" + target.id;
+        graphqlResponseFence.clear(key);
+        responses.delete(key);
+        response = null;
+        responseTab = "body";
+      }
+      mark();
+      render();
+      focus?.(selected);
+      return true;
+    };
+    const queryChangeOwner = (id) => {
+      const state = namedState();
+      const item = state.items.find((value) => value.id === id);
+      if (!item) throw Error("GraphQL 查询已不存在。");
+      const version = editVersion;
+      const body = target.body;
+      const collection = target.graphqlNamedQueries;
+      return {
+        item,
+        valid: () =>
+          owns() &&
+          graphqlEditor.isConnected &&
+          editVersion === version &&
+          target.body === body &&
+          target.graphqlNamedQueries === collection,
+      };
+    };
+    const prepareNamedRename = (id) => {
+      const owner = queryChangeOwner(id);
+      const revision = modalRevision;
+      return {
+        name: owner.item.name,
+        apply: (name) => {
+          if (modalRevision !== revision || !owner.valid())
+            throw Error("GraphQL 查询或窗口已变化，请重新操作。");
+          return changeNamed({ type: "rename", id, name }, () =>
+            focusNamed(id, true),
+          );
+        },
+      };
+    };
+    const prepareNamedDelete = (id) => {
+      const owner = queryChangeOwner(id);
+      const revision = modalRevision;
+      return {
+        name: owner.item.name,
+        apply: () => {
+          if (modalRevision !== revision || !owner.valid())
+            throw Error("GraphQL 查询或窗口已变化，请重新操作。");
+          changeNamed({ type: "delete", id }, (selected) =>
+            focusNamed(selected),
+          );
+        },
+      };
+    };
+    bindGraphQLWorkspace(graphqlEditor, {
+      request: target,
+      drafts: graphqlDrafts,
+      directory: graphqlSchemaDirectory,
+      named: {
+        add: (keyboard) =>
+          changeNamed(
+            {
+              type: "add",
+              id: uid(),
+              name: defaultNamedQuery(namedState().items),
+            },
+            keyboard
+              ? () => $("#graphql-query")?.focus({ preventScroll: true })
+              : undefined,
+          ),
+        select: (id, keyboard) =>
+          changeNamed(
+            { type: "select", id },
+            keyboard ? (selected) => focusNamed(selected) : undefined,
+          ),
+        prepareRename: prepareNamedRename,
+        prepareDelete: prepareNamedDelete,
+      },
+      owns,
+      revised: () => editVersion++,
+      changed: mark,
+      redraw: () => {
+        render();
+        $("#graphql-query")?.focus({ preventScroll: true });
+      },
+      detach: () => {
+        if (target.graphqlNamedQueries)
+          throw Error("请将所需查询复制到独立 HTTP 接口。");
+        collect();
+        delete target.graphqlEditorVersion;
+        graphqlSchemaDirectory.clear(target);
+        param = "body";
+        mark();
+        render();
+        const raw = $("#body-code");
+        if (raw) raw.value = target.body;
+        raw?.focus({ preventScroll: true });
+      },
+    });
+  }
+  on("#graphql-design-debug", "click", () => {
+    collect();
+    mode = "debug";
+    param = "graphql";
+    render();
+    ($("#graphql-query") || $("#graphql-detach"))?.focus({
+      preventScroll: true,
+    });
+  });
+  const selectDebugParameter = (key, focus) => {
+    collect();
+    param = key;
+    render();
+    if (focus) {
+      const strip = $(".param-tabs");
+      const selected = strip?.querySelector("[data-param].active");
+      selected?.focus({ preventScroll: true });
+      if (selected) revealParameterTab(strip, selected);
+    }
+  };
+  on("[data-param]", "click", (_, e) => selectDebugParameter(e.dataset.param));
+  if (layoutEditor) {
+    const owner = project;
+    const target = request();
+    releaseHTTPRequestOverflow = bindHTTPRequestParameterOverflow(
+      layoutEditor,
+      {
+        select(key) {
+          if (
+            layoutEditor.isConnected &&
+            project === owner &&
+            request() === target
+          )
+            selectDebugParameter(key, true);
+        },
+        onError: (error) => toast(error.message),
+      },
+    );
+  }
   on("[data-response]", "click", (_, e) => {
+    manualResponseView.selected();
     responseTab = e.dataset.response;
     render();
   });
+  const debugExamplePane = $(".http-debug-examples");
+  if (debugExamplePane) bindDebugExamples(debugExamplePane, project, request());
+
   on("#body-code", "input", (_, element) => {
     if ($("#code-highlight"))
       $("#code-highlight").innerHTML = highlightJSON(element.value) + "\n";
@@ -2975,55 +5674,155 @@ function bind() {
     }
     if ($("#code-gutter")) $("#code-gutter").scrollTop = element.scrollTop;
   });
-  on('input[name="body-type"],#raw-format', "change", (_, e) => {
-    collect();
-    if (["none", "form-data", "urlencoded"].includes(e.value))
-      bodyExpanded = false;
-    if (e.name === "body-type" && e.value === "raw" && !$("#raw-format"))
-      request().bodyType = "json";
-    mark();
-    render();
-  });
+  const binaryEditor = $(".binary-body-editor");
+  if (binaryEditor) {
+    const owner = project;
+    const target = request();
+    bindBinaryBodyEditor(binaryEditor, {
+      request: target,
+      owns: () => page === "apis" && project === owner && request() === target,
+      confirm,
+      mark,
+      toast,
+    });
+  }
+  const bodyModeOwner = project;
+  const bodyModeRequest = request();
+  on(
+    httpBodyRadios + ",#raw-format," + compactHTTPBodySelector,
+    "change",
+    (_, control) => {
+      const r = request();
+      if (
+        !control.isConnected ||
+        project !== bodyModeOwner ||
+        r !== bodyModeRequest
+      )
+        return;
+      const compact = control.matches(compactHTTPBodySelector);
+      if (
+        compact &&
+        (control.disabled ||
+          !control.closest(".editor[data-http-response-layout].split-layout"))
+      )
+        return;
+      const familyChange = compact || control.matches(httpBodyRadios);
+      const value = control.value;
+      const previousFamily = httpBodyFamily(r.bodyType);
+      const radios = [...document.querySelectorAll(httpBodyRadios)];
+      const chosen = radios.find((radio) => radio.value === value);
+      if (familyChange && (!chosen || value === previousFamily)) return;
+      const keepFocus = compact || control.matches(":focus-visible");
+      const focusSelector = compact
+        ? compactHTTPBodySelector
+        : httpBodyRadios + ":checked";
+      const restoreFamily = () => {
+        for (const radio of radios)
+          radio.checked = radio.value === previousFamily;
+        if (compact) control.value = previousFamily;
+        if (keepFocus) $(focusSelector)?.focus({ preventScroll: true });
+      };
+      const nextType = value === "raw" ? "json" : value;
+      if (
+        familyChange &&
+        value === "urlencoded" &&
+        unsupportedURLencodedForm(r.form)
+      ) {
+        restoreFamily();
+        throw Error(
+          "URLencoded 不支持文件或 multipart 分项内容类型；请先处理对应表单字段。",
+        );
+      }
+      if (familyChange && (r.bodyType === "binary" || value === "binary")) {
+        let change;
+        try {
+          change = prepareBinaryBodyChange(r, nextType);
+        } catch (error) {
+          restoreFamily();
+          throw error;
+        }
+        if (!change) return;
+        if (
+          change.clear &&
+          !confirm(
+            "切换二进制正文格式会清除当前正文，避免在另一格式中使用。确定继续？",
+          )
+        ) {
+          restoreFamily();
+          return;
+        }
+        // Collect under the original format; never temporarily retype its bytes.
+        restoreFamily();
+        collect();
+        r.body = "";
+        r.bodyType = change.nextType;
+        bodyExpanded = false;
+        mark();
+        render();
+        if (keepFocus) $(focusSelector)?.focus({ preventScroll: true });
+        return;
+      }
+      const restoreDebugBodyFocus =
+        mode === "debug" &&
+        familyChange &&
+        keepFocus &&
+        (compact ||
+          value === "none" ||
+          value === "form-data" ||
+          (value === "urlencoded" &&
+            isDebugURLencoded(page, mode, param, { ...r, bodyType: value })) ||
+          control
+            .closest(".request-panel")
+            ?.querySelector(
+              ":scope > :is(.body-none, .debug-multipart-editor, .debug-urlencoded-editor)",
+            ));
+      if (compact) chosen.checked = true;
+      try {
+        collect();
+      } catch (error) {
+        if (familyChange) restoreFamily();
+        throw error;
+      }
+      if (["none", "form-data", "urlencoded"].includes(value))
+        bodyExpanded = false;
+      if (familyChange && value === "raw" && !$("#raw-format"))
+        r.bodyType = "json";
+      mark();
+      render();
+      if (restoreDebugBodyFocus)
+        $(focusSelector)?.focus({ preventScroll: true });
+    },
+  );
   on("#expand-body", "click", () => {
     collect();
     bodyExpanded = !bodyExpanded;
     render();
     $("#body-code")?.focus();
   });
-  on("#toggle-parameter-helper", "click", () => {
+  on("#toggle-parameter-helper", "click", (event, button) => {
+    const keepFocus =
+      button.classList.contains("debug-raw-helper") &&
+      event.detail === 0 &&
+      button === document.activeElement;
     collect();
     helperOpen = !helperOpen;
+    if (helperOpen) rawHelperOwner = null;
     render();
+    if (keepFocus)
+      $("#toggle-parameter-helper")?.focus({ preventScroll: true });
   });
-  on("#new-body-dynamic", "click", () => editDynamicValue("body"));
-  on("[data-edit-body-dynamic]", "click", (_, element) =>
-    editDynamicValue("body", element.dataset.editBodyDynamic),
-  );
-  on("#insert-builtin-variable", "click", () => {
-    const name = $("#builtin-variable").value;
-    insertVariable(name);
-    if ($("#builtin-variable")) $("#builtin-variable").value = name;
-  });
-  on("[data-insert-variable]", "click", (_, element) => {
-    insertVariable(element.dataset.insertVariable);
-  });
-  on("[data-insert-dictionary]", "click", (_, element) => {
-    collect();
-    const entry = effectiveParameterDictionary(project).find(
-      (item) => item.id === element.dataset.insertDictionary,
-    );
-    if (!entry) throw Error("字典参数已不存在");
-    request().body = insertDictionaryField(request().body, entry);
-    request().bodyType = "json";
-    mark();
-    render();
-  });
+  bindBodyParameterHelper();
   on("#generate-body", "click", async () => {
+    if (
+      request()?.bodyType === "binary" ||
+      request()?.graphqlEditorVersion === 1
+    )
+      return;
     collect();
     const targetProject = project,
       targetRequest = request(),
       version = editVersion,
-      openingSequence = projectOpenSequence,
+      openingSequence = projectOpenRequestSequence,
       generation = ++bodyGenerationSequence,
       targetPage = page,
       targetMode = mode;
@@ -3040,7 +5839,7 @@ function bind() {
       project !== targetProject ||
       request() !== targetRequest ||
       editVersion !== version ||
-      projectOpenSequence !== openingSequence ||
+      projectOpenRequestSequence !== openingSequence ||
       page !== targetPage ||
       mode !== targetMode
     )
@@ -3050,19 +5849,68 @@ function bind() {
     mark();
     render();
   });
-  on("#format-json", "click", () => {
+  on("#format-json", "click", (event, button) => {
+    if (!button.isConnected || request()?.bodyType === "binary") return;
+    const debugRawJSON = Boolean(button.closest(".http-debug-raw-actions"));
+    const keepFocus =
+      debugRawJSON && event.detail === 0 && button === document.activeElement;
     collect();
-    request().body = JSON.stringify(JSON.parse(request().body), null, 2);
+    request().body = JSON.stringify(
+      JSON.parse(request().body),
+      null,
+      debugRawJSON ? 4 : 2,
+    );
     mark();
     render();
+    if (keepFocus) $("#format-json")?.focus({ preventScroll: true });
   });
+  const formEditorProject = project,
+    formEditorRequest = request();
+  const debugFormEditor = ".debug-multipart-editor, .debug-urlencoded-editor";
+  const ownsDebugFormControl = (element) =>
+    element.isConnected &&
+    project === formEditorProject &&
+    request() === formEditorRequest &&
+    (element.closest(".debug-multipart-editor")
+      ? isDebugMultipart(page, mode, param, formEditorRequest?.bodyType)
+      : Boolean(element.closest(".debug-urlencoded-editor")) &&
+        isDebugURLencoded(page, mode, param, formEditorRequest));
+  const staleDebugFormControl = (element) =>
+    Boolean(element.closest(debugFormEditor)) && !ownsDebugFormControl(element);
   on("[data-field-type]", "change", (_, e) => {
-    request().form[e.dataset.fieldType].type = e.value;
-    delete request().form[e.dataset.fieldType].schemaDefined;
+    if (staleDebugFormControl(e)) return;
+    const keepFieldFocus = document.activeElement === e;
+    const index = e.dataset.fieldType;
+    const r = request(),
+      field = r?.form[index];
+    if (!e.isConnected || !field) return;
+    const oldType = formFileRepresentation(field) ? "file" : "text";
+    let change;
+    try {
+      change = prepareFormTypeChange(field, e.value, r.bodyType);
+    } catch (error) {
+      e.value = oldType;
+      throw error;
+    }
+    if (!change) return;
+    if (
+      change.confirm &&
+      !confirm("切换字段类型会清除当前值或文件选择。确定继续？")
+    ) {
+      e.value = oldType;
+      return;
+    }
+    r.form[index] = change.row;
     mark();
     render();
+    if (keepFieldFocus)
+      (
+        $(`[data-field-type="${index}"]`) ||
+        $(`[data-pair="form:${index}:value"]`)
+      )?.focus({ preventScroll: true });
   });
   on("[data-field-file]", "change", async (_, e) => {
+    if (staleDebugFormControl(e)) return;
     const file = e.files[0];
     const selectedProject = project;
     const selectedRequest = request();
@@ -3073,9 +5921,12 @@ function bind() {
       file,
       field,
       () =>
+        e.isConnected &&
+        e.files[0] === file &&
         page === "apis" &&
         project === selectedProject &&
         request() === selectedRequest &&
+        selectedBodyType === "form-data" &&
         selectedRequest.bodyType === selectedBodyType &&
         selectedRequest.form[index] === field &&
         field.type === "file",
@@ -3085,44 +5936,419 @@ function bind() {
       },
     );
   });
-  on("[data-pair]", "input", (_, e) => {
+  onPair("[data-pair]", "input", (_, e) => {
+    if (staleDebugFormControl(e)) return;
     const [k, i, f] = e.dataset.pair.split(":");
+    if (k === "path" && (!e.isConnected || e.readOnly)) return;
+    if (compactKind(e) && !ownsCompactDebugPair(e)) return;
     request()[k][i][f] = e.value;
-    if (f === "key") delete request()[k][i].schemaDefined;
+    if (f === "key") {
+      delete request()[k][i].schemaDefined;
+      if (k === "form" && $(".param-tabs")) {
+        const bodyTab = $('.param-tabs [data-param="body"]');
+        const count = namedFormRows(request());
+        bodyTab.textContent = count ? `Body (${count})` : "Body";
+      }
+    }
     mark();
   });
-  on("[data-pair-enabled]", "change", (_, e) => {
+  onPair("[data-pair-enabled]", "change", (_, e) => {
+    if (staleDebugFormControl(e)) return;
     const [k, i] = e.dataset.pairEnabled.split(":");
+    if (compactKind(e) && !ownsCompactDebugPair(e)) return;
     request()[k][i].enabled = e.checked;
+    if (compactKind(e)) syncCompactDebugAll();
+    if (k === "form")
+      syncMultipartAll(
+        $("#debug-multipart-enable-all, #debug-urlencoded-enable-all"),
+        request().form,
+      );
     mark();
   });
-  on("[data-add-pair]", "click", (_, e) => {
-    request()[e.dataset.addPair].push({ key: "", value: "", enabled: true });
+  const formEnableAll =
+    "#debug-multipart-enable-all, #debug-urlencoded-enable-all";
+  syncMultipartAll($(formEnableAll), formEditorRequest?.form || []);
+  on(formEnableAll, "change", (_, element) => {
+    if (!ownsDebugFormControl(element) || !formEditorRequest.form.length)
+      return;
+    for (const row of formEditorRequest.form) row.enabled = element.checked;
+    for (const checkbox of element
+      .closest(debugFormEditor)
+      .querySelectorAll("[data-pair-enabled]"))
+      checkbox.checked = element.checked;
+    syncMultipartAll(element, formEditorRequest.form);
+    mark();
+  });
+  const commitDebugFormRow = (event, element) => {
+    if (event.isComposing || !ownsDebugFormControl(element)) return;
+    const row = newMultipartTextRow(element.value);
+    if (!row) return;
+    const index = formEditorRequest.form.length;
+    const { selectionStart, selectionEnd, selectionDirection } = element;
+    formEditorRequest.form.push(row);
     mark();
     render();
+    const key = $(`[data-pair="form:${index}:key"]`);
+    key?.focus();
+    if (selectionStart !== null && selectionEnd !== null)
+      key?.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+  };
+  const formNewKey = "#debug-multipart-new-key, #debug-urlencoded-new-key";
+  on(formNewKey, "input", commitDebugFormRow);
+  on(formNewKey, "compositionend", commitDebugFormRow);
+  const composerProject = project;
+  const composerRequest = request();
+  const compactKind = (element) =>
+    element.closest(".debug-header-pairs")
+      ? "headers"
+      : element.closest(".debug-cookie-pairs")
+        ? "cookies"
+        : null;
+  const readCompactDebugNext = (element) =>
+    element
+      .closest(".debug-pair-composer")
+      .querySelector("[data-debug-header-next], [data-debug-cookie-next]")
+      .checked;
+  const ownsCompactDebugPair = (element, kind = compactKind(element)) =>
+    kind &&
+    element.isConnected &&
+    project === composerProject &&
+    request() === composerRequest &&
+    ownsDebugPairComposer(kind, page, mode, param, composerRequest);
+  const compactDebugPairCapture = (element, index) => {
+    const kind = compactKind(element);
+    if (!kind) return null;
+    const rows = composerRequest?.[kind];
+    const row = rows?.[index];
+    const current = () =>
+      ownsCompactDebugPair(element, kind) &&
+      composerRequest[kind] === rows &&
+      (index === undefined || (Boolean(row) && rows[index] === row));
+    const error =
+      (kind === "headers" ? "Header" : "Cookie") +
+      " 参数草稿已变化，请重新打开编辑器";
+    return {
+      current,
+      error,
+      assertCurrent() {
+        if (!current()) throw Error(error);
+      },
+    };
+  };
+  const compactEnableAll = "#debug-header-enable-all, #debug-cookie-enable-all";
+  const enableAll = $(compactEnableAll);
+  const syncCompactDebugAll = () => {
+    if (enableAll?.isConnected)
+      Object.assign(
+        enableAll,
+        debugPairSelection(composerRequest[compactKind(enableAll)]),
+      );
+  };
+  syncCompactDebugAll();
+  on(compactEnableAll, "change", (_, element) => {
+    const kind = compactKind(element);
+    if (!ownsCompactDebugPair(element, kind) || !composerRequest[kind].length)
+      return;
+    for (const row of composerRequest[kind]) row.enabled = element.checked;
+    for (const checkbox of element
+      .closest("table")
+      .querySelectorAll("[data-pair-enabled]"))
+      checkbox.checked = element.checked;
+    syncCompactDebugAll();
+    mark();
   });
-  on("[data-remove-pair]", "click", (_, e) => {
+  const commitDebugPair = (event, input) => {
+    const kind = input.dataset.debugPairName;
+    if (
+      event.isComposing ||
+      !input.isConnected ||
+      project !== composerProject ||
+      request() !== composerRequest ||
+      !ownsDebugPairComposer(kind, page, mode, param, composerRequest)
+    )
+      return;
+    const row = debugPairFromKey(input.value);
+    if (!row) return;
+    if (compactKind(input)) row.enabled = readCompactDebugNext(input);
+    const rows = composerRequest[kind];
+    const index = rows.length;
+    const { selectionStart, selectionEnd, selectionDirection } = input;
+    rows.push(row);
+    mark();
+    render();
+    const next = $(`[data-pair="${kind}:${index}:key"]`);
+    next?.focus({ preventScroll: true });
+    if (selectionStart !== null && selectionEnd !== null)
+      next?.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+  };
+  on("[data-debug-pair-name]", "input", commitDebugPair);
+  on("[data-debug-pair-name]", "compositionend", commitDebugPair);
+  const ownsDesignPair = (input, kind) =>
+    input.isConnected &&
+    input.closest(".design-parameter-panel") &&
+    project === composerProject &&
+    request() === composerRequest &&
+    !workspaceDocument() &&
+    canComposeDesignPair(kind, page, mode, designParameter);
+  const commitDesignPair = (event, input) => {
+    const kind = input.dataset.designPairName;
+    if (event.isComposing || !ownsDesignPair(input, kind)) return;
+    const draft = provisionalQuery.read(composerProject, composerRequest);
+    const row =
+      kind === "query" && draft
+        ? provisionalQueryRow(input.value, draft)
+        : debugPairFromKey(input.value);
+    if (!row) return;
+    collect();
+    const canvas = $(".http-design-canvas");
+    const top = canvas?.scrollTop ?? 0;
+    const { selectionStart, selectionEnd, selectionDirection } = input;
+    const rows = composerRequest[kind];
+    const index = rows.length;
+    rows.push(row);
+    mark();
+    render();
+    if ($(".http-design-canvas")) $(".http-design-canvas").scrollTop = top;
+    const next = $(`[data-pair="${kind}:${index}:key"]`);
+    next?.focus({ preventScroll: true });
+    if (selectionStart !== null && selectionEnd !== null)
+      next?.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+  };
+  on("[data-design-pair-name]", "input", commitDesignPair);
+  on("[data-design-pair-name]", "compositionend", commitDesignPair);
+  const queryPanel = $(".design-parameter-panel");
+  const queryMetadataOwner = (button, checked = false) => {
+    if (!ownsDesignPair(button, "query"))
+      throw Error("Query 参数已变化，请重新选择。");
+    const index = Number(
+      checked
+        ? button.dataset.designQueryRequired
+        : button.dataset.designQueryType,
+    );
+    const row = composerRequest.query[index];
+    if (typeof row?.key !== "string" || !row.key.trim())
+      throw Error("Query 参数已变化，请重新选择。");
+    return {
+      button,
+      row,
+      index,
+      version: editVersion,
+      key: row.key,
+      schema: row.schema,
+    };
+  };
+  const updateQueryMetadata = (owner, change, focusedPart) => {
+    if (
+      !owner ||
+      !ownsDesignPair(owner.button, "query") ||
+      editVersion !== owner.version ||
+      composerRequest.query[owner.index] !== owner.row ||
+      owner.row.key !== owner.key ||
+      owner.row.schema !== owner.schema
+    )
+      throw Error("Query 参数已变化，请重新选择。");
+    collect();
+    if (!change(owner.row)) return;
+    const scrollTop = $(".http-design-canvas")?.scrollTop;
+    mark();
+    render();
+    const canvas = $(".http-design-canvas");
+    if (canvas && scrollTop !== undefined) canvas.scrollTop = scrollTop;
+    $(`[data-design-query-${focusedPart}="${owner.index}"]`)?.focus({
+      preventScroll: true,
+    });
+  };
+  const captureProvisional = (button) => {
+    const options = provisionalQuery.read(composerProject, composerRequest);
+    if (saving || !options || !ownsDesignPair(button, "query"))
+      throw Error("待命名 Query 参数已变化，请重新选择。");
+    return { button, options };
+  };
+  const updateProvisional = (token, next, focus) => {
+    if (
+      saving ||
+      !token?.options ||
+      !ownsDesignPair(token.button, "query") ||
+      !provisionalQuery.update(
+        composerProject,
+        composerRequest,
+        token.options,
+        next,
+      )
+    )
+      throw Error("待命名 Query 参数已变化，请重新选择。");
+    const scrollTop = $(".http-design-canvas")?.scrollTop;
+    render();
+    const canvas = $(".http-design-canvas");
+    if (canvas && scrollTop !== undefined) canvas.scrollTop = scrollTop;
+    $(focus)?.focus({ preventScroll: true });
+  };
+  bindDesignQueryTypeMenu(queryPanel, {
+    capture: (button) =>
+      button.hasAttribute("data-design-query-draft-type")
+        ? captureProvisional(button)
+        : queryMetadataOwner(button),
+    update: (owner, type) => {
+      if (owner?.options) {
+        updateProvisional(
+          owner,
+          { ...owner.options, type },
+          "[data-design-query-draft-type]",
+        );
+        return;
+      }
+      updateQueryMetadata(
+        owner,
+        (row) => {
+          const next = prepareDesignQueryType(row, type);
+          if (!next) return false;
+          row.schema = next;
+          delete row.schemaDefined;
+          return true;
+        },
+        "type",
+      );
+    },
+    notify: toast,
+  });
+  on("[data-design-query-draft-enabled]", "change", (_, checkbox) => {
+    const enabled = checkbox.checked;
+    checkbox.checked =
+      provisionalQuery.read(composerProject, composerRequest)?.enabled ?? true;
+    const token = captureProvisional(checkbox);
+    updateProvisional(
+      token,
+      { ...token.options, enabled },
+      `[data-design-query-draft-enabled="${checkbox.dataset.designQueryDraftEnabled}"]`,
+    );
+  });
+  on("[data-design-query-draft-required]", "click", (_, button) => {
+    const token = captureProvisional(button);
+    updateProvisional(
+      token,
+      { ...token.options, required: !token.options.required },
+      "[data-design-query-draft-required]",
+    );
+  });
+  on("[data-design-query-draft-reset]", "click", (_, button) => {
+    const token = captureProvisional(button);
+    updateProvisional(
+      token,
+      provisionalQueryDefaults,
+      '[data-design-pair-name="query"]',
+    );
+  });
+  on("[data-design-query-required]", "click", (_, button) =>
+    updateQueryMetadata(
+      queryMetadataOwner(button, true),
+      (row) => {
+        row.required = row.required !== true;
+        return true;
+      },
+      "required",
+    ),
+  );
+  onPair("[data-add-pair]", "click", (_, e) => {
+    if (staleDebugFormControl(e)) return;
+    const key = e.dataset.addPair;
+    if (e.closest(".design-pair-composer")) {
+      if (ownsDesignPair(e, key))
+        $(`[data-design-pair-name="${key}"]`)?.focus({ preventScroll: true });
+      return;
+    }
+    if (mode === "design") collect();
+    if (key === "form" && e.closest(".debug-urlencoded-editor")) {
+      $("#debug-urlencoded-new-key")?.focus();
+      return;
+    }
+    if (ownsDebugPairComposer(key, page, mode, param, request())) {
+      $(`[data-debug-pair-name="${key}"]`)?.focus();
+      return;
+    }
+    const focusDebugPath =
+      key === "path" &&
+      page === "apis" &&
+      mode === "debug" &&
+      param === "path" &&
+      usesDesignPathDraft(project, request());
+    const index = request()[key].length;
+    request()[key].push({ key: "", value: "", enabled: true });
+    mark();
+    render();
+    if (mode === "design" || (key === "form" && $(debugFormEditor)))
+      $(`[data-pair="${key}:${index}:key"]`)?.focus();
+    else if (focusDebugPath)
+      $(`.debug-path-pairs [data-pair="path:${index}:key"]`)?.focus();
+  });
+  onPair("[data-remove-pair]", "click", (_, e) => {
+    if (staleDebugFormControl(e)) return;
     const [k, i] = e.dataset.removePair.split(":");
+    const compactPair = compactDebugPairCapture(e, i);
+    if (compactPair && !compactPair.current()) return;
+    if (mode === "design") collect();
     request()[k].splice(Number(i), 1);
     mark();
     render();
   });
+  const ownedHTTPAuth = $("#auth-type[data-debug-auth-choice]")
+    ? { project, request: request() }
+    : null;
+  const ownsHTTPAuth = () =>
+    ownedHTTPAuth &&
+    project === ownedHTTPAuth.project &&
+    request() === ownedHTTPAuth.request &&
+    page === "apis" &&
+    (mode === "debug" || mode === "design") &&
+    usesDebugAuthChoice(project, request());
   on("#auth-type", "change", (_, e) => {
+    if (e.hasAttribute("data-debug-auth-choice")) {
+      const r = request();
+      if (!e.isConnected || !ownsHTTPAuth()) return;
+      const drafts = debugAuthDrafts.get(r) || new Map();
+      const focused = e.contains(document.activeElement);
+      try {
+        if (mode === "design") collect();
+        if (!updateDebugAuthChoice(r, e.value, drafts)) return;
+      } catch (error) {
+        e.value = debugAuthChoice(r);
+        throw error;
+      }
+      debugAuthDrafts.set(r, drafts);
+      mark();
+      render();
+      if (focused) $("#auth-type")?.focus({ preventScroll: true });
+      return;
+    }
+    if (mode === "design") {
+      try {
+        collect();
+      } catch (error) {
+        e.value = request().auth.type;
+        throw error;
+      }
+    }
+    const focused = document.activeElement === e;
     request().auth.type = e.value;
     mark();
     render();
+    if (focused) $("#auth-type")?.focus({ preventScroll: true });
   });
   on("[data-auth]", "input", (_, e) => {
+    if (ownedHTTPAuth && (!e.isConnected || !ownsHTTPAuth())) return;
     request().auth[e.dataset.auth] = e.value;
     mark();
   });
-  on("#expand-script", "click", () => {
+  const openScriptEditor = (fromPostMenu = false) => {
+    const fromPreCard = Boolean(preWorkspace);
+    if (fromPreCard && !ownsPre()) return;
     collect();
     const draft = createScriptDraft(project, request(), param);
     modal(
       (param === "before" ? "前置" : "后置") + "脚本编辑器",
       `<p class="muted">这是临时草稿。应用只更新当前接口，不执行脚本、不自动保存项目；取消或 Esc 放弃本次编辑。</p><label for="expanded-script-code">JavaScript</label><textarea id="expanded-script-code" wrap="off" spellcheck="false">${esc(draft.text)}</textarea>`,
       () => {
+        if (fromPreCard && !ownsPre())
+          throw Error("接口或阶段已切换，请重新打开脚本编辑器");
         if (
           applyScriptDraft(
             draft,
@@ -3137,8 +6363,32 @@ function bind() {
         }
       },
       "应用到接口",
+      fromPreCard
+        ? () => {
+            if (
+              project === draft.project &&
+              request() === draft.request &&
+              page === "apis" &&
+              mode === "debug" &&
+              param === "before"
+            )
+              $("#expand-script")?.focus({ preventScroll: true });
+          }
+        : fromPostMenu
+          ? () => {
+              if (
+                project === draft.project &&
+                request() === draft.request &&
+                page === "apis" &&
+                mode === "debug" &&
+                param === draft.stage
+              )
+                $("#http-post-add")?.focus({ preventScroll: true });
+            }
+          : undefined,
     );
     $("#expanded-script-code").focus();
+    if (fromPostMenu || fromPreCard) return;
     $("#dialog").addEventListener(
       "close",
       () => {
@@ -3151,8 +6401,150 @@ function bind() {
       },
       { once: true },
     );
-  });
+  };
+  on("#expand-script", "click", () => openScriptEditor());
+  const postWorkspace = $(".http-post-actions");
+  if (postWorkspace) {
+    const owner = project,
+      target = request();
+    const owns = () =>
+      postWorkspace.isConnected &&
+      project === owner &&
+      request() === target &&
+      page === "apis" &&
+      mode === "debug" &&
+      param === "after";
+    const disclosure = postWorkspace.querySelector("#http-post-advanced");
+    const key = httpPostAdvancedKey(target);
+    const rememberDisclosure = () => {
+      if (disclosure.open) {
+        if (httpPostAdvanced.size >= 128 && !httpPostAdvanced.has(key))
+          httpPostAdvanced.delete(httpPostAdvanced.values().next().value);
+        httpPostAdvanced.add(key);
+      } else httpPostAdvanced.delete(key);
+    };
+    on("#http-post-advanced", "toggle", () => {
+      if (owns()) rememberDisclosure();
+    });
+    const releaseMenu = bindHTTPPostActions(postWorkspace, {
+      choose(key) {
+        if (!owns()) return;
+        if (key === "script") openScriptEditor(true);
+        else if (key === "assertions" || key === "extract")
+          selectDebugParameter(key, true);
+      },
+      onError: (error) => toast(error.message),
+    });
+    releaseHTTPPostActions = () => {
+      // A native details toggle event can still be queued when render replaces this editor.
+      if (postWorkspace.isConnected) rememberDisclosure();
+      releaseMenu();
+    };
+  }
+  if (preWorkspace) {
+    const updatePre = (change) =>
+      httpPreEditors.set(preRequest, {
+        ...httpPreEditors.get(preRequest),
+        ...change,
+      });
+    on("#http-pre-advanced", "toggle", (_, disclosure) => {
+      if (ownsPre()) updatePre({ advancedOpen: disclosure.open });
+    });
+    on("#http-pre-hide-script", "click", () => {
+      if (!ownsPre()) return;
+      updatePre({ scriptOpen: false });
+      render();
+      $("#http-pre-add")?.focus({ preventScroll: true });
+    });
+    const updateWaitError = (element, operation, index) => {
+      const draft = httpPreWaitDrafts.read(operation);
+      const issue = $(`#http-pre-wait-error-${index}`);
+      element.setAttribute("aria-invalid", String(Boolean(draft)));
+      issue.textContent = draft?.message || "";
+      issue.hidden = !draft;
+    };
+    on("[data-pre-wait-ms]", "input", (_, element) => {
+      const index = Number(element.dataset.preWaitMs);
+      const operation = ownedWait(element, index);
+      if (!operation) return;
+      httpPreWaitDrafts.edit(preRequest, operation, element.value);
+      updateWaitError(element, operation, index);
+      mark();
+    });
+    on("[data-pre-wait-ms]", "keydown", (event, element) => {
+      if (event.key !== "Escape") return;
+      const index = Number(element.dataset.preWaitMs);
+      const operation = ownedWait(element, index);
+      if (!operation || !httpPreWaitDrafts.clear(operation)) return;
+      element.value = String(operation.milliseconds);
+      updateWaitError(element, operation, index);
+      event.preventDefault();
+    });
+    on("[data-pre-wait-toggle]", "change", (_, element) => {
+      const operation = ownedWait(
+        element,
+        Number(element.dataset.preWaitToggle),
+      );
+      if (!operation) return;
+      try {
+        httpPreWaitDrafts.toggle(preRequest, operation, element.checked);
+      } catch (error) {
+        element.checked = operation.enabled;
+        throw error;
+      }
+      mark();
+    });
+    releaseHTTPPreActions = bindHTTPPreActions(preWorkspace, {
+      choose(key) {
+        if (!ownsPre()) return;
+        if (key === "script") {
+          updatePre({ scriptOpen: true });
+          render();
+          $("#script-code")?.focus({ preventScroll: true });
+        } else if (key === "wait") {
+          const index = addHTTPPreWait(preRequest);
+          mark();
+          render();
+          $(`[data-pre-wait-ms="${index}"]`)?.focus({ preventScroll: true });
+        } else if (key === "database") {
+          $("#http-pre-add")?.focus({ preventScroll: true });
+          databaseOperationDialog(-1, ownsPre).catch((error) =>
+            toast(error.message),
+          );
+        }
+      },
+      onError: (error) => toast(error.message),
+    });
+  }
+  const snippetWorkspace = $(".http-script-workspace");
+  const snippetStage = snippetWorkspace?.dataset.httpScriptStage;
+  const snippetOwnerProject = project;
+  const snippetOwner = request();
+  const ownsSnippets = () =>
+    snippetWorkspace?.isConnected &&
+    project === snippetOwnerProject &&
+    request() === snippetOwner &&
+    page === "apis" &&
+    mode === "debug" &&
+    !workspaceDocument() &&
+    snippetWorkspace.closest("[data-http-response-layout]") &&
+    param === snippetStage;
+  if (snippetWorkspace)
+    bindHTTPScriptSnippets(snippetWorkspace, {
+      owns: () =>
+        ownsSnippets() &&
+        (snippetStage !== "after" ||
+          snippetWorkspace.closest("#http-post-advanced")?.open === true),
+      toggle: (folded) =>
+        httpSnippetEditors.set(snippetOwner, {
+          ...httpSnippetEditors.get(snippetOwner),
+          [snippetStage]: folded,
+        }),
+      onError: (message) => toast(message),
+    });
   on("#script-code", "input", (_, element) => {
+    if ((preWorkspace && !ownsPre()) || (snippetWorkspace && !ownsSnippets()))
+      return;
     request()[param + "Script"] = element.value;
     mark();
   });
@@ -3162,6 +6554,9 @@ function bind() {
       projectId = project.id,
       config = structuredClone(request().auth),
       original = JSON.stringify(request().auth);
+    const ownsAuth = $("#auth-type[data-debug-auth-choice]")
+      ? captureDebugAuthOperation(project, request())
+      : null;
     const pendingKey = projectId + ":" + requestId;
     if (pendingOAuth1.has(pendingKey)) return;
     pendingOAuth1.add(pendingKey);
@@ -3176,6 +6571,8 @@ function bind() {
       const flow = await api("/oauth1/start", "POST", config);
       if (project.id !== projectId || current !== requestId)
         throw Error("项目/接口已切换，请重新开始OAuth1授权");
+      if (ownsAuth && !ownsAuth(project, request()))
+        throw Error("原接口认证已变化，请重新授权");
       modal(
         "OAuth1 OOB/PIN 授权",
         `<p><a href="${esc(flow.authorizationUrl)}" target="_blank" rel="noopener noreferrer">打开服务授权页面</a></p><p>在服务页面授权后复制验证码。流程5分钟后过期；临时令牌密钥仅保留在内存。</p><label>Verifier / PIN</label><input id="oauth1-verifier" autocomplete="off">`,
@@ -3183,7 +6580,11 @@ function bind() {
           const target =
             project.id === projectId &&
             project.requests.find((item) => item.id === requestId);
-          if (!target || JSON.stringify(target.auth) !== original)
+          if (
+            !target ||
+            JSON.stringify(target.auth) !== original ||
+            (ownsAuth && !ownsAuth(project, target))
+          )
             throw Error("原接口认证已变化，请重新授权，避免覆盖修改");
           const result = await api("/oauth1/complete", "POST", {
             id: flow.id,
@@ -3197,7 +6598,11 @@ function bind() {
           const currentTarget = project.requests.find(
             (item) => item.id === requestId,
           );
-          if (!currentTarget || JSON.stringify(currentTarget.auth) !== original)
+          if (
+            !currentTarget ||
+            JSON.stringify(currentTarget.auth) !== original ||
+            (ownsAuth && !ownsAuth(project, currentTarget))
+          )
             throw Error("接口已更新，令牌未覆盖现有修改");
           currentTarget.auth.accessToken = result.accessToken;
           currentTarget.auth.tokenSecret = result.tokenSecret;
@@ -3216,11 +6621,16 @@ function bind() {
     const requestId = current,
       projectId = project.id;
     const config = structuredClone(request().auth);
+    const ownsAuth = $("#auth-type[data-debug-auth-choice]")
+      ? captureDebugAuthOperation(project, request())
+      : null;
     const applyToken = (result) => {
       if (project.id !== projectId)
         throw Error("项目已切换，令牌未写入其他项目");
       const target = project.requests.find((item) => item.id === requestId);
       if (!target) throw Error("原请求已不存在");
+      if (ownsAuth && !ownsAuth(project, target))
+        throw Error("原接口认证已变化，令牌未覆盖现有修改");
       target.auth.token = result.accessToken;
       if (result.refreshToken) target.auth.refreshToken = result.refreshToken;
       mark();
@@ -3229,6 +6639,8 @@ function bind() {
     };
     if (config.grantType === "authorization_code") {
       const flow = await api("/oauth/start", "POST", config);
+      if (ownsAuth && !ownsAuth(project, request()))
+        throw Error("原接口认证已变化，请重新授权");
       modal(
         "OAuth 授权",
         `<p>请先在身份提供方登记此回调地址：</p><pre>${esc(flow.redirectUri)}</pre><p><a href="${esc(flow.authorizationUrl)}" target="_blank" rel="noopener noreferrer">打开授权页面</a></p><p>授权结束后返回这里检查结果。流程 5 分钟后过期。</p>`,
@@ -3242,7 +6654,12 @@ function bind() {
       );
     } else applyToken(await api("/oauth/token", "POST", config));
   });
-  on("#edit-operations", "click", editRules);
+  on("#edit-operations", "click", () => {
+    if (stalePre()) return;
+    if (preWorkspace && httpPreWaitDrafts.pending([preRequest]))
+      throw Error(waitDraftError);
+    editRules(preWorkspace ? ownsPre : undefined);
+  });
   on("#add-assertion", "click", () => {
     request().assertions.push({ target: "status", op: "eq", value: 200 });
     mark();
@@ -3279,9 +6696,18 @@ function bind() {
     mark();
     render();
   });
+  on(".http-action-split details", "keydown", (event, details) => {
+    if (event.key !== "Escape" || !details.open) return;
+    event.preventDefault();
+    event.stopPropagation();
+    details.open = false;
+    details.querySelector("summary").focus();
+  });
   on("#send-menu-curl", "click", (_, element) => {
-    element.closest("details").open = false;
-    $("#curl").click();
+    const details = element.closest("details");
+    details.open = false;
+    details.querySelector("summary").focus();
+    return openCurlPreview(details.querySelector("summary"));
   });
   on("#send-menu-plan", "click", () => {
     mode = "cases";
@@ -3290,29 +6716,15 @@ function bind() {
   });
   on("#save-menu-copy", "click", () => $("#duplicate").click());
   on("#save-menu-project", "click", () => save());
-  on("#duplicate", "click", () => {
-    collect();
-    const r = structuredClone(request());
-    r.id = uid();
-    r.name += " 副本";
-    project.requests.push(r);
-    current = r.id;
-    response = null;
-    if (!opened.includes(current)) opened.push(current);
-    mark();
-    render();
-  });
-  on("#delete", "click", async () => {
+  on("#duplicate", "click", () => duplicateRequest(request()));
+  on("#delete", "click", async (_, opener) => {
+    if (graphqlDrafts.pending(request())) throw Error(unappliedGraphQL);
     if (project.settings?.nativeInheritance) {
       await changeNativeRequestLifecycle(request().id, false);
       return;
     }
-    if (!confirm("将此接口移到回收站？")) return;
-    request().deletedAt = new Date().toISOString();
-    current = project.requests.find((r) => !r.deletedAt)?.id;
-    response = responses.get(project.id + ":" + current) || null;
-    mark();
-    render();
+    if (workspaceDocument()) throw Error("没有当前接口可删除");
+    confirmOrdinaryRequestTrash(request(), opener);
   });
   on("[data-restore]", "click", async (_, e) => {
     if (project.settings?.nativeInheritance) {
@@ -3324,9 +6736,66 @@ function bind() {
     await save();
   });
   on("#send", "click", send);
-  on("#cancel", "click", () => {
+  const cancelForegroundRun = () =>
+    runId ? api("/cancel", "POST", { id: runId }) : undefined;
+  on("#cancel", "click", async (_, button) => {
+    if (button.closest(".selected-sse-workbench")) {
+      const attempt = sseCaptures.current(selectedSSEOwner());
+      if (!sseCaptures.cancel(attempt)) {
+        if (genericProtocolCapture?.cancel === button)
+          return cancelForegroundRun();
+        return;
+      }
+      paintSSECapture();
+      try {
+        await api("/cancel", "POST", { id: attempt.dispatch.runId });
+      } catch {
+        // The acknowledgement is not proof of stop either way. Only the
+        // original run response or the matching terminal record can settle it.
+      }
+      return;
+    }
+    if (!caseCancellationOwner()) return cancelForegroundRun();
+  });
+  on("#sse-capture-check", "click", async (_, button) => {
+    const attempt = sseCaptures.current(selectedSSEOwner());
+    if (attempt?.phase !== "unknown" || attempt.checking) return;
+    attempt.checking = true;
+    paintSSECapture();
+    let found = false;
+    try {
+      const records = await api(
+        "/projects/" + attempt.owner.projectId + "/protocol-runs?type=sse",
+      );
+      found = sseCaptures.check(attempt, records);
+    } catch {
+      // The current local service could not return this history read.
+    } finally {
+      attempt.checking = false;
+      attempt.reconciliationMissed = !found;
+      paintSSECapture();
+    }
+    if (sseCaptures.current(selectedSSEOwner()) !== attempt) return;
+    if (
+      button.isConnected &&
+      (document.activeElement === button ||
+        document.activeElement === document.body)
+    )
+      (found ? $("#protocol-run") : button).focus();
+  });
+  on("#sse-capture-abandon", "click", () => {
+    const attempt = sseCaptures.current(selectedSSEOwner());
+    if (attempt?.phase !== "unknown" || attempt.checking) return;
+    if (!confirm("结束这一次核对？这不会取消、重发或证明远端未执行。")) return;
+    if (sseCaptures.abandon(attempt)) {
+      paintSSECapture();
+      $("#protocol-run").focus();
+    }
+  });
+  on("#cancel-case-run", "click", () => {
+    if (!canCancelCurrentCase()) return;
     if (caseBatch?.running) caseBatch.cancelRequested = true;
-    return runId ? api("/cancel", "POST", { id: runId }) : undefined;
+    return cancelForegroundRun();
   });
   on("#download-response-binary", "click", () => {
     const bytes = Uint8Array.from(atob(response.rawBodyBase64), (character) =>
@@ -3341,23 +6810,51 @@ function bind() {
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
-  on("#curl", "click", async () => {
+  async function openCurlPreview(opener) {
+    if (!opener.isConnected || $("#dialog").open) return;
     collect();
-    const r = await api("/projects/" + project.id + "/curl", "POST", {
-      request: request(),
-      environmentId: env(),
-    });
-    modal(
-      "cURL（Bash）",
-      `<p class="muted">按当前环境生成，不执行前后置脚本。可能包含认证凭据，请勿公开分享。HTTP/2命令需要支持HTTP/2的cURL；HTTPS严格HTTP/2需cURL8.10或更新版。</p><textarea id="curl-output" readonly>${esc(r.curl)}</textarea>`,
-      () => navigator.clipboard.writeText(r.curl),
-      "复制",
+    const owner = project,
+      ownedRequest = request(),
+      environmentId = env(),
+      ownerMode = mode,
+      projectIntent = projectOpenRequestSequence,
+      version = editVersion,
+      openingRevision = modalRevision;
+    if (!owner || !ownedRequest) return;
+    const ownsPreview = () =>
+      opener.isConnected &&
+      project === owner &&
+      request() === ownedRequest &&
+      env() === environmentId &&
+      page === "apis" &&
+      mode === ownerMode &&
+      projectOpenRequestSequence === projectIntent &&
+      editVersion === version &&
+      modalRevision === openingRevision &&
+      !workspaceDocument();
+    const drawer = curlPreview.open(
+      $("#curl-preview-dialog"),
+      opener,
+      ownsPreview,
+      (value) => navigator.clipboard.writeText(value),
     );
-  });
-  on("#import", "click", () =>
+    if (!drawer) return;
+    try {
+      const r = await api("/projects/" + owner.id + "/curl", "POST", {
+        request: ownedRequest,
+        environmentId,
+      });
+      drawer.deliver(r.curl);
+    } catch (error) {
+      drawer.fail(error);
+    }
+  }
+  on("#curl", "click", (_, opener) => openCurlPreview(opener));
+  on("#import,#welcome-import,#project-menu-import", "click", (_, opener) => {
+    const owner = project;
     modal(
-      "导入接口",
-      `<p class="muted">支持项目JSON、OpenAPI JSON/YAML、Postman Collection、cURL及Apipost旧版/现代JSON（有限兼容）。现代JSON同时导入环境、服务和全局变量，遇到未支持资源会拒绝；请选择导入环境后再发送。仅解析，不执行导入内容。</p><label>导入方式</label><select id="import-mode"><option value="interfaces">导入接口到当前项目</option><option value="restore">完整恢复项目备份为新副本</option><option value="apipost-directory">原版目录JSON子集（实验性，非完整迁移）</option></select><input id="import-file" type="file" accept=".json,.yaml,.yml,.txt"><textarea id="import-text" placeholder="粘贴 JSON 或 cURL"></textarea><label>仅原版目录模式使用：选择含 project.json 的目录，未知文件会拒绝</label><input id="import-directory" type="file" webkitdirectory multiple aria-label="原版项目目录">`,
+      "导入项目（手动）",
+      localProjectImportMarkup(),
       async () => {
         if (busy || saving) throw Error("请先结束当前请求或保存，再导入");
         nativeRequestLifecycle.assertCanSave(project.id);
@@ -3395,12 +6892,12 @@ function bind() {
             throw Error("项目、草稿或导入内容已变化，未执行导入");
           const targetProject = project,
             version = editVersion,
-            openingSequence = projectOpenSequence;
+            openingSequence = projectOpenRequestSequence;
           const stopped = () =>
             inputChanged() ||
             project !== targetProject ||
             editVersion !== version ||
-            projectOpenSequence !== openingSequence ||
+            projectOpenRequestSequence !== openingSequence ||
             dirty ||
             busy ||
             saving;
@@ -3444,6 +6941,7 @@ function bind() {
             project = result;
             dirty = false;
             current = project.requests.at(-1)?.id;
+            activeDocumentId = null;
             response = null;
             if (current && !opened.includes(current)) opened.push(current);
             if (request()?.importNotes?.length) {
@@ -3472,12 +6970,27 @@ function bind() {
           operation.finish();
         }
       },
-    ),
-  );
+      "导入",
+      ["welcome-import", "project-menu-import"].includes(opener.id)
+        ? () => {
+            if (project !== owner) return;
+            const restore =
+              opener.id === "project-menu-import" ? $("#new-project") : opener;
+            if (restore?.isConnected) restore.focus({ preventScroll: true });
+          }
+        : undefined,
+    );
+    const shell = $(".local-project-import");
+    if (shell) {
+      bindLocalProjectImport(shell);
+      bindOpenAPIFileReview(shell);
+    }
+  });
   on("#export", "click", () => {
     modal(
       "导出项目",
-      '<button id="scoped-export-open">选择资源导出定义（预览范围和依赖）</button><hr><p>以下为整项目导出；本地项目 JSON 是完整备份，包含环境及历史。</p><label>整项目格式</label><select id="export-format"><option value="native">本地项目 JSON（包含环境和历史）</option><option value="openapi">OpenAPI 3 JSON（接口定义）</option></select><p class="notice">导出内容可能包含密钥、请求凭据和响应数据，请检查后再分享。</p>',
+      '<button id="scoped-export-open">选择资源导出定义（预览范围和依赖）</button><hr><p>以下为整项目导出；本地项目 JSON 是完整备份，包含环境及历史。</p><label>整项目格式</label><select id="export-format"><option value="native">本地项目 JSON（包含环境和历史）</option><option value="openapi">OpenAPI 3 JSON（接口定义）</option></select><p class="notice">导出内容可能包含密钥、请求凭据和响应数据，请检查后再分享。</p>' +
+        graphqlExportNoticeHTML(project),
       async () => {
         await save();
         const format = $("#export-format").value;
@@ -3488,6 +7001,7 @@ function bind() {
       },
       "导出",
     );
+    bindGraphQLExportNotice($("#dialog-content"));
     $("#scoped-export-open").onclick = () => {
       try {
         openScopedDefinitionExport();
@@ -3498,8 +7012,10 @@ function bind() {
   });
   on("#locate-request", "click", () => {
     collect();
-    const selected = request();
-    if (!selected || selected.deletedAt) throw Error("没有当前接口可定位");
+    const doc = workspaceDocument();
+    const selected = doc || request();
+    if (!selected || selected.deletedAt)
+      throw Error("没有当前接口或文档可定位");
     search = "";
     searchType = "all";
     const selectedPath = selected.folder || "";
@@ -3513,9 +7029,9 @@ function bind() {
     }
     page = "apis";
     render();
-    const item = document.querySelector(
-      '[data-request="' + CSS.escape(current) + '"]',
-    );
+    const item = doc
+      ? $('[data-document-index="' + project.documents.indexOf(doc) + '"]')
+      : $('[data-request="' + CSS.escape(current) + '"]');
     item?.scrollIntoView({ block: "nearest" });
     item?.focus({ preventScroll: true });
   });
@@ -3525,19 +7041,25 @@ function bind() {
     bindTree();
   });
   on("#save-protocol", "click", async () => {
-    const item = {
+    if (saving) throw Error("保存尚未完成，请等待");
+    nativeRequestLifecycle.assertCanSave(project.id);
+    projectImports.assertCanSave(project.id);
+    const protocols = project.protocols || [];
+    const index = protocols.findIndex(
+      (existing) => existing.id === selectedProtocolId,
+    );
+    if (selectedProtocolId && index < 0)
+      throw Error("连接定义已变化，请重新选择");
+    const item = protocolDefinitionEdit(protocols[index], {
       id: selectedProtocolId || uid(),
       name: $("#protocol-name").value || "新连接",
       type: $("#protocol-type").value,
       url: $("#protocol-url").value,
       port: Number($("#protocol-port").value),
-    };
-    project.protocols ??= [];
-    const index = project.protocols.findIndex(
-      (existing) => existing.id === item.id,
-    );
-    if (index < 0) project.protocols.push(item);
-    else project.protocols[index] = item;
+    });
+    if (index < 0) protocols.push(item);
+    else protocols[index] = item;
+    project.protocols = protocols;
     selectedProtocolId = item.id;
     mark();
     await save();
@@ -3569,30 +7091,63 @@ function bind() {
     if (!sessionController.status().intentId) throw Error("没有会话或恢复证据");
     download("protocol-session.json", sessionController.evidence());
   });
-  on("#protocol-run", "click", async () => {
+  on("#protocol-run", "click", async (_, button) => {
     assertExecutionReady();
-    runId = uid();
+    const type = $("#protocol-type").value;
+    const url = $("#protocol-url").value;
+    const id = uid();
+    const input = {
+      type,
+      url,
+      host: url,
+      port: Number($("#protocol-port").value),
+      duration: Number($("#protocol-duration").value),
+      message: $("#protocol-message").value,
+      runId: id,
+    };
+    const path = "/projects/" + project.id + "/protocol";
+    const owner = selectedSSEOwner();
+    if (type === "sse" && owner) {
+      const attempt = sseCaptures.start(owner, { runId: id, url });
+      if (!attempt) throw Error("请先核对之前的采集结果，不要重复采集");
+      runId = "";
+      busy = true;
+      paintSSECapture();
+      let receipt;
+      try {
+        receipt = await api(path, "POST", input, { protocolReceiptRunId: id });
+      } catch {
+        // A transport/API exception cannot prove that the original run never
+        // reached the local service or that its remote effects did not occur.
+      } finally {
+        sseCaptures.settle(attempt, receipt);
+        busy = false;
+        if (selectedSSEOwner()) paintSSECapture();
+        else if ($("#protocol-run")) $("#protocol-run").disabled = false;
+      }
+      return;
+    }
+    const resultNode = $("#protocol-result");
+    const cancel = $("#cancel");
+    genericProtocolCapture = { cancel };
+    runId = id;
     busy = true;
-    $("#protocol-run").disabled = true;
+    button.disabled = true;
+    cancel.disabled = false;
     try {
-      const type = $("#protocol-type").value;
-      const result = await api(
-        "/projects/" + project.id + "/protocol",
-        "POST",
-        {
-          type,
-          url: $("#protocol-url").value,
-          host: $("#protocol-url").value,
-          port: Number($("#protocol-port").value),
-          duration: Number($("#protocol-duration").value),
-          message: $("#protocol-message").value,
-          runId,
-        },
-      );
-      $("#protocol-result").textContent = JSON.stringify(result, null, 2);
+      const result = await api(path, "POST", input);
+      if (resultNode.isConnected)
+        resultNode.textContent = JSON.stringify(result, null, 2);
     } finally {
+      genericProtocolCapture = null;
+      runId = "";
       busy = false;
-      if ($("#protocol-run")) $("#protocol-run").disabled = false;
+      if (selectedSSEOwner()) {
+        if (resultNode.isConnected && type !== "sse") {
+          button.disabled = false;
+          cancel.disabled = true;
+        } else paintSSECapture();
+      } else if ($("#protocol-run")) $("#protocol-run").disabled = false;
     }
   });
   on("#db-register", "click", () => {
@@ -3679,8 +7234,8 @@ function bind() {
       };
   });
   let databaseDialogOpening = false;
-  const databaseOperationDialog = async (index = -1) => {
-    if (databaseDialogOpening) return;
+  const databaseOperationDialog = async (index = -1, ownsWorkspace) => {
+    if (databaseDialogOpening || (ownsWorkspace && !ownsWorkspace())) return;
     databaseDialogOpening = true;
     try {
       collect();
@@ -3698,8 +7253,9 @@ function bind() {
       );
       if (
         project.id !== projectId ||
-        request().id !== requestId ||
+        request()?.id !== requestId ||
         param !== phase ||
+        (ownsWorkspace && !ownsWorkspace()) ||
         modalRevision !== openingRevision
       )
         return;
@@ -3725,8 +7281,9 @@ function bind() {
         () => {
           if (
             project.id !== projectId ||
-            request().id !== requestId ||
-            param !== phase
+            request()?.id !== requestId ||
+            param !== phase ||
+            (ownsWorkspace && !ownsWorkspace())
           )
             throw Error("接口或阶段已切换，请重新操作");
           const operations = request()[phase] || [];
@@ -3779,29 +7336,50 @@ function bind() {
       databaseDialogOpening = false;
     }
   };
-  on("#add-db-operation", "click", () => databaseOperationDialog());
+  on("#add-db-operation", "click", () =>
+    databaseOperationDialog(-1, preWorkspace ? ownsPre : undefined),
+  );
   on("[data-edit-db-operation]", "click", (_, element) =>
-    databaseOperationDialog(Number(element.dataset.editDbOperation)),
+    databaseOperationDialog(
+      Number(element.dataset.editDbOperation),
+      preWorkspace ? ownsPre : undefined,
+    ),
   );
   on("[data-remove-operation]", "click", (_, element) => {
+    if (stalePre()) return;
     collect();
     const index = Number(element.dataset.removeOperation),
       operations = request()[param];
+    const operation = operations?.[index];
+    const wait = Boolean(element.closest("[data-pre-wait-row]"));
+    if (wait && !ownedWait(element, index)) return;
     if (
-      !operations?.[index] ||
-      !confirm("移除此声明式操作？不会修改数据库或已保存的计划快照。")
+      !operation ||
+      !confirm(
+        wait
+          ? "删除此请求的前置等待？"
+          : "移除此声明式操作？不会修改数据库或已保存的计划快照。",
+      ) ||
+      stalePre() ||
+      (wait &&
+        (request().before !== operations || operations[index] !== operation))
     )
       return;
     operations.splice(index, 1);
+    if (wait) httpPreWaitDrafts.clear(operation);
     mark();
     render();
+    if (wait) $("#http-pre-add")?.focus({ preventScroll: true });
   });
   on("[data-move-operation]", "click", (_, element) => {
+    if (stalePre()) return;
     collect();
     const [index, delta] = element.dataset.moveOperation.split(":").map(Number),
       operations = request()[param],
       next = index + delta;
+    const wait = Boolean(element.closest("[data-pre-wait-row]"));
     if (
+      (wait && !ownedWait(element, index)) ||
       !operations?.[index] ||
       next < 0 ||
       next >= operations.length ||
@@ -3814,8 +7392,15 @@ function bind() {
     ];
     mark();
     render();
+    if (wait) {
+      const again = $(`[data-move-operation="${next}:${delta}"]`);
+      (again?.disabled ? $(`[data-pre-wait-ms="${next}"]`) : again)?.focus({
+        preventScroll: true,
+      });
+    }
   });
   on("[data-toggle-db-operation]", "click", (_, element) => {
+    if (stalePre()) return;
     collect();
     const operations = request()[param],
       operation = operations?.[Number(element.dataset.toggleDbOperation)];
@@ -4150,36 +7735,223 @@ function bind() {
     mark();
     render();
   });
-  on("#add-env", "click", () =>
+  function editEnvironment(id, workspace = null) {
+    const owner = project;
+    let item = project.environments.find((value) => value.id === id);
+    let editor;
+    const apply = () => {
+      if (project !== owner) throw Error("项目已变化，请重新打开环境设置");
+      const values = editor.read();
+      const name = $("#env-name, #edit-env-name").value.trim();
+      if (item) {
+        item.name = name || item.name;
+        item.variables = values;
+      } else {
+        item = { id: uid(), name: name || "新环境", variables: values };
+        project.environments.push(item);
+      }
+      mark();
+      render();
+    };
     modal(
-      "新建环境",
-      '<label>环境名称</label><input id="env-name"><label>变量（JSON 对象）</label>' +
-        jsonEditor({ baseUrl: "http://localhost:8080" }),
-      () => {
-        project.environments.push({
-          id: uid(),
-          name: $("#env-name").value || "新环境",
-          variables: JSON.parse($("#modal-json").value),
-        });
-        mark();
-        render();
-      },
-    ),
-  );
-  on("[data-edit-env]", "click", (_, e) => {
-    const v = project.environments.find((v) => v.id === e.dataset.editEnv);
-    modal(
-      "编辑 " + v.name,
-      `<label>环境名称</label><input id="edit-env-name" value="${esc(v.name)}"><p>JSON仅编辑当前值，已有初始值和说明保持不变。</p>` +
-        jsonEditor(v.variables),
-      () => {
-        v.name = $("#edit-env-name").value.trim() || v.name;
-        v.variables = JSON.parse($("#modal-json").value);
-        mark();
-        render();
-      },
+      "环境设置",
+      environmentDialogHTML(project, item, { workspace: Boolean(workspace) }),
+      apply,
+      "保存并关闭",
     );
+    editor = mountEnvironmentDialog($("#dialog-content"), item);
+    $("#environment-save-stay").onclick = () => {
+      try {
+        apply();
+        editEnvironment(item.id, workspace);
+      } catch (error) {
+        toast(error.message);
+      }
+    };
+    bindEnvironmentNavigation(workspace, editor);
+    $("#dialog-content [data-env-services]").onclick = () =>
+      leaveEnvironmentDraft(editor, () => editService());
+  }
+  function editWorkspaceGlobals(workspace, query = "") {
+    const owner = project;
+    const epoch = editVersion;
+    const draftInputs = () => [
+      project.globalVariables || {},
+      project.globalVariableDefinitions || {},
+    ];
+    const source = draftInputs();
+    const original = JSON.stringify(source);
+    const rows = variableRows(...source);
+    let editor, revision;
+    const apply = () => {
+      if (
+        project !== owner ||
+        epoch !== editVersion ||
+        revision !== modalRevision ||
+        !$("#dialog").open ||
+        original !== JSON.stringify(draftInputs())
+      )
+        throw Error("项目或变量草稿已变化，请重新打开全局变量");
+      if (!editor.changed) return;
+      const next = editor.read();
+      if (original === JSON.stringify([next.values, next.definitions])) return;
+      owner.globalVariables = next.values;
+      owner.globalVariableDefinitions = next.definitions;
+      mark();
+      render();
+    };
+    modal(
+      "全局变量",
+      environmentDialogShell(owner, {
+        workspace: true,
+        section: "globals",
+        content: workspaceGlobalVariablesHTML(),
+        actions:
+          '<button type="button" id="environment-save-stay">保存</button>',
+      }),
+      apply,
+      "保存并关闭",
+    );
+    revision = modalRevision;
+    editor = mountWorkspaceGlobalVariables(
+      $(".environment-global-content"),
+      rows,
+      query,
+    );
+    bindEnvironmentNavigation(workspace, editor);
+    $("#environment-save-stay").onclick = () => {
+      try {
+        apply();
+        editWorkspaceGlobals(workspace, editor.query);
+      } catch (error) {
+        toast(error.message);
+      }
+    };
+  }
+  function editWorkspaceParameters(workspace, initialTab) {
+    const owner = project;
+    const epoch = editVersion;
+    const source = structuredClone(owner.settings?.globalParameters);
+    const original = JSON.stringify(source);
+    const issue = globalParameterWorkspaceIssue(owner.settings);
+    let editor, revision;
+    const apply = () => {
+      if (!editor) return;
+      if (
+        owner !== project ||
+        epoch !== editVersion ||
+        revision !== modalRevision ||
+        !$("#dialog").open ||
+        original !== JSON.stringify(project.settings?.globalParameters) ||
+        globalParameterWorkspaceIssue(project.settings)
+      )
+        throw Error("项目或参数草稿已变化，请重新打开全局参数");
+      if (!editor.changed) return;
+      const next = editor.read();
+      if (JSON.stringify(source ?? {}) === JSON.stringify(next)) return;
+      (owner.settings ??= {}).globalParameters = next;
+      mark();
+      render();
+    };
+    modal(
+      "全局参数",
+      environmentDialogShell(owner, {
+        workspace: true,
+        section: "parameters",
+        content: workspaceGlobalParametersHTML(issue),
+        actions: issue
+          ? ""
+          : '<button type="button" id="environment-save-stay">保存</button>',
+      }),
+      apply,
+      issue ? "完成" : "保存并关闭",
+    );
+    revision = modalRevision;
+    if (!issue) {
+      editor = mountWorkspaceGlobalParameters(
+        $(".environment-parameter-content"),
+        source,
+        initialTab,
+      );
+      editor.focusTab();
+      $("#environment-save-stay").onclick = () => {
+        try {
+          apply();
+          editWorkspaceParameters(workspace, editor.kind);
+        } catch (error) {
+          toast(error.message);
+        }
+      };
+      on("#environment-parameter-advanced", "click", () =>
+        leaveEnvironmentDraft(editor, openGlobalParameterSettings),
+      );
+    } else $('[data-env-section="parameters"]')?.focus();
+    bindEnvironmentNavigation(workspace, editor);
+  }
+  function leaveEnvironmentDraft(editor, action) {
+    if (editor?.changed && !confirm("放弃尚未保存的环境修改？")) return;
+    return action();
+  }
+  function switchEnvironmentSection(section, workspace) {
+    if (section === "cookies") return openCookieManager(workspace);
+    if (section === "globals")
+      return workspace
+        ? editWorkspaceGlobals(workspace)
+        : editVariableDefinitions();
+    return workspace
+      ? editWorkspaceParameters(workspace)
+      : openGlobalParameterSettings();
+  }
+  function openGlobalParameterSettings() {
+    $("#dialog").close();
+    page = "settings";
+    settingsSection = "settings-global-parameters";
+    render();
+    $("#parameter-scope")?.focus();
+  }
+  function bindEnvironmentNavigation(workspace, editor) {
+    const navigate = (action) => leaveEnvironmentDraft(editor, action);
+    on("#dialog-content [data-env-open]", "click", (_, button) =>
+      navigate(() => editEnvironment(button.dataset.envOpen, workspace)),
+    );
+    on("#dialog-content [data-env-new]", "click", () =>
+      navigate(() => editEnvironment(undefined, workspace)),
+    );
+    on("#dialog-content [data-env-current]", "click", () =>
+      $("#env-name").focus(),
+    );
+    on("#dialog-content [data-env-section]", "click", (_, button) => {
+      if (button.getAttribute("aria-current") === "page") return;
+      return navigate(() =>
+        switchEnvironmentSection(button.dataset.envSection, workspace),
+      );
+    });
+  }
+  on("#open-environment-settings", "click", () => {
+    const owner = project,
+      requestId = current,
+      dialog = $("#dialog");
+    const opening = openCookieManager({
+      bindNavigation: bindEnvironmentNavigation,
+    });
+    if (dialog.open && dialog.querySelector(".environment-dialog--workspace"))
+      dialog.addEventListener(
+        "close",
+        () => {
+          if (
+            !dialog.open &&
+            project === owner &&
+            page === "apis" &&
+            current === requestId
+          )
+            $("#open-environment-settings")?.focus({ preventScroll: true });
+        },
+        { once: true },
+      );
+    return opening;
   });
+  on("#add-env", "click", () => editEnvironment());
+  on("[data-edit-env]", "click", (_, e) => editEnvironment(e.dataset.editEnv));
   on("[data-delete-env]", "click", (_, e) => {
     if (project.environments.length === 1) throw Error("至少保留一个环境");
     project.environments = project.environments.filter(
@@ -4210,26 +7982,39 @@ function bind() {
     );
   });
   on("#add-example", "click", () => editExample());
+  const mockExampleOwner = project;
+  const mockExampleRequest = request();
+  const ownsMockExample = (element) =>
+    element.isConnected &&
+    page === "apis" &&
+    mode === "mock" &&
+    project === mockExampleOwner &&
+    request() === mockExampleRequest;
   on("[data-delete-example]", "click", (_, element) => {
-    const examples = request().examples,
-      index = Number(element.dataset.deleteExample);
-    if (!Number.isInteger(index) || index < 0 || index >= examples.length)
-      throw Error("响应示例不存在");
+    if (!ownsMockExample(element)) return;
+    const examples = mockExampleRequest.examples,
+      index = Number(element.dataset.deleteExample),
+      row = examples[index];
+    if (!Number.isInteger(index) || !row) throw Error("响应示例不存在");
     if (
       !confirm(
         "移除响应示例 " +
-          JSON.stringify(examples[index].name || "未命名") +
-          "？",
+          JSON.stringify(row.name || "未命名") +
+          (debugExampleDrafts.read(row)
+            ? "？该示例未完成的正文草稿也将丢弃。"
+            : "？"),
       )
     )
       return;
+    if (!ownsMockExample(element) || examples[index] !== row) return;
     examples.splice(index, 1);
+    debugExampleDrafts.clear(row);
     mark();
     render();
   });
-  on("[data-edit-example]", "click", (_, e) =>
-    editExample(Number(e.dataset.editExample)),
-  );
+  on("[data-edit-example]", "click", (_, e) => {
+    if (ownsMockExample(e)) editExample(Number(e.dataset.editExample));
+  });
   async function useMock(index) {
     if (saving) throw Error("正在保存，请完成后再切换Mock调试");
     collect();
@@ -4245,6 +8030,7 @@ function bind() {
     if (project.id !== projectId || current !== requestId || dirty)
       throw Error("接口或内容已变化，未切换Mock地址，请确认后重试");
     Object.assign(request(), target);
+    expireLiteralURLQueryRows(project, request());
     mode = "debug";
     mark();
     render();
@@ -4259,9 +8045,80 @@ function bind() {
     const source = item?.sourceRequestId || current;
     const ownerProjectId = project.id;
     let caseModalRevision;
+    const saveCase = async () => {
+      if (busy || saving) throw Error("请先结束当前请求或保存，再保存用例");
+      nativeRequestLifecycle.assertCanSave(project.id);
+      const input = {
+        name: $("#case-name")?.value,
+        folderId: $("#case-folder")?.value,
+        requestText: $("#modal-json")?.value,
+      };
+      const inputChanged = () =>
+        project.id !== ownerProjectId ||
+        modalRevision !== caseModalRevision ||
+        !$("#dialog")?.open ||
+        $("#case-name")?.value !== input.name ||
+        $("#case-folder")?.value !== input.folderId ||
+        $("#modal-json")?.value !== input.requestText;
+      if (inputChanged()) throw Error("项目或用例窗口已变化，未保存用例");
+      const requestSnapshot = JSON.parse(input.requestText);
+      const operation = projectImports.begin(ownerProjectId, "case");
+      let posted = false;
+      try {
+        collect();
+        if (dirty) {
+          if (!confirm("当前有未保存修改，先保存再保存用例？"))
+            throw Error("用例保存已取消，修改仍保留");
+          await operation.saveDraft(save);
+        }
+        if (inputChanged() || dirty || busy || saving)
+          throw Error("项目、草稿或用例内容已变化，未保存用例");
+        const targetProject = project,
+          version = editVersion,
+          openingSequence = projectOpenRequestSequence;
+        posted = true;
+        const result = await api(
+          "/projects/" + ownerProjectId + "/cases",
+          "POST",
+          {
+            id: item?.id,
+            name: input.name,
+            sourceRequestId: source,
+            folderId: input.folderId,
+            request: requestSnapshot,
+            functions: item?.functions,
+            createdAt: item?.createdAt,
+          },
+        );
+        if (
+          inputChanged() ||
+          project !== targetProject ||
+          editVersion !== version ||
+          projectOpenRequestSequence !== openingSequence ||
+          dirty ||
+          busy ||
+          saving ||
+          result?.project?.id !== ownerProjectId
+        )
+          throw Error("用例返回时项目或草稿已变化，未替换当前内容");
+        project = result.project;
+        render();
+      } catch (error) {
+        if (posted) {
+          operation.requireReconciliation();
+          throw Error(
+            error.message +
+              "。用例可能已写入原项目，请重新加载核对，勿直接重复提交；当前草稿仍保留。",
+          );
+        }
+        throw error;
+      } finally {
+        operation.finish();
+      }
+    };
     modal(
       item ? "编辑接口用例" : "新建接口用例",
-      `<label>用例名称</label><input id="case-name" value="${esc(item?.name || "新用例")}"><label>分组</label><select id="case-folder"><option value="">根目录</option>${(
+      `<div class="interface-case-editor"><div class="interface-case-scroll"><div class="interface-case-fields"><label for="case-name">用例名称<input id="case-name" value="${esc(item?.name || "新用例")}"></label><label for="case-folder">分组<select id="case-folder"><option value="">根目录</option>${(
         project.caseFolders || []
       )
         .filter((f) => f.sourceRequestId === source)
@@ -4271,78 +8128,23 @@ function bind() {
         )
         .join(
           "",
-        )}</select><label>独立请求快照</label>${jsonEditor(item?.request || request())}`,
+        )}</select></label></div><label for="modal-json">独立请求快照</label>${jsonEditor(item?.request || request())}</div><p id="case-save-error" role="alert"></p></div>`,
       async () => {
-        if (busy || saving) throw Error("请先结束当前请求或保存，再保存用例");
-        nativeRequestLifecycle.assertCanSave(project.id);
-        const input = {
-          name: $("#case-name")?.value,
-          folderId: $("#case-folder")?.value,
-          requestText: $("#modal-json")?.value,
-        };
-        const inputChanged = () =>
-          project.id !== ownerProjectId ||
-          modalRevision !== caseModalRevision ||
-          !$("#dialog")?.open ||
-          $("#case-name")?.value !== input.name ||
-          $("#case-folder")?.value !== input.folderId ||
-          $("#modal-json")?.value !== input.requestText;
-        if (inputChanged()) throw Error("项目或用例窗口已变化，未保存用例");
-        const requestSnapshot = JSON.parse(input.requestText);
-        const operation = projectImports.begin(ownerProjectId, "case");
-        let posted = false;
+        const message = $("#case-save-error");
+        if (message) message.textContent = "";
         try {
-          collect();
-          if (dirty) {
-            if (!confirm("当前有未保存修改，先保存再保存用例？"))
-              throw Error("用例保存已取消，修改仍保留");
-            await operation.saveDraft(save);
-          }
-          if (inputChanged() || dirty || busy || saving)
-            throw Error("项目、草稿或用例内容已变化，未保存用例");
-          const targetProject = project,
-            version = editVersion,
-            openingSequence = projectOpenSequence;
-          posted = true;
-          const result = await api(
-            "/projects/" + ownerProjectId + "/cases",
-            "POST",
-            {
-              id: item?.id,
-              name: input.name,
-              sourceRequestId: source,
-              folderId: input.folderId,
-              request: requestSnapshot,
-              functions: item?.functions,
-              createdAt: item?.createdAt,
-            },
-          );
-          if (
-            inputChanged() ||
-            project !== targetProject ||
-            editVersion !== version ||
-            projectOpenSequence !== openingSequence ||
-            dirty ||
-            busy ||
-            saving ||
-            result?.project?.id !== ownerProjectId
-          )
-            throw Error("用例返回时项目或草稿已变化，未替换当前内容");
-          project = result.project;
-          render();
+          await saveCase();
         } catch (error) {
-          if (posted) {
-            operation.requireReconciliation();
-            throw Error(
-              error.message +
-                "。用例可能已写入原项目，请重新加载核对，勿直接重复提交；当前草稿仍保留。",
-            );
-          }
+          if (
+            modalRevision === caseModalRevision &&
+            $("#dialog")?.open &&
+            message?.isConnected
+          )
+            message.textContent = error.message;
           throw error;
-        } finally {
-          operation.finish();
         }
       },
+      "保存",
     );
     caseModalRevision = modalRevision;
   }
@@ -4394,32 +8196,53 @@ function bind() {
     await save();
     render();
   });
-  if ($("#select-all-cases")) {
-    const total = (project.cases || []).filter(
-      (c) => c.sourceRequestId === current,
-    ).length;
-    const count = selectedInterfaceCases().size;
-    $("#select-all-cases").indeterminate = count > 0 && count < total;
+  const casePanel = $(".case-populated-layout");
+  if (casePanel) {
+    const owner = project,
+      source = current;
+    const ownsSelection = () =>
+      casePanel.isConnected &&
+      project === owner &&
+      current === source &&
+      mode === "cases";
+    const all = casePanel.querySelector("#select-all-cases");
+    const rows = [...casePanel.querySelectorAll("[data-select-case]")];
+    const counter = casePanel.querySelector("[data-case-selection-count]");
+    const actions = casePanel.querySelector(".case-selected-actions");
+    const syncSelection = () => {
+      const selected = selectedInterfaceCases();
+      all.checked = rows.length > 0 && selected.size === rows.length;
+      all.indeterminate = selected.size > 0 && selected.size < rows.length;
+      for (const row of rows) {
+        row.checked = selected.has(row.dataset.selectCase);
+        row
+          .closest(".interface-case-row")
+          .classList.toggle("case-row-selected", row.checked);
+      }
+      counter.toggleAttribute("data-empty", !selected.size);
+      counter.textContent = "已选 " + selected.size + " 项";
+      actions.hidden = !selected.size;
+      for (const button of actions.querySelectorAll("button"))
+        button.disabled = busy || !selected.size;
+    };
+    syncSelection();
+    all.addEventListener("change", () => {
+      if (!ownsSelection() || busy || all.disabled) return;
+      caseSelections.set(
+        owner.id + ":" + source,
+        new Set(all.checked ? rows.map((row) => row.dataset.selectCase) : []),
+      );
+      syncSelection();
+    });
+    for (const row of rows)
+      row.addEventListener("change", () => {
+        if (!ownsSelection() || busy || row.disabled) return;
+        const selected = selectedInterfaceCases();
+        if (row.checked) selected.add(row.dataset.selectCase);
+        else selected.delete(row.dataset.selectCase);
+        syncSelection();
+      });
   }
-  on("#select-all-cases", "change", (_, element) => {
-    caseSelections.set(
-      project.id + ":" + current,
-      new Set(
-        element.checked
-          ? (project.cases || [])
-              .filter((c) => c.sourceRequestId === current)
-              .map((c) => c.id)
-          : [],
-      ),
-    );
-    render();
-  });
-  on("[data-select-case]", "change", (_, element) => {
-    const selected = selectedInterfaceCases();
-    if (element.checked) selected.add(element.dataset.selectCase);
-    else selected.delete(element.dataset.selectCase);
-    render();
-  });
   on("#move-selected-cases", "click", () => {
     const ids = [...selectedInterfaceCases()],
       source = current;
@@ -4614,6 +8437,7 @@ function bind() {
       const environmentId = env();
       busy = true;
       ownsBusy = true;
+      singleCaseRun = { projectId: write.projectId, sourceRequestId: source };
       runId = uid();
       render();
       posted = true;
@@ -4635,7 +8459,11 @@ function bind() {
       if (posted) throw write.uncertain(error);
       throw error;
     } finally {
-      if (ownsBusy) busy = false;
+      if (ownsBusy) {
+        busy = false;
+        runId = null;
+        singleCaseRun = null;
+      }
       write.operation.finish();
       render();
     }
@@ -4677,6 +8505,7 @@ function bind() {
   });
   on("#load-run", "click", async () => {
     assertExecutionReady();
+    if (httpPreWaitDrafts.pending([request()])) throw Error(waitDraftError);
     collect();
     const count = Number($("#load-count").value),
       concurrency = Number($("#load-concurrency").value),
@@ -4706,20 +8535,29 @@ function bind() {
       concurrency,
       dataCSV,
     });
-    loadResult = null;
+    const owner = { projectId: project.id, requestId: current, result: null };
+    const requestDraft = request(),
+      environmentId = env();
+    loadResult = owner;
     busy = true;
     runId = uid();
     render();
     try {
-      loadResult = await api("/projects/" + project.id + "/load", "POST", {
-        ...timing,
-        request: request(),
-        environmentId: env(),
-        count,
-        concurrency,
-        dataCSV,
-        runId,
-      });
+      const result = await api(
+        "/projects/" + owner.projectId + "/load",
+        "POST",
+        {
+          ...timing,
+          request: requestDraft,
+          environmentId,
+          count,
+          concurrency,
+          dataCSV,
+          runId,
+        },
+      );
+      if (loadResult === owner && project.id === owner.projectId)
+        owner.result = result;
     } finally {
       busy = false;
       render();
@@ -4731,13 +8569,15 @@ function bind() {
       "新建执行计划",
       '<label>计划名称</label><input id="plan-name" class="${plan.provenance?.fields?.name==="ai"?"ai-value":""}" value="业务流程验证"><p class="muted">保存当前接口快照，后续接口变更不会影响计划。</p>',
       async () => {
+        const source = request();
+        const steps = source
+          ? [{ request: snapshotInterfaceForPlan(source) }]
+          : [];
         page = "plans";
         await savePlan({
           name: $("#plan-name").value,
           environmentId: env(),
-          steps: request()
-            ? [{ request: snapshotInterfaceForPlan(request()) }]
-            : [],
+          steps,
         });
       },
     );
@@ -4854,25 +8694,54 @@ function bind() {
       },
     });
   });
-  on("#add-step", "click", () =>
-    modal(
-      "添加步骤",
-      `<label>选择接口</label><select id="step-api">${project.requests
-        .filter((r) => !r.deletedAt)
-        .map(
-          (r) => `<option value="${r.id}">${r.method} ${esc(r.name)}</option>`,
-        )
-        .join("")}</select>`,
-      async () => {
-        assertExecutionReady();
-        const p = project.plans.find((p) => p.id === planId);
-        const r = project.requests.find((r) => r.id === $("#step-api").value);
-        if (!r) throw Error("请先创建接口");
-        p.steps.push({ request: snapshotInterfaceForPlan(r) });
-        await savePlan(p);
-      },
-    ),
-  );
+  on("#add-step", "click", async () => {
+    assertExecutionReady();
+    const plan = project.plans.find((item) => item.id === planId);
+    const selected = selectedPlanStepIds();
+    if (!plan || !selected.length) return;
+    const requests = new Map(
+      project.requests
+        .filter((item) => !item.deletedAt)
+        .map((item) => [item.id, item]),
+    );
+    const steps = selected.map((id) => {
+      const request = requests.get(id);
+      if (!request) throw Error("所选接口已变化，请重新选择");
+      return { request: snapshotInterfaceForPlan(request) };
+    });
+    await savePlan({ ...plan, steps: [...plan.steps, ...steps] });
+  });
+  const stepPicker = $("#plan-step-picker");
+  const selectedPlanStepIds = stepPicker
+    ? bindPlanPickerTree(stepPicker, (count) => {
+        $("#add-step").disabled = !count;
+        stepPicker.querySelector(":scope > summary").textContent = count
+          ? "已选 " + count + " 个接口"
+          : "选择要执行的接口";
+      })
+    : () => [];
+  on("#plan-step-picker", "keydown", (event, picker) => {
+    if (event.key !== "Escape" || !picker.open) return;
+    event.preventDefault();
+    picker.open = false;
+    picker.querySelector("summary").focus();
+  });
+  on("#plan-step-picker", "focusout", (event, picker) => {
+    if (
+      picker.open &&
+      event.relatedTarget &&
+      !picker.contains(event.relatedTarget)
+    )
+      picker.open = false;
+  });
+  on(".plans-page", "click", (event) => {
+    const picker = $("#plan-step-picker");
+    if (picker?.open && !event.composedPath().includes(picker))
+      picker.open = false;
+  });
+  on("#plan-step-picker", "toggle", (_, picker) => {
+    if (picker.open) picker.querySelector("input[type=search]").focus();
+  });
   on("#plan-status-policy", "change", async (_, e) => {
     assertExecutionReady();
     const plan = project.plans.find((item) => item.id === planId);
@@ -5011,6 +8880,95 @@ function bind() {
     }
   });
   on("#history-project-reload", "click", () => openProject(project.id));
+  const historyRoot = $(".recent-http-history");
+  if (historyRoot) {
+    const owner = project,
+      openedVersion = projectOpenSequence;
+    const active = () =>
+      page === "history" &&
+      project === owner &&
+      projectOpenSequence === openedVersion;
+    const state = () => ({
+      dirty: dirty || graphqlDrafts.hasProject(owner),
+      busy,
+      saving,
+    });
+    const loadSaved = (id) =>
+      api("/projects/" + encodeURIComponent(id) + "/recent-saved-definitions");
+    const canSelectSaved = (receipt) => {
+      if (!active() || !recentSavedTrashAvailable(owner, receipt, state()))
+        return false;
+      try {
+        nativeRequestLifecycle.assertCanSave(owner.id);
+        projectImports.assertCanSave(owner.id);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    bindRecentHistoryFilter(historyRoot, {
+      projectId: owner.id,
+      active,
+      loadSaved,
+      canSelectSaved,
+      confirmMoveSaved: ({
+        ids,
+        receipt,
+        current: selectionCurrent,
+        opener,
+        applied,
+      }) => {
+        const version = editVersion;
+        let dialogRevision,
+          moved = false;
+        const ownsDialog = () =>
+          selectionCurrent() &&
+          modalRevision === dialogRevision &&
+          $("#dialog").open &&
+          editVersion === version;
+        const requireOwner = () => {
+          if (!ownsDialog())
+            throw Error("已保存版本或项目已变化，未移到回收站；请重新读取");
+        };
+        modal(
+          `将所选 ${ids.length} 个接口移到回收站？`,
+          "<p>只更新当前项目草稿，不会立即写入。请显式保存项目；已保存的接口可以从回收站恢复。</p>",
+          async () => {
+            requireOwner();
+            const latest = await loadSaved(owner.id);
+            if (modalRevision !== dialogRevision || !$("#dialog").open) return;
+            requireOwner();
+            const targets = recentSavedTrashTargets(
+              owner,
+              ids,
+              receipt,
+              latest,
+              state(),
+            );
+            const deletedAt = new Date().toISOString();
+            for (const entry of targets) entry.deletedAt = deletedAt;
+            if (ids.includes(current)) {
+              current = owner.requests.find((entry) => !entry.deletedAt)?.id;
+              response = responses.get(owner.id + ":" + current) || null;
+            }
+            mark();
+            moved = true;
+            applied();
+          },
+          "移到回收站",
+          () => {
+            if (!active()) return;
+            if (moved) $("#save-project")?.focus({ preventScroll: true });
+            else if (opener.isConnected && !opener.closest("[hidden]"))
+              opener.focus({ preventScroll: true });
+            else $("#recent-saved-tab")?.focus({ preventScroll: true });
+          },
+        );
+        dialogRevision = modalRevision;
+        $('#dialog footer button[value="cancel"]').focus();
+      },
+    });
+  }
   on("#protocol-history-filter", "submit", (event) => {
     event.preventDefault();
     applyProtocolHistoryFilters($("#protocol-history"), project);
@@ -5076,6 +9034,7 @@ function bind() {
     );
     mark();
     page = "apis";
+    activeDocumentId = null;
     mode = "design";
     render();
   });
@@ -5098,7 +9057,109 @@ function bind() {
     ),
   );
 }
+function duplicateRequest(target) {
+  if (graphqlDrafts.pending(target)) throw Error(unappliedGraphQL);
+  collect();
+  const copy = structuredClone(target);
+  copy.id = uid();
+  copy.name += " 副本";
+  project.requests.push(copy);
+  current = copy.id;
+  activeDocumentId = null;
+  response = null;
+  if (!opened.includes(current)) opened.push(current);
+  mark();
+  render();
+}
+
+function ordinaryRequestRowOwner(target) {
+  const owner = project,
+    selection = current,
+    documentId = activeDocumentId,
+    name = target?.name,
+    version = editVersion;
+  return () =>
+    Boolean(
+      target &&
+        project === owner &&
+        page === "apis" &&
+        current === selection &&
+        activeDocumentId === documentId &&
+        target.name === name &&
+        owner.requests.find((item) => item.id === target.id) === target &&
+        !owner.settings?.nativeInheritance &&
+        !target.deletedAt &&
+        editVersion === version &&
+        !busy &&
+        !saving,
+    );
+}
+
+function confirmOrdinaryRequestTrash(target, opener) {
+  if (graphqlDrafts.pending(target)) throw Error(unappliedGraphQL);
+  const owner = project,
+    selected = !workspaceDocument() && request() === target,
+    ownsTarget = ordinaryRequestRowOwner(target);
+  if (!ownsTarget()) throw Error("接口已变化或操作正在进行，请稍后再试");
+  let moved = false,
+    dialogRevision;
+  modal(
+    "确定将 " + target.name + " 移到回收站？",
+    '<div class="request-trash-confirmation" aria-hidden="true"></div>',
+    () => {
+      if (
+        !ownsTarget() ||
+        modalRevision !== dialogRevision ||
+        !$("#dialog").open
+      )
+        throw Error("接口或草稿已变化，未移到回收站；请重新打开确认");
+      // A different editor remains open. Validate/retain its draft before a redraw.
+      if (!selected) collect();
+      target.deletedAt = new Date().toISOString();
+      if (current === target.id) {
+        current = owner.requests.find((r) => !r.deletedAt)?.id;
+        if (selected)
+          response = responses.get(owner.id + ":" + current) || null;
+      }
+      mark();
+      moved = true;
+      render();
+    },
+    "确定",
+    () => {
+      if (project !== owner || page !== "apis") return;
+      if (!moved && opener?.isConnected) opener.focus({ preventScroll: true });
+      else if (moved)
+        (
+          $("#request-name") ||
+          $(".tab.selected .tab-switch") ||
+          $("#welcome-add")
+        )?.focus({ preventScroll: true });
+    },
+  );
+  dialogRevision = modalRevision;
+  $('#dialog footer button[value="cancel"]').focus();
+}
+
 function bindTree() {
+  bindApiRowMenu($("#tree"), {
+    prepare(id) {
+      if ($("#dialog").open) throw Error("请先结束当前对话框");
+      const target = project.requests.find((item) => item.id === id);
+      const owns = ordinaryRequestRowOwner(target);
+      if (!owns()) throw Error("接口已变化或操作正在进行，请稍后再试");
+      return (action, trigger) => {
+        if (!owns() || $("#dialog").open)
+          throw Error("接口或草稿已变化，请重新打开操作菜单");
+        if (action === "clone") {
+          duplicateRequest(target);
+          $(".tab.selected .tab-switch")?.focus({ preventScroll: true });
+        } else if (action === "trash")
+          confirmOrdinaryRequestTrash(target, trigger);
+      };
+    },
+    notify: toast,
+  });
   for (const folder of document.querySelectorAll("[data-tree-folder]")) {
     const key = project.id + ":" + folder.dataset.treeFolder;
     folder.ontoggle = () => {
@@ -5142,15 +9203,11 @@ function bindTree() {
     page = "grpc";
     render();
   });
-  on("[data-document-index]", "click", (_, element) => {
-    collect();
-    const index = Number(element.dataset.documentIndex);
-    page = "docs";
-    render();
-    document
-      .querySelector('[data-edit-document="' + index + '"]')
-      ?.closest("article")
-      ?.scrollIntoView({ block: "start" });
+  on("[data-document-index]", "click", (event, element) => {
+    const item = project.documents[Number(element.dataset.documentIndex)];
+    const keyboard = event.detail === 0 && element === document.activeElement;
+    openWorkspaceDocument(item?.id);
+    if (keyboard) $(".tab.selected .tab-switch")?.focus();
   });
   on("[data-protocol-id]", "click", (_, element) => {
     collect();
@@ -5176,6 +9233,8 @@ function bindTree() {
         const remove = $("#folder-remove").checked,
           name = $("#folder-name").value.trim();
         if (!remove && !name) throw Error("名称不能为空");
+        if (debugExampleDrafts.pending(project.requests))
+          throw Error("请先修正或撤回无效的响应示例正文，再修改目录");
         const changed = moveFolderTree(project, old, remove ? null : name);
         const serviceId = $("#folder-service").value;
         if (!remove) {
@@ -5211,23 +9270,266 @@ function bindTree() {
   on("[data-request]", "click", (_, e) => {
     collect();
     current = e.dataset.request;
+    activeDocumentId = null;
     if (!opened.includes(current)) opened.push(current);
     page = "apis";
     response = responses.get(project.id + ":" + current) || null;
     render();
   });
 }
-function editExample(index) {
+function bindDebugExamples(pane, owner, target) {
+  const examples = target.examples;
+  const { choices, current } = debugExampleChoices(
+    target,
+    debugExampleSelections.get(target),
+  );
+  let row = current?.row;
+  const preset = row ? debugExampleDrafts.implicitPreset(row) : current?.key;
+  const selected = pane.querySelector(
+    '[data-debug-example-choice][aria-pressed="true"]',
+  );
+  const owns = () =>
+    pane.isConnected &&
+    project === owner &&
+    request() === target &&
+    page === "apis" &&
+    mode === "debug" &&
+    responseTab === "examples" &&
+    target.examples === examples &&
+    (!row || examples.includes(row));
+  const focus = (selector) => $(selector)?.focus({ preventScroll: true });
+  on(
+    "[data-debug-example-choice]",
+    "click",
+    (_, button) => {
+      if (!owns()) return;
+      const choice = choices.find(
+        ({ key }) => key === button.dataset.debugExampleChoice,
+      );
+      if (!choice) return;
+      const next =
+        (choice === current ? row : choice.row) ||
+        (choice === current ? preset : choice.key);
+      debugExampleSelections.set(target, next);
+      const active = debugExampleChoices(target, next).current;
+      render();
+      if (active) focus(`[data-debug-example-choice="${active.key}"]`);
+    },
+    pane,
+  );
+  const body = pane.querySelector("#debug-example-body");
+  const error = pane.querySelector("#debug-example-error");
+  const format = pane.querySelector(".http-debug-example-format");
+  const notice = () => {
+    const invalid = debugExampleDrafts.read(row);
+    body.setAttribute("aria-invalid", String(Boolean(invalid)));
+    error.hidden = !invalid;
+    error.textContent = invalid?.message || "";
+  };
+  const restorePreset = (value) => {
+    const wasOnlyEdit =
+      row &&
+      debugExampleDrafts.soleImplicitEdit(owner, row, editVersion, dirty);
+    const key = row && debugExampleDrafts.returnToPreset(target, row, value);
+    if (!key) return false;
+    row = undefined;
+    debugExampleSelections.set(target, key);
+    selected.title = "未保存的示例预设";
+    body.placeholder = "输入正文以创建示例草稿（纯文本）。";
+    format.hidden = true;
+    format.textContent = "";
+    mark();
+    if (wasOnlyEdit) {
+      dirty = false;
+      $("#save")?.classList.remove("primary");
+      $("#save-project")?.classList.remove("primary");
+      const indicator = $("#saved-state");
+      if (indicator) indicator.textContent = "✓ 已保存";
+    }
+    return true;
+  };
+  const editBody = (event) => {
+    if (!owns() || body.readOnly || event.isComposing) return;
+    const value = body.value;
+    if (restorePreset(value)) {
+      notice();
+      return;
+    }
+    if (!row) {
+      row = debugExampleDrafts.materializePreset(target, preset, value);
+      if (!row) return;
+      debugExampleSelections.set(target, row);
+      selected.removeAttribute("title");
+      body.placeholder = "";
+      format.textContent = `纯文本 · ${row.status}`;
+      format.hidden = false;
+    }
+    if (!editableDebugExample(target, row)) return;
+    if (value === row.body && !debugExampleDrafts.read(row)) return;
+    const sole = debugExampleDrafts.soleImplicitEdit(
+      owner,
+      row,
+      editVersion,
+      dirty,
+    );
+    debugExampleDrafts.edit(target, row, value);
+    notice();
+    mark();
+    if (sole) debugExampleDrafts.rememberSoleEdit(owner, row, editVersion);
+  };
+  // Keep the live textarea mounted for first input, composition, Undo and Redo.
+  on("#debug-example-body", "input", editBody, pane);
+  on("#debug-example-body", "compositionend", editBody, pane);
+  on(
+    "#debug-example-body",
+    "keydown",
+    (event) => {
+      if (
+        event.key !== "Escape" ||
+        event.isComposing ||
+        !owns() ||
+        !row ||
+        !debugExampleDrafts.clear(row)
+      )
+        return;
+      body.value = row.body;
+      restorePreset(body.value);
+      notice();
+      event.preventDefault();
+    },
+    pane,
+  );
+  const form = pane.querySelector("#debug-example-settings");
+  if (!form) return;
+  const name = form.querySelector("#debug-example-name");
+  const status = form.querySelector("#debug-example-status");
+  let action, anchor, openedRow;
+  const place = () => {
+    const box = anchor.getBoundingClientRect();
+    const width = form.getBoundingClientRect().width;
+    const height = form.getBoundingClientRect().height;
+    form.style.left =
+      Math.max(
+        8,
+        Math.min(box.left, document.documentElement.clientWidth - width - 8),
+      ) + "px";
+    form.style.top =
+      (box.bottom + height + 13 <= window.innerHeight
+        ? box.bottom + 5
+        : Math.max(8, box.top - height - 5)) + "px";
+  };
+  const close = () => {
+    if (form.matches(":popover-open")) form.hidePopover();
+    anchor?.focus({ preventScroll: true });
+  };
+  on(
+    "#debug-example-edit, #debug-example-add",
+    "click",
+    (_, button) => {
+      if (!owns()) return;
+      anchor = button;
+      openedRow = row;
+      action = button.id === "debug-example-edit" ? "edit" : "add";
+      name.value = action === "edit" ? (row?.name ?? current.name) : "";
+      status.value = String(
+        action === "edit" ? (row?.status ?? current.status) : 200,
+      );
+      form.showPopover();
+      button.setAttribute("aria-expanded", "true");
+      place();
+      name.focus();
+    },
+    pane,
+  );
+  on(
+    "#debug-example-settings",
+    "toggle",
+    () => {
+      if (!form.matches(":popover-open"))
+        anchor?.setAttribute("aria-expanded", "false");
+    },
+    pane,
+  );
+  on(
+    "#debug-example-cancel",
+    "click",
+    () => {
+      if (owns()) close();
+    },
+    pane,
+  );
+  on(
+    "#debug-example-settings",
+    "keydown",
+    (event) => {
+      if (event.key !== "Escape" || !owns()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    },
+    pane,
+  );
+  on(
+    "#debug-example-settings",
+    "submit",
+    (event) => {
+      event.preventDefault();
+      if (!owns() || openedRow !== row || !form.matches(":popover-open"))
+        return;
+      const existing = action === "edit" ? row : undefined;
+      const next = prepareDebugExampleMetadata(
+        target,
+        existing,
+        name.value,
+        status.value,
+      );
+      if (existing) {
+        existing.name = next.name;
+        existing.status = next.status;
+        debugExampleDrafts.keepExample(existing);
+      } else {
+        examples.push(next);
+        if (action === "edit") debugExampleSelections.set(target, next);
+        else if (current) debugExampleSelections.set(target, row || preset);
+      }
+      const focusReturn =
+        action === "edit" ? "#debug-example-edit" : "#debug-example-add";
+      form.hidePopover();
+      mark();
+      render();
+      focus(focusReturn);
+    },
+    pane,
+  );
+}
+
+function editExample(index, designScope) {
+  const owner = project;
+  const expectedMode = mode;
   const r = request(),
-    ex = r.examples[index] || {
-      name: "成功响应",
-      status: 200,
-      body: '{\n  "success": true\n}',
+    original = r.examples[index],
+    ex = original || {
+      name: designScope ? "响应示例" : "成功响应",
+      status: designScope ? Number(designScope.definition.status) : 200,
+      body: designScope ? "{}" : '{\n  "success": true\n}',
+      ...(designScope
+        ? { headers: { "content-type": designScope.media } }
+        : {}),
     };
+  debugExampleDrafts.assertReplaceable(original);
   modal(
     "响应示例",
-    `<div class="example-settings"><label>名称<input id="ex-name" value="${esc(ex.name)}"></label><label>状态码<input id="ex-status" type="number" value="${esc(ex.status)}"></label><label>延迟（ms）<input id="ex-delay" type="number" min="0" max="5000" value="${esc(ex.delayMs ?? 0)}"></label></div><p class="muted">100–199 仅作为文档示例；204/205/304 不发送正文。延迟范围 0–5000ms。</p><label>响应内容（允许为空）</label><textarea id="ex-body">${esc(ex.body)}</textarea><label>响应头（JSON对象，禁止传输/隔离控制头）</label><textarea id="ex-headers">${esc(JSON.stringify(ex.headers ?? {}, null, 2))}</textarea>`,
+    `<div class="example-settings"><label>名称<input id="ex-name" value="${esc(ex.name)}"></label><label>状态码<input id="ex-status" type="number" value="${esc(ex.status)}" ${designScope ? "readonly" : ""}></label><label>延迟（ms）<input id="ex-delay" type="number" min="0" max="5000" value="${esc(ex.delayMs ?? 0)}"></label></div><p class="muted">100–199 仅作为文档示例；204/205/304 不发送正文。延迟范围 0–5000ms。</p><label>响应内容（允许为空）</label><textarea id="ex-body">${esc(ex.body)}</textarea><label>响应头（JSON对象，禁止传输/隔离控制头）</label><textarea id="ex-headers">${esc(JSON.stringify(ex.headers ?? {}, null, 2))}</textarea>`,
     () => {
+      if (
+        project !== owner ||
+        request() !== r ||
+        mode !== expectedMode ||
+        page !== "apis" ||
+        (index !== undefined && r.examples[index] !== original)
+      )
+        throw Error("响应示例草稿已变化，请重新打开");
+      debugExampleDrafts.assertReplaceable(original);
       const val = editResponseExample(ex, {
         name: $("#ex-name").value,
         status: Number($("#ex-status").value),
@@ -5235,12 +9537,189 @@ function editExample(index) {
         headers: JSON.parse($("#ex-headers").value.trim() || "{}"),
         delayMs: Number($("#ex-delay").value),
       });
+      if (designScope) {
+        if (
+          request() !== r ||
+          !r.responses.includes(designScope.definition) ||
+          (index !== undefined && r.examples[index] !== ex)
+        )
+          throw Error("响应示例草稿已变化，请重新打开");
+        if (
+          String(val.status) !== String(designScope.definition.status) ||
+          exampleMedia(val.headers) !== designScope.media
+        )
+          throw Error("请在所属响应状态和 Content-Type 下编辑示例");
+        try {
+          JSON.parse(val.body);
+        } catch {
+          throw Error("JSON 响应示例正文无效");
+        }
+      }
       if (index === undefined) r.examples.push(val);
       else r.examples[index] = val;
       mark();
       render();
     },
   );
+}
+
+function bindWorkspaceModel() {
+  const owner = project;
+  const draft = workspaceModelDrafts.get(owner.id);
+  const current = () =>
+    project === owner &&
+    page === "dictionary" &&
+    workspaceModelDrafts.get(owner.id) === draft;
+  const reveal = (control) => {
+    const target = $(control);
+    target?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    target?.focus({ preventScroll: true });
+  };
+  on("[data-open-model-workspace]", "click", () => {
+    if (project !== owner || page !== "dictionary") return;
+    workspaceModelDrafts.open(owner.id);
+    render();
+    reveal("#model-workspace-name");
+  });
+  on("[data-new-model-workspace-folder]", "click", (_, button) => {
+    if (project !== owner || page !== "dictionary") return;
+    button.closest("details").open = false;
+    editModelFolder();
+  });
+  if (!draft?.active) return;
+  on("[data-dictionary-jump]", "click", (_, element) => {
+    if (!current()) return;
+    draft.active = false;
+    const target = element.dataset.dictionaryJump;
+    render();
+    reveal("#" + target);
+  });
+  on("#model-workspace-list", "click", () => {
+    if (!current()) return;
+    draft.active = false;
+    render();
+    reveal("#dictionary-surface-heading");
+  });
+  on("#model-workspace-name", "input", (_, input) => {
+    if (current()) draft.name = input.value;
+  });
+  on("#model-workspace-folder", "change", (_, input) => {
+    if (current()) draft.folderId = input.value;
+  });
+  on("#model-workspace-discard", "click", () => {
+    if (!current()) return;
+    if (draft.changed && !confirm("放弃这份未应用的数据模型草稿？")) return;
+    workspaceModelDrafts.finish(owner.id, draft);
+    render();
+    reveal("#dictionary-surface-heading");
+  });
+  bindModelFieldTypeMenu($(".model-draft-schema"), {
+    active: current,
+    notify: toast,
+    choose: (index, target) => {
+      const schema = changeWorkspaceModelFieldType(draft.schema, index, target);
+      if (schema === draft.schema) return;
+      draft.replaceSchema(schema);
+      render();
+      reveal("#model-type-trigger-" + index);
+    },
+  });
+  on("[data-model-required]", "click", (_, control) => {
+    if (!current() || !control.isConnected) return;
+    const index = Number(control.dataset.modelRequired);
+    const required = control.getAttribute("aria-pressed") !== "true";
+    const schema = setWorkspaceModelFieldRequired(
+      draft.schema,
+      index,
+      required,
+    );
+    if (schema === draft.schema) return;
+    draft.replaceSchema(schema);
+    render();
+    reveal("#model-required-" + index);
+  });
+  const fieldInput = (id) => "#model-field-name-" + id;
+  const startField = (after) => {
+    if (!current()) return;
+    const id = draft.tree.begin(draft.schema, after);
+    render();
+    reveal(fieldInput(id));
+  };
+  const resolveField = (id, cancel = false) => {
+    if (!current()) return;
+    const index = draft.tree.pending.findIndex((field) => field.id === id);
+    if (cancel) draft.tree.cancel(id);
+    else if (!draft.tree.confirm(draft, id)) {
+      render();
+      reveal(fieldInput(id));
+      return;
+    }
+    const next = draft.tree.pending[index] || draft.tree.pending.at(-1);
+    render();
+    reveal(next ? fieldInput(next.id) : "#model-root-add");
+  };
+  on("#model-root-expand", "click", () => {
+    if (!current()) return;
+    draft.tree.expanded = !draft.tree.expanded;
+    render();
+    reveal("#model-root-expand");
+  });
+  on("#model-root-add", "click", () => startField());
+  on("[data-model-field-sibling]", "click", (_, button) =>
+    startField(button.dataset.modelFieldSibling),
+  );
+  on("[data-model-field-name]", "input", (_, input) => {
+    if (current()) draft.tree.input(input.dataset.modelFieldName, input.value);
+  });
+  on("[data-model-field-name]", "keydown", (event, input) => {
+    if (
+      event.isComposing ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      (event.key !== "Enter" && event.key !== "Escape")
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    resolveField(input.dataset.modelFieldName, event.key === "Escape");
+  });
+  on("[data-model-field-confirm]", "click", (_, button) =>
+    resolveField(button.dataset.modelFieldConfirm),
+  );
+  on("[data-model-field-cancel]", "click", (_, button) =>
+    resolveField(button.dataset.modelFieldCancel, true),
+  );
+  on("#model-workspace-apply", "click", () => {
+    if (!current()) return;
+    draft.tree.assertResolved();
+    saveModel(owner, undefined, draft, uid());
+    workspaceModelDrafts.finish(owner.id, draft);
+    mark();
+    render();
+    reveal("#dictionary-models-heading");
+  });
+  on("#model-workspace-raw", "click", () => {
+    if (!current()) return;
+    draft.tree.assertResolved();
+    modal(
+      "Raw",
+      modelRawEditorMarkup(),
+      () => {
+        if (!current()) throw Error("模型草稿已变化，请重新打开 Raw 编辑");
+        draft.replaceSchema(JSON.parse($("#model-workspace-json").value));
+        render();
+      },
+      "应用到模型草稿",
+      () => {
+        if (current()) reveal("#model-workspace-raw");
+      },
+    );
+    bindModelRawEditor(
+      $(".model-workspace-raw"),
+      JSON.stringify(draft.schema, null, 2),
+    );
+  });
 }
 
 function editModelFolder(id) {
@@ -5319,12 +9798,23 @@ function editDictionary(index) {
 }
 async function send() {
   assertExecutionReady();
+  if (httpPreWaitDrafts.pending([request()])) throw Error(waitDraftError);
+  if (graphqlDrafts.pending(request())) throw Error(unappliedGraphQL);
   collect();
   const targetId = current,
     projectId = project.id,
     revision = project.revision;
   const snapshot = structuredClone(request());
+  const responseKey = projectId + ":" + targetId;
+  const namedGraphQL = snapshot.graphqlEditorVersion === 1;
+  const graphqlEpoch =
+    namedGraphQL && graphqlResponseFence.capture(responseKey);
   const environmentId = env();
+  const reveal = manualResponseView.capture(
+    readAfterSendResponse(localStorage),
+    project,
+    targetId,
+  );
   busy = true;
   runId = uid();
   render();
@@ -5351,14 +9841,33 @@ async function send() {
   } catch (error) {
     result = { error: error.message };
   } finally {
-    responses.set(projectId + ":" + targetId, result);
-    if (project.id === projectId && current === targetId) response = result;
+    const stillNamesGraphQL =
+      !namedGraphQL || graphqlResponseFence.current(responseKey, graphqlEpoch);
+    if (stillNamesGraphQL) responses.set(responseKey, result);
+    if (stillNamesGraphQL && project.id === projectId && current === targetId) {
+      response = result;
+      if (
+        manualResponseView.shouldReveal(
+          reveal,
+          readAfterSendResponse(localStorage),
+          result,
+        )
+      )
+        responseTab = "body";
+    }
     busy = false;
     render(true);
   }
 }
 document.addEventListener("keydown", (e) => {
-  if ($("#dialog").open) {
+  if (
+    $("#dialog").open ||
+    $("#curl-preview-dialog")?.open ||
+    $("#empty-trash-dialog")?.open ||
+    $("#appearance-dialog")?.open ||
+    $("#project-switch-confirmation")?.open ||
+    $("#graphql-named-delete-confirm")?.matches?.(":popover-open")
+  ) {
     if ((e.ctrlKey || e.metaKey) && ["s", "Enter"].includes(e.key))
       e.preventDefault();
     return;
@@ -5378,6 +9887,8 @@ document.addEventListener("keydown", (e) => {
     (e.ctrlKey || e.metaKey) &&
     e.key === "Enter" &&
     page === "apis" &&
+    !workspaceDocument() &&
+    request() &&
     !busy
   ) {
     e.preventDefault();
@@ -5387,6 +9898,8 @@ document.addEventListener("keydown", (e) => {
 window.addEventListener("beforeunload", (e) => {
   if (
     dirty ||
+    designResponseSettingsDrafts.hasProject(project) ||
+    graphqlDrafts.hasProject(project) ||
     (grpcWorkbenchProject === project?.id && grpcWorkbenchState?.draftDirty) ||
     (socketioWorkbenchProject === project?.id &&
       socketioWorkbenchState?.draftDirty)
@@ -5396,11 +9909,14 @@ window.addEventListener("beforeunload", (e) => {
   }
 });
 async function init() {
+  applyFontScale(document.documentElement, readFontScale(localStorage));
   compactUI = localStorage.getItem("compact-ui") === "true";
   responseLayout =
     localStorage.getItem("response-layout") === "split" ? "split" : "stacked";
-  if (localStorage.getItem("theme") === "dark")
-    document.body.classList.add("dark");
+  document.body.classList.toggle(
+    "dark",
+    appearanceTheme(localStorage.getItem("theme")) === "dark",
+  );
   token =
     new URLSearchParams(location.hash.slice(1)).get("token") ||
     sessionStorage.getItem("local-api-token") ||
@@ -5409,6 +9925,16 @@ async function init() {
     history.replaceState(null, "", location.pathname + location.search);
   const localSession = await api("/session");
   token = localSession.token;
+  currentBuild = productBuild(localSession.version);
+  if (typeof window.desktop?.appVersion === "function")
+    void Promise.resolve()
+      .then(() => window.desktop.appVersion())
+      .then((installed) => {
+        currentBuild = productBuild(localSession.version, installed);
+        updateProductVersion(document, currentBuild);
+      })
+      .catch(() => {});
+
   sessionController = createProtocolSessionController({
     api,
     storage: sessionStorage,
@@ -5608,7 +10134,95 @@ function editMockField(id) {
   );
 }
 
-function editDocument(index) {
+function bindWorkspaceDocument() {
+  const doc = workspaceDocument();
+  if (!doc) return;
+  const owner = project;
+  const active = () => owner === project && workspaceDocument() === doc;
+  const preview = $("#workspace-document-preview");
+  prepareWorkspaceDocumentLinks(preview);
+  on("#workspace-document-toggle", "click", () => {
+    if (!active()) return;
+    const prefs = documentModes.get(doc.id);
+    const editing = prefs?.view !== "edit";
+    documentModes.set(doc.id, { ...prefs, view: editing ? "edit" : "preview" });
+    render();
+    $(
+      editing ? "#workspace-document-text" : "#workspace-document-toggle",
+    )?.focus();
+  });
+  on("#workspace-document-settings", "click", () => {
+    if (active()) editDocument(owner.documents.indexOf(doc), doc);
+  });
+  on("#workspace-document-title", "input", (_, input) => {
+    if (!active() || !input.isConnected || doc.title === input.value) return;
+    doc.title = input.value;
+    mark();
+    const title = doc.title || "未命名文档";
+    $(".tab.selected [data-workspace-document-tab-name]").textContent = title;
+    $(".tab.selected [data-close-document-tab]").setAttribute(
+      "aria-label",
+      "关闭 " + title,
+    );
+    $("#tree").innerHTML = tree();
+    bindTree();
+  });
+  const input = $("#workspace-document-text");
+  if (input)
+    bindLocalDocumentImage({
+      picker: $("#workspace-document-image-file"),
+      input,
+      trigger: $("#workspace-document-image"),
+      active: () => active() && !$("#dialog").open,
+      notify: toast,
+    });
+  const linked = $("#workspace-document-sync");
+  const scroll =
+    input &&
+    bindWorkspaceDocumentScroll(input, preview, {
+      active: () => active() && input.isConnected,
+      enabled: () => linked.checked,
+    });
+  on("#workspace-document-sync", "change", (_, checkbox) => {
+    if (!active() || !checkbox.isConnected) return;
+    documentModes.set(doc.id, {
+      ...documentModes.get(doc.id),
+      synchronized: checkbox.checked,
+    });
+  });
+  on("#workspace-document-top", "click", () => scroll?.top());
+  let previewTimer;
+  on("#workspace-document-text", "input", () => {
+    if (!active() || !input.isConnected || doc.content === input.value) return;
+    doc.content = input.value;
+    mark();
+    $("#workspace-document-count").textContent = documentCounts(doc.content);
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      if (active() && input.isConnected) {
+        preview.innerHTML = renderMarkdown(doc.content);
+        prepareWorkspaceDocumentLinks(preview);
+        scroll.refreshPreview();
+      }
+    }, 120);
+  });
+  on("[data-workspace-markdown]", "click", (_, control) => {
+    if (!active() || !input?.isConnected) return;
+    const patch = markdownEdit(
+      control.dataset.workspaceMarkdown,
+      input.value,
+      input.selectionStart,
+      input.selectionEnd,
+    );
+    if (!patch || !insertTextareaText(input, patch)) return;
+    input.setSelectionRange(patch.anchor, patch.anchor + patch.length);
+  });
+}
+
+function editDocument(index, workspaceOwner) {
+  const owner = project,
+    openedVersion = editVersion;
+  let initialInput;
   const existing = project.documents[index] || {
     title: "新文档",
     content: "# 使用说明\n\n",
@@ -5618,6 +10232,14 @@ function editDocument(index) {
     "项目文档",
     `<label>标题</label><input id="document-title" value="${esc(existing.title)}"><label>目录</label><input id="document-folder" value="${esc(existing.folder || "")}"><label>状态</label><select id="document-status"><option value="">未设置状态</option>${existing.statusId && !statuses.some((status) => status.id === existing.statusId) ? `<option selected value="${esc(existing.statusId)}">已删除状态（保留标记）</option>` : ""}${statuses.map((status) => `<option value="${esc(status.id)}" ${status.id === existing.statusId ? "selected" : ""}>${esc(status.name)}</option>`).join("")}</select><div class="form-grid">${attributeFields(project.settings?.attributes || [], existing.attributes, "doc-attribute")}</div><label>Markdown 正文</label><textarea id="document-content">${esc(existing.content)}</textarea><label>插入本地图片（PNG/JPEG，最多128KiB，随文档离线保存）</label><input id="document-image" type="file" accept="image/png,image/jpeg"><label>实时预览</label><div id="document-preview" class="markdown-content"></div>`,
     () => {
+      if (
+        workspaceOwner &&
+        (owner !== project ||
+          openedVersion !== editVersion ||
+          workspaceDocument() !== workspaceOwner ||
+          project.documents[index] !== workspaceOwner)
+      )
+        throw Error("项目或文档草稿已变化，请重新打开文档设置");
       const fields = project.settings?.attributes || [];
       validateAttributeDefinitions(fields);
       const attributes = { ...(existing.attributes || {}) };
@@ -5639,16 +10261,30 @@ function editDocument(index) {
         folder: $("#document-folder").value,
         statusId: $("#document-status").value,
         attributes,
-        content: $("#document-content").value,
+        content:
+          workspaceOwner && $("#document-content").value === initialInput
+            ? existing.content
+            : $("#document-content").value,
       };
       if (index === undefined) project.documents.push(record);
       else project.documents[index] = record;
       mark();
       render();
     },
+    workspaceOwner ? "应用到项目草稿" : undefined,
+    workspaceOwner
+      ? () => {
+          if (
+            owner === project &&
+            workspaceDocument()?.id === workspaceOwner.id
+          )
+            $("#workspace-document-settings")?.focus();
+        }
+      : undefined,
   );
   const input = $("#document-content"),
     preview = $("#document-preview");
+  initialInput = input.value;
   let timer;
   input.oninput = () => {
     clearTimeout(timer);
@@ -5656,33 +10292,18 @@ function editDocument(index) {
       preview.innerHTML = renderMarkdown(input.value);
     }, 120);
   };
-  $("#document-image").onchange = async (event) => {
-    const picker = event.target,
-      file = picker.files?.[0];
-    if (!file) return;
-    try {
-      if (file.size > 128 * 1024) throw Error("图片最多128KiB");
-      const uri = inlineImageURI(
-        new Uint8Array(await file.arrayBuffer()),
-        file.type,
-      );
-      const bitmap = await createImageBitmap(file);
-      bitmap.close();
-      if (!input.isConnected || $("#document-content") !== input) return;
-      const start = input.selectionStart,
-        end = input.selectionEnd;
-      const text = "\n![图片](" + uri + ")\n";
-      if (input.value.length - (end - start) + text.length > 256 * 1024)
-        throw Error("文档超过256KiB预览限制");
-      input.setRangeText(text, start, end, "end");
-      input.dispatchEvent(new Event("input"));
-      toast("图片已插入，保存文档后生效");
-    } catch (error) {
-      if (input.isConnected) toast(error.message);
-    } finally {
-      picker.value = "";
-    }
-  };
+  const imageDialogRevision = modalRevision;
+  bindLocalDocumentImage({
+    picker: $("#document-image"),
+    input,
+    active: () =>
+      project === owner &&
+      $("#dialog").open &&
+      modalRevision === imageDialogRevision &&
+      (!workspaceOwner || workspaceDocument() === workspaceOwner) &&
+      (index === undefined || project.documents[index] === existing),
+    notify: toast,
+  });
   preview.innerHTML = renderMarkdown(input.value);
 }
 
@@ -5727,28 +10348,33 @@ async function pollSession() {
 
 async function refreshMCPActivity() {
   if (!token || document.hidden) return;
+  const poll = ++mcpPollSequence;
+  let nextState;
   try {
-    const poll = ++mcpPollSequence;
-    const nextState = await api("/mcp/config");
-    if (poll !== mcpPollSequence) return;
-    mcpState = nextState;
+    nextState = await api("/mcp/config");
+    if (!isMCPActivityReceipt(nextState)) throw Error("MCP config unavailable");
+  } catch {
+    if (poll === mcpPollSequence) {
+      // A failed read must not overwrite the last confirmed permission data.
+      mcpTopStatusUnavailable = true;
+      updateMCPTopStatus($("#mcp-status"), null, true);
+    }
+    return;
+  }
+  if (poll !== mcpPollSequence) return;
+  mcpState = nextState;
+  mcpTopStatusKnown = true;
+  mcpTopStatusUnavailable = false;
+  updateMCPTopStatus($("#mcp-status"), mcpState, false);
+  try {
     updateMCPPanel?.(mcpState);
-    const running = (mcpState.activities || []).filter(
-      (item) => item.status === "running",
-    );
-    const top = $("#mcp-status");
-    if (top)
-      top.textContent =
-        "MCP · " +
-        (running.length
-          ? running.length + " 个任务运行中"
-          : mcpState.enabled
-            ? "已开启"
-            : "未开启");
     const area = $("#mcp-plan-status");
     if (area)
-      area.textContent = running
-        .filter((item) => item.projectId === project?.id)
+      area.textContent = (mcpState.activities || [])
+        .filter(
+          (item) =>
+            item?.status === "running" && item.projectId === project?.id,
+        )
         .map(
           (item) =>
             item.tool +
@@ -5831,7 +10457,7 @@ function editFunction(index) {
   };
 }
 
-function editDynamicValue(group, index) {
+function editDynamicValue(group, index, compactPair) {
   const target = request();
   const editor = $("#body-code");
   const selection = {
@@ -5877,6 +10503,7 @@ function editDynamicValue(group, index) {
     "动态参数值",
     `<p>预览使用当前环境值；发送时会重新读取前置脚本运行后的值。固定值输入JSON，变量输入变量名。处理函数按逗号分隔顺序执行。</p><label>来源</label><select id="dynamic-source"><option value="fixed">固定值</option><option value="variable">变量</option><option value="mock">Mock样例</option><option value="apipost-function">原版函数模板（Query受限子集）</option><option value="apipost-header-function">原版函数模板（Header受限子集）</option><option value="apipost-form-function">原版函数模板（表单文本受限子集）</option><option value="apipost-body-function">原版函数模板（完整正文受限子集）</option></select><p>原版函数模板仅支持匹配位置的Query/Header/表单文本表达式或整个raw/JSON正文，支持原样函数参数、安全点路径变量或引号原文起始；首函数抛错保留首段模板，后续抛错保留上一步值。支持无参数fn_及lower/upper/length/number及concat/lconcat原文拼接、substr有界整数截取、padstart/padend有界填充及URI编解码加工链；MD5/SHA、Base64文本及ISO日期加工暂不能与共享函数混用；允许响应后置脚本及仅改变量的前置脚本；禁止前置请求修改、SDK模式及额外原生加工链，Header/表单/正文允许前后缀及多个白名单变量/原文表达式（多表达式不支持共享函数），Query仍须单个完整表达式；结果不再次插值。</p><label>输入值 / 变量名 / Mock表达式</label><textarea id="dynamic-value"></textarea><details><summary>Mock类型与种子</summary><p>支持 @cname()、@email()、@integer(min,max) 等有界表达式，不是完整Faker/Mock.js。种子留空每次重新生成；填写整数可复现。预览不代表下次随机结果。</p><select id="dynamic-mock-type">${["string", "integer", "number", "boolean", "object", "array"].map((type) => `<option>${type}</option>`).join("")}</select><input id="dynamic-seed" type="number" placeholder="随机种子（可选）"></details>${group === "body" ? '<label>输出方式</label><select id="dynamic-format"><option value="json">JSON值（自动转义/引号）</option><option value="text">原始文本</option></select>' : ""}<label>处理函数</label><input id="dynamic-functions" list="dynamic-function-list"><datalist id="dynamic-function-list">${(project.settings?.functions || []).map((fn) => `<option value="${esc(fn.name)}"></option>`).join("")}</datalist><button id="dynamic-preview" type="button">预览</button><button id="dynamic-remove" type="button">移除动态值</button><pre id="dynamic-result">尚未预览</pre>`,
     () => {
+      compactPair?.assertCurrent();
       const spec = read();
       if (isApipostFunctionSource(spec.source)) {
         if (group !== apipostFunctionSourceGroups[spec.source])
@@ -5893,15 +10520,7 @@ function editDynamicValue(group, index) {
           throw Error("原版函数模板暂不支持额外加工链");
       }
       if (group === "body") {
-        target.bodyDynamic ??= {};
-        target.bodyDynamic[bodyId] = spec;
-        if (!index)
-          target.body =
-            target.body.slice(0, selection.start) +
-            "{{@value:" +
-            bodyId +
-            "}}" +
-            target.body.slice(selection.end);
+        setBodyDynamicDraft(target, bodyId, spec, index ? null : selection);
       } else row.dynamic = spec;
       mark();
       render();
@@ -5925,6 +10544,7 @@ function editDynamicValue(group, index) {
   $("#dynamic-preview").onclick = async () => {
     const output = $("#dynamic-result");
     try {
+      compactPair?.assertCurrent();
       const result = await api(
         "/projects/" + project.id + "/dynamic-preview",
         "POST",
@@ -5943,9 +10563,10 @@ function editDynamicValue(group, index) {
     }
   };
   $("#dynamic-remove").onclick = () => {
+    if (compactPair && !compactPair.current()) return toast(compactPair.error);
     if (group === "body") {
       delete target.bodyDynamic?.[bodyId];
-      target.body = target.body.split("{{@value:" + bodyId + "}}").join("");
+      target.body = target.body.split(bodyDynamicToken(bodyId)).join("");
     } else delete row.dynamic;
     mark();
     $("#dialog").close();
@@ -5953,43 +10574,57 @@ function editDynamicValue(group, index) {
   };
 }
 
-async function openCookieManager() {
+async function openCookieManager(workspace = null) {
   collect();
-  const environmentId = env(),
-    endpoint = "/projects/" + project.id + "/cookies";
-  const dialog = $("#dialog"),
-    marker = {};
-  dialog.cookieManagerRequest = marker;
-  const active = () =>
-    dialog.open &&
-    dialog.cookieManagerRequest === marker &&
-    $("#dialog-title").textContent === "Cookie管理器";
+  const owner = project,
+    environmentId = env(),
+    endpoint = "/projects/" + owner.id + "/cookies";
+  const dialog = $("#dialog");
+  const loading = '<p role="status">正在读取Cookie…</p>';
   modal(
     "Cookie管理器",
-    '<p role="status">正在读取Cookie…</p>',
+    workspace
+      ? environmentDialogShell(owner, {
+          workspace: true,
+          section: "cookies",
+          content: `<section class="environment-dialog-main environment-cookie-content" aria-label="当前执行环境的Cookie">${loading}</section>`,
+        })
+      : loading,
     () => {},
     "完成",
   );
+  const revision = modalRevision;
+  const content = workspace
+    ? $(".environment-cookie-content")
+    : $("#dialog-content");
+  const active = () =>
+    dialog.open &&
+    modalRevision === revision &&
+    owner === project &&
+    environmentId === env() &&
+    content.isConnected;
+  if (workspace) {
+    workspace.bindNavigation(workspace);
+    $('[data-env-section="cookies"]')?.focus();
+  }
   let state;
   try {
     state = await api(
       endpoint + "?environmentId=" + encodeURIComponent(environmentId),
     );
   } catch (error) {
-    if (active())
-      $("#dialog-content").textContent = "读取Cookie失败：" + error.message;
+    if (active()) content.textContent = "读取Cookie失败：" + error.message;
     return;
   }
   if (!active()) return;
-  const view = () =>
-    `<p class="notice">Cookie明文仅存当前电脑，按项目与环境隔离，Cookie库不进入项目备份，但请求/响应历史可能含Cookie，分享前请检查。开启后自动保存/发送匹配Cookie，并覆盖请求里手工填写的Cookie。此处操作立即生效，关闭窗口不撤销。</p><p id="cookie-error" class="failed" role="alert"></p><button id="cookie-toggle">${state.enabled ? "关闭自动Cookie" : "开启自动Cookie"}</button><button id="cookie-refresh">重新加载</button><button id="cookie-clear">清空当前环境Cookie</button><p>状态：${state.enabled ? "已开启" : "已关闭"} · ${state.cookies.length}/500</p><div class="cookie-table"><table><thead><tr><th>名称</th><th>值</th><th>域 / 路径</th><th>属性</th><th></th></tr></thead><tbody>${state.cookies.map((c, i) => `<tr><td>${esc(c.key)}</td><td><input type="password" readonly value="${esc(c.value)}" aria-label="Cookie值"></td><td>${esc(c.domain)}<br>${esc(c.path)}</td><td>${c.secure ? "Secure " : ""}${c.httpOnly ? "HttpOnly " : ""}${c.hostOnly ? "HostOnly" : ""}</td><td><button data-cookie-edit="${i}">编辑</button><button data-cookie-remove="${i}">删除</button></td></tr>`).join("")}</tbody></table></div><label>来源URL（HTTP/HTTPS）</label><input id="cookie-url" placeholder="https://api.example.test/"><label>Set-Cookie（同域、同路径、同名会覆盖；更改身份会新增）</label><textarea id="cookie-line" placeholder="name=value; Path=/; Secure"></textarea><button id="cookie-set">保存Cookie</button>`;
   const attempt = (fn) => async () => {
+    if (!active()) return;
     try {
       await fn();
     } catch (error) {
       if (!active()) return;
       $("#cookie-error").textContent = error.message;
-      $("#dialog-content").scrollTop = 0;
+      content.scrollTop = 0;
     }
   };
   const change = async (data) => {
@@ -6002,9 +10637,11 @@ async function openCookieManager() {
   };
   const draw = () => {
     if (!active()) return;
-    $("#dialog-content").innerHTML = view();
-    $("#dialog-content").scrollTop = 0;
-    for (const button of $("#dialog-content").querySelectorAll("button"))
+    content.innerHTML = cookieManagerHTML(state, {
+      workspace: Boolean(workspace),
+    });
+    content.scrollTop = 0;
+    for (const button of content.querySelectorAll("button"))
       button.type = "button";
     $("#cookie-toggle").onclick = attempt(() =>
       change({ operation: "configure", enabled: !state.enabled }),
@@ -6026,9 +10663,7 @@ async function openCookieManager() {
         cookie: $("#cookie-line").value,
       }),
     );
-    for (const button of $("#dialog-content").querySelectorAll(
-      "[data-cookie-remove]",
-    ))
+    for (const button of content.querySelectorAll("[data-cookie-remove]"))
       button.onclick = attempt(async () => {
         const c = state.cookies[Number(button.dataset.cookieRemove)];
         if (confirm("删除此Cookie？"))
@@ -6039,10 +10674,11 @@ async function openCookieManager() {
             key: c.key,
           });
       });
-    for (const button of $("#dialog-content").querySelectorAll(
-      "[data-cookie-edit]",
-    ))
+    for (const button of content.querySelectorAll("[data-cookie-edit]"))
       button.onclick = () => {
+        if (!active()) return;
+        const editor = content.querySelector("#environment-cookie-add");
+        if (editor) editor.open = true;
         const c = state.cookies[Number(button.dataset.cookieEdit)];
         $("#cookie-url").value =
           "https://" +
@@ -6067,17 +10703,185 @@ async function openCookieManager() {
   draw();
 }
 
-function insertVariable(name) {
+function rawHelperBodyOwner() {
+  const editor = $("#body-code");
+  const owner = request();
+  if (!editor || !owner) return null;
+  const ownerProject = project,
+    ownerEnvironment = env(),
+    ownerCollectionId = owner.postmanCollectionId,
+    ownerOpening = projectOpenRequestSequence,
+    ownerEdit = editVersion,
+    ownerText = editor.value;
+  return {
+    project: ownerProject,
+    request: owner,
+    environment: ownerEnvironment,
+    selection: { start: editor.selectionStart, end: editor.selectionEnd },
+    text: ownerText,
+    current: () =>
+      page === "apis" &&
+      mode === "debug" &&
+      param === "body" &&
+      helperOpen &&
+      useTabbedRawHelper() &&
+      project === ownerProject &&
+      request() === owner &&
+      owner.bodyType === "json" &&
+      owner.postmanCollectionId === ownerCollectionId &&
+      env() === ownerEnvironment &&
+      projectOpenRequestSequence === ownerOpening &&
+      editVersion === ownerEdit &&
+      $("#body-code") === editor &&
+      editor.value === ownerText,
+  };
+}
+function setBodyDynamicDraft(
+  target,
+  id,
+  spec,
+  selection,
+  sourceBody = target.body,
+) {
+  target.bodyDynamic ??= {};
+  target.bodyDynamic[id] = spec;
+  if (selection)
+    target.body =
+      sourceBody.slice(0, selection.start) +
+      bodyDynamicToken(id) +
+      sourceBody.slice(selection.end);
+}
+function openRawHelperFixedChooser() {
+  openRawHelperDynamicPreset({
+    label: "固定值",
+    action: "#raw-helper-insert-fixed",
+    chooser: ".raw-helper-fixed-chooser",
+    markup: rawHelperFixedChooser,
+    bindChooser: bindRawHelperFixedChooser,
+    missing: "请输入不超过 64 KiB 的固定值",
+  });
+}
+function openRawHelperMockChooser() {
+  openRawHelperDynamicPreset({
+    label: "Mock数据",
+    action: "#raw-helper-insert-mock",
+    chooser: ".raw-helper-mock-chooser",
+    markup: rawHelperMockChooser,
+    bindChooser: bindRawHelperMockChooser,
+    missing: "请选择已支持的 Mock 规则",
+  });
+}
+function openRawHelperDynamicPreset({
+  label,
+  action,
+  chooser,
+  markup,
+  bindChooser,
+  missing,
+}) {
+  const owner = rawHelperBodyOwner();
+  if (!owner) return;
+  const id = uid();
+  let read,
+    inserted = false;
+  modal(
+    label,
+    markup(),
+    () => {
+      if (!owner.current())
+        throw Error("接口、环境或草稿已变化，未插入" + label);
+      const value = read?.();
+      if (!value) throw Error(missing);
+      if (Object.hasOwn(owner.request.bodyDynamic || {}, id))
+        throw Error("动态值标识已存在，未插入");
+      const previousScroll = $("#raw-helper-dynamic")?.scrollTop || 0;
+      setBodyDynamicDraft(
+        owner.request,
+        id,
+        value.spec,
+        owner.selection,
+        owner.text,
+      );
+      mark();
+      render();
+      const helper = $("#raw-helper-dynamic");
+      if (helper) helper.scrollTop = previousScroll;
+      inserted = true;
+    },
+    "确定",
+    () => {
+      if (inserted) {
+        const field = $("#body-code");
+        const caret = owner.selection.start + bodyDynamicToken(id).length;
+        field?.focus({ preventScroll: true });
+        field?.setSelectionRange(caret, caret);
+      } else {
+        const control = $(action) || $("#toggle-parameter-helper");
+        control?.focus({ preventScroll: true });
+      }
+    },
+  );
+  read = bindChooser(
+    $(chooser),
+    id,
+    $("#dialog-save"),
+    $('#dialog footer button[value="cancel"]'),
+  );
+}
+function openRawHelperVariableChooser() {
+  const owner = rawHelperBodyOwner();
+  if (!owner) return;
+  const scopeNames = () =>
+    rawHelperVariableNames(owner.project, owner.environment, owner.request);
+  const entries = scopeNames();
+  let selectedName,
+    inserted = false;
+  modal(
+    "引用变量",
+    rawHelperVariableChooser(entries),
+    () => {
+      const name = selectedName?.();
+      if (!owner.current()) throw Error("接口、环境或草稿已变化，未插入变量");
+      const selected = entries.find((entry) => entry.name === name);
+      if (
+        !selected ||
+        !scopeNames().some(
+          (entry) => entry.name === name && entry.scope === selected.scope,
+        )
+      )
+        throw Error("当前变量作用域已变化，请重新选择");
+      insertVariable(name, owner.selection);
+      inserted = true;
+    },
+    "确定",
+    () => {
+      const target = inserted
+        ? $("#body-code")
+        : $("#raw-helper-reference-variable") || $("#toggle-parameter-helper");
+      target?.focus({ preventScroll: true });
+    },
+  );
+  selectedName = bindRawHelperVariableChooser(
+    $(".raw-helper-variable-chooser"),
+    $("#dialog-save"),
+    $('#dialog footer button[value="cancel"]'),
+  );
+}
+
+function insertVariable(name, selection) {
   const editor = $("#body-code");
   if (!editor) return;
-  const start = editor.selectionStart,
-    end = editor.selectionEnd,
-    helperScroll = $(".parameter-helper")?.scrollTop || 0;
+  const helperScrollRegion = () =>
+    $("#raw-helper-dynamic:not([hidden])") || $(".parameter-helper");
+  const start = selection?.start ?? editor.selectionStart,
+    end = selection?.end ?? editor.selectionEnd,
+    helperScroll = helperScrollRegion()?.scrollTop || 0;
   request().body =
     editor.value.slice(0, start) + "{{" + name + "}}" + editor.value.slice(end);
   mark();
   render();
-  if ($(".parameter-helper")) $(".parameter-helper").scrollTop = helperScroll;
+  const helper = helperScrollRegion();
+  if (helper) helper.scrollTop = helperScroll;
   const updated = $("#body-code");
   updated?.setSelectionRange(start + name.length + 4, start + name.length + 4);
   updated?.focus({ preventScroll: true });

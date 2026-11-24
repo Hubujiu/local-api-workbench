@@ -1,0 +1,56 @@
+.send-settings {
+  padding-top: 24px;
+}
+.send-settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 109px);
+  gap: 0 18px;
+  align-items: start;
+  margin-top: 23px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.send-settings-row label {
+  font-size: calc(14 * var(--app-type-unit));
+  line-height: 20px;
+}
+.send-settings-row p {
+  margin: 5px 0 0;
+  color: var(--send-settings-secondary, #6d6252);
+  font-size: calc(12 * var(--app-type-unit));
+  line-height: 19px;
+}
+body.dark .send-settings {
+  --send-settings-secondary: var(--muted);
+}
+.send-timeout-control {
+  position: relative;
+}
+.send-timeout-control > input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 4px 35px 4px 8px;
+}
+.send-timeout-control > span {
+  position: absolute;
+  inset: 7px 10px auto auto;
+  color: var(--send-settings-secondary, #6d6252);
+  pointer-events: none;
+}
+.send-settings-row #send-timeout-error:empty {
+  display: none;
+}
+.send-settings-row #send-timeout-error {
+  grid-column: 1 / -1;
+  color: var(--red);
+}
+#send-timeout-reset {
+  width: fit-content;
+  margin: auto auto 0;
+}
+@media (max-width: 600px) {
+  #send-timeout-reset {
+    margin: 0;
+  }
+}

@@ -1,3 +1,4 @@
+import { activeGraphQLRequest } from "../public/graphql-named-queries.js";
 import {
   renderGraphQLVariableTemplate,
   validateGraphQLVariableTemplate,
@@ -50,6 +51,8 @@ import { normalizeScriptURLMode } from "../public/script-url-mode.js";
 import { randomInt } from "node:crypto";
 import { sampleProjectSchema } from "./mock-fields.mjs";
 import { previewFunction } from "./custom-functions.mjs";
+import { assertHTTPPreWaitEligible } from "../public/http-pre-wait-contract.js";
+import { throwIfInactive } from "./request-control.mjs";
 // Elapsed execution budgets must not follow civil-clock adjustments.
 const monotonicNow = performance.now.bind(performance);
 
@@ -58,7 +61,12 @@ export async function resolveDynamicValue(
   variables,
   functions = [],
   deadline,
+  controls,
 ) {
+  const check = () => {
+    if (controls) throwIfInactive(controls);
+  };
+  check();
   if (
     !spec ||
     ![
@@ -80,6 +88,7 @@ export async function resolveDynamicValue(
   )
     throw Error("动态值最多10个处理函数");
   if (isApipostFunctionSource(spec.source)) {
+    if (controls) throw Error("前置等待不能与原版动态函数模板混用");
     if (chain.length) throw Error("原版函数模板暂不支持额外加工链");
     return resolveApipostFunctionTemplate(
       spec.value,
@@ -129,10 +138,29 @@ export async function resolveDynamicValue(
   };
   bounded(value);
   for (const name of chain) {
+    check();
     const fn = functions.find((item) => item.name === name);
     if (!fn) throw Error("动态值函数不存在: " + name);
-    value = (await previewFunction(fn, value)).value;
+    check();
+    try {
+      value = (
+        await previewFunction(
+          fn,
+          value,
+          controls
+            ? { signal: controls.workerSignal ?? controls.signal }
+            : undefined,
+        )
+      ).value;
+    } catch (error) {
+      // Report the owner's monotonic timeout/cancellation, not a worker's
+      // cancellation label when the phase deadline caused its termination.
+      check();
+      throw error;
+    }
+    check();
   }
+  check();
   return bounded(value);
 }
 async function resolveDynamicRequestBase(
@@ -142,7 +170,12 @@ async function resolveDynamicRequestBase(
   interpolate,
   literalBody,
   inheritedDeadline,
+  controls,
 ) {
+  const check = () => {
+    if (controls) throwIfInactive(controls);
+  };
+  check();
   validateApipostTemplateRequest(request);
   const postmanOAuth2 = postmanOAuth2Definition(request.auth);
   const nativeOAuth2 = nativeOAuth2Definition(request.auth);
@@ -276,8 +309,14 @@ async function resolveDynamicRequestBase(
     headerSchemas.push({ index, schema: row.schema });
     delete row.schema;
   }
+  const interpolateActive = controls
+    ? (value, vars) => {
+        check();
+        return interpolate(value, vars);
+      }
+    : interpolate;
   const resolved = {
-    ...interpolate(clone, variables),
+    ...interpolateActive(clone, variables),
     ...scriptSources,
     ...operation,
   };
@@ -288,21 +327,25 @@ async function resolveDynamicRequestBase(
   for (const { index, schema } of cookieSchemas)
     resolved.cookies[index].schema = schema;
   for (const { index, value } of queryObjectValues)
-    resolved.query[index].value = JSON.stringify(interpolate(value, variables));
+    resolved.query[index].value = JSON.stringify(
+      interpolateActive(value, variables),
+    );
   for (const { index, value } of arrayValues)
-    resolved.query[index].value = JSON.stringify(interpolate(value, variables));
+    resolved.query[index].value = JSON.stringify(
+      interpolateActive(value, variables),
+    );
   for (const { index, value } of objectValues)
     resolved.headers[index].value = JSON.stringify(
-      interpolate(value, variables),
+      interpolateActive(value, variables),
     );
   for (const { index, value } of cookieValues)
     resolved.cookies[index].value = JSON.stringify(
-      interpolate(value, variables),
+      interpolateActive(value, variables),
     );
   if (nativeOAuth2 !== undefined) {
     const selected = nativeOAuth2.addTokenTo;
     if (selected && nativeOAuth2.access_token) {
-      nativeOAuth2.access_token = interpolate(
+      nativeOAuth2.access_token = interpolateActive(
         nativeOAuth2.access_token,
         variables,
       );
@@ -311,7 +354,7 @@ async function resolveDynamicRequestBase(
         nativeOAuth2.access_token &&
         nativeOAuth2.headerPrefix
       )
-        nativeOAuth2.headerPrefix = interpolate(
+        nativeOAuth2.headerPrefix = interpolateActive(
           nativeOAuth2.headerPrefix,
           variables,
         );
@@ -321,17 +364,20 @@ async function resolveDynamicRequestBase(
   if (postmanOAuth2 !== undefined)
     resolved.auth.postmanOAuth2 = resolvePostmanOAuth2(
       request.auth,
-      interpolate,
+      interpolateActive,
       variables,
     );
   for (const { group, index, spec } of specs) {
+    check();
     if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
     const value = await resolveDynamicValue(
       spec,
       variables,
       functions,
       deadline,
+      controls,
     );
+    check();
     if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
     if (
       spec.source === "apipost-function" &&
@@ -365,10 +411,11 @@ async function resolveDynamicRequestBase(
           : JSON.stringify(value);
   }
   for (const [index, part] of parts.entries()) {
+    check();
     const dynamic = bodySpecs.find((item) => item.index === index);
     if (!dynamic) {
       parts[index] =
-        literalBody === undefined ? interpolate(part, variables) : part;
+        literalBody === undefined ? interpolateActive(part, variables) : part;
       continue;
     }
     if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
@@ -377,13 +424,16 @@ async function resolveDynamicRequestBase(
       variables,
       functions,
       deadline,
+      controls,
     );
+    check();
     if (monotonicNow() > deadline) throw Error("动态值处理超过5秒总预算");
     parts[index] =
       dynamic.spec.format === "json" || typeof value !== "string"
         ? JSON.stringify(value)
         : value;
   }
+  check();
   if (inheritedDeadline !== undefined && monotonicNow() > deadline)
     throw Error("动态值处理超过5秒总预算");
   resolved.body = parts.join("");
@@ -401,7 +451,13 @@ export async function resolveDynamicRequest(
   functions,
   interpolate,
   finalBody,
+  controls,
 ) {
+  if (controls) {
+    throwIfInactive(controls);
+    assertHTTPPreWaitEligible(request);
+  }
+  request = activeGraphQLRequest(request);
   validateQueryArrayRequest(request);
   validateHeaderObjectRequest(request);
   validateCookieObjectRequest(request);
@@ -436,6 +492,7 @@ export async function resolveDynamicRequest(
       interpolate,
       literalBody,
       graphqlDeadline,
+      controls,
     );
   if (normalizeScriptURLMode(request.scriptURLMode) === "sdk")
     return resolveSDKURLRequest(

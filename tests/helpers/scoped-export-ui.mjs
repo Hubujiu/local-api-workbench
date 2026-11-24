@@ -123,7 +123,13 @@ export async function exerciseScopedExportUI(page) {
   async function open(format = "apipost") {
     await page.locator("#export").click();
     await page.locator("#scoped-export-open").click();
-    await page.locator("#scoped-export-format").selectOption(format);
+    await page
+      .locator(`input[name="scoped-export-card-format"][value="${format}"]`)
+      .check();
+    assert.equal(
+      await page.locator("#scoped-export-format").inputValue(),
+      format,
+    );
     assert.equal(
       await page.locator("[data-export-resource]:checked").count(),
       0,

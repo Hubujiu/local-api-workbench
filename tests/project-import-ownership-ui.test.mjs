@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createDebugExampleDrafts } from "../public/http-debug-examples.js";
 import assert from "node:assert/strict";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,14 +8,17 @@ import { createProjectImportGuard } from "../public/project-import-guard.js";
 import { createNativeRequestLifecycle } from "../public/native-request-lifecycle.js";
 import { createApp } from "../src/server.mjs";
 import { normalizeRequest } from "../src/core.mjs";
+import { localProjectImportMarkup } from "../public/local-project-import.js";
 const source = await readFile(
   new URL("../public/app.js", import.meta.url),
   "utf8",
 );
-const importSource = source.slice(
-  source.indexOf('  on("#import",'),
-  source.indexOf('  on("#export",'),
+const importStart = source.indexOf(
+  '  on("#import,#welcome-import,#project-menu-import",',
 );
+const importEnd = source.indexOf('  on("#export",', importStart);
+assert(importStart > 0 && importEnd > importStart);
+const importSource = source.slice(importStart, importEnd);
 const openSource = source.slice(
   source.indexOf("async function openProject("),
   source.indexOf("\nfunction modal("),
@@ -59,10 +63,14 @@ function harness({
     "nativeRequestLifecycle",
     "hooks",
     "importMode",
+    "localProjectImportMarkup",
+    "debugExampleDrafts",
     `
     let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
- let project=initial,dirty=false,editVersion=0,busy=false,saving=false,modalRevision=1,projectOpenSequence=0,
+ let openedDocuments=[],activeDocumentId=null;
+ const documentModes=new Map();
+ let project=initial,dirty=false,editVersion=0,busy=false,saving=false,modalRevision=1,projectOpenSequence=0,projectOpenRequestSequence=0,
       current="r",response=null,opened=[],page="apis",mode="design",projects=[{id:initial.id}],lastRun,loadResult,planId,selectedProtocolId;
     const els={"#import-mode":{value:importMode},"#import-file":{files:[]},"#import-text":{value:"{}"},"#import-directory":{files:[]},"#dialog":{open:true}};
     const $=s=>els[s], confirm=(text)=>hooks.confirm?.(text)??true, collect=()=>hooks.collect?.(), render=()=>{},toast=()=>{},request=()=>project.requests[0],sessionStorage={setItem(){}};
@@ -73,18 +81,50 @@ function harness({
     ${openSource}
     let click,submit;const on=(s,e,f)=>click=f;const modal=(t,h,cb)=>submit=cb;
     ${importSource}
-    click();
-    return {run:()=>submit(),state,edit,els,save,open:openProject,replace(p){project=p;},dirty(){dirty=true;},setBusy(){busy=true;},selectPending(){projectOpenSequence++;},replaceModal(){modalRevision++;}};
+    click(null, {id:"#import"});
+    return {run:()=>submit(),state,edit,els,save,open:openProject,replace(p){project=p;},dirty(){dirty=true;},setBusy(){busy=true;},selectPending(){projectOpenSequence++;projectOpenRequestSequence++;},replaceModal(){modalRevision++;}};
   `,
   );
   return {
-    ...create(initial, api, guard, native, hooks, mode),
+    ...create(
+      initial,
+      api,
+      guard,
+      native,
+      hooks,
+      mode,
+      localProjectImportMarkup,
+      createDebugExampleDrafts(),
+    ),
     calls,
     guard,
     native,
   };
 }
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+test("explicit import uses selected file over pasted content without pre-reading", async () => {
+  const h = harness();
+  let reads = 0;
+  h.els["#import-text"].value = "ignored pasted content";
+  h.els["#import-file"].files = [
+    {
+      async text() {
+        reads++;
+        return "selected file content";
+      },
+    },
+  ];
+  assert.equal(reads, 0);
+  assert.equal(h.calls.length, 0);
+  const submission = h.run();
+  await tick();
+  assert.equal(reads, 1);
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].body.document, "selected file content");
+  h.calls[0].resolve(fixture());
+  await submission;
+});
+
 test("actual merge callback applies its own response once", async () => {
   const h = harness();
   const running = h.run();

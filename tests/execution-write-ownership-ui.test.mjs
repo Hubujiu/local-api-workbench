@@ -1,7 +1,13 @@
+import { createDebugExampleDrafts } from "../public/http-debug-examples.js";
+import { createHTTPPreWaitDrafts } from "../public/http-pre-wait.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createProjectImportGuard } from "../public/project-import-guard.js";
+import {
+  changedProvisionalQuery,
+  createProvisionalQuery,
+} from "../public/design-query-provisional.js";
 import { createNativeRequestLifecycle } from "../public/native-request-lifecycle.js";
 import { adoptVariableWrites } from "../public/variable-write-receipt.js";
 const source = (
@@ -89,13 +95,21 @@ function harness(initial = fixture()) {
     "initial",
     "api",
     "projectImports",
+    "changedProvisionalQuery",
+    "provisionalQuery",
+    "httpPreWaitDrafts",
+    "debugExampleDrafts",
     "nativeRequestLifecycle",
     "adoptVariableWrites",
     "assert",
     `
+ const debugAuthDrafts = new WeakMap();
+ const request=()=>project.requests.find((entry)=>entry.id===current);
  let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
- let project=initial,projects=[{id:"a"}],dirty=false,saving=false,busy=false,editVersion=0,projectOpenSequence=0,current="r",planId="p",planTab="plans",lastRun,runId,opened=[],response,loadResult,selectedProtocolId;
+ let openedDocuments=[],activeDocumentId=null;
+ const documentModes=new Map();
+ let project=initial,projects=[{id:"a"}],dirty=false,saving=false,busy=false,editVersion=0,projectOpenSequence=0,projectOpenRequestSequence=0,current="r",planId="p",planTab="plans",lastRun,runId,opened=[],response,loadResult,selectedProtocolId;
  const collect=()=>{},render=()=>{},toast=()=>{},env=()=>project.environments[0]?.id||"e",uid=()=>"run-id",confirm=()=>true;
  const document={querySelectorAll:()=>[]},sessionStorage={setItem(){}},caseResults={set(){}};
  const $=()=>null;const mark=()=>{dirty=true;editVersion++};
@@ -109,11 +123,22 @@ function harness(initial = fixture()) {
  assert.equal(typeof handlers["#run-plan"], "function", "plan handler must register eagerly");
  assert.equal(typeof handlers["[data-run-case]"], "function", "case handler must register eagerly");
  assert.deepEqual(Object.keys(handlers).sort(), ["#run-plan", "[data-run-case]"].sort(), "harness must register only the intended execution handlers");
- return {ready:assertExecutionReady,runPlan:()=>handlers["#run-plan"](),runCase:()=>handlers["[data-run-case]"](null,{dataset:{runCase:"c"}}),save,savePlan,open:openProject,dirty(){dirty=true},edit(){project.plans[0].name="new draft";mark()},state:()=>({project,dirty,busy,saving,planId,planTab,lastRun}),replace(p){project=p},navigate(){projectOpenSequence++},selectPlan(){planId="other"}};
+ return {ready:assertExecutionReady,runPlan:()=>handlers["#run-plan"](),runCase:()=>handlers["[data-run-case]"](null,{dataset:{runCase:"c"}}),save,savePlan,open:openProject,dirty(){dirty=true},edit(){project.plans[0].name="new draft";mark()},state:()=>({project,dirty,busy,saving,planId,planTab,lastRun}),replace(p){project=p},navigate(){projectOpenSequence++;projectOpenRequestSequence++},selectPlan(){planId="other"}};
  `,
   );
   return {
-    ...create(initial, api, guard, native, adoptVariableWrites, assert),
+    ...create(
+      initial,
+      api,
+      guard,
+      changedProvisionalQuery,
+      createProvisionalQuery(),
+      createHTTPPreWaitDrafts(),
+      createDebugExampleDrafts(),
+      native,
+      adoptVariableWrites,
+      assert,
+    ),
     calls,
     guard,
     native,
@@ -236,6 +261,17 @@ for (const change of ["edit", "navigate", "replace"]) {
     assert.throws(() => h.guard.assertCanSave("a"), /重新加载/);
   });
 }
+const protocolRunMarker = '  on("#protocol-run", "click",';
+function assertProtocolRunAdmission(text) {
+  const [before, handler, ...duplicates] = text.split(protocolRunMarker);
+  assert.ok(before !== text, "missing protocol-run click handler");
+  assert.equal(duplicates.length, 0, "multiple protocol-run click handlers");
+  assert.match(
+    handler,
+    /^\s*async\s*\([^)]*\)\s*=>\s*\{\s*assertExecutionReady\(\);/,
+    "protocol-run must check execution admission before reading or dispatching",
+  );
+}
 test("pending write blocks every direct execution admission and imports", async () => {
   const h = harness(),
     op = h.guard.begin("a", "case");
@@ -248,7 +284,6 @@ test("pending write blocks every direct execution admission and imports", async 
     "async function send() {",
     "  async function runInterfaceCaseBatch(ids) {",
     '  on("#load-run", "click", async () => {',
-    '  on("#protocol-run", "click", async () => {',
   ]) {
     assert(
       source
@@ -257,6 +292,29 @@ test("pending write blocks every direct execution admission and imports", async 
       marker,
     );
   }
+  assertProtocolRunAdmission(source);
+});
+test("protocol execution admission detector is independent of click callback arity and fails closed", () => {
+  const registration = (parameters, first = "assertExecutionReady();") =>
+    `${protocolRunMarker} async (${parameters}) => { ${first} });`;
+  assert.doesNotThrow(() => assertProtocolRunAdmission(registration("")));
+  assert.doesNotThrow(() =>
+    assertProtocolRunAdmission(registration("_, button")),
+  );
+  assert.throws(() => assertProtocolRunAdmission(""), /missing/);
+  assert.throws(
+    () =>
+      assertProtocolRunAdmission(registration("") + registration("_, button")),
+    /multiple/,
+  );
+  for (const wrong of [
+    "const request = prepare(); assertExecutionReady();",
+    "// assertExecutionReady();\nprepare();",
+  ])
+    assert.throws(
+      () => assertProtocolRunAdmission(registration("_, button", wrong)),
+      /before reading or dispatching/,
+    );
 });
 test("savePlan applies only its owned receipt and retains newer selection", async () => {
   const h = harness(),
@@ -442,6 +500,8 @@ test("actual Ctrl+Enter dispatch catches admission rejection and shows toast", a
       "document",
       "send",
       "toast",
+      "workspaceDocument",
+      "request",
       `const $=()=>({open:false});let page="apis",busy=false,bodyExpanded=false;const save=()=>Promise.resolve();${keyboard}`,
     )(
       {
@@ -455,6 +515,8 @@ test("actual Ctrl+Enter dispatch catches admission rejection and shows toast", a
         return Promise.reject(Error(message));
       },
       (text) => messages.push(text),
+      () => null,
+      () => ({ id: "request" }),
     );
     listener({
       ctrlKey: true,
@@ -467,6 +529,44 @@ test("actual Ctrl+Enter dispatch catches admission rejection and shows toast", a
     assert.equal(calls, 1);
     assert.equal(prevented, 1);
     assert.deepEqual(messages, [message]);
+  }
+});
+test("actual Ctrl+Enter does not dispatch from the project welcome or Markdown", () => {
+  const keyboard = source.slice(
+    source.indexOf('document.addEventListener("keydown"'),
+    source.indexOf('window.addEventListener("beforeunload"'),
+  );
+  for (const [selectedDocument, selectedRequest] of [
+    [null, null],
+    [{ id: "document" }, { id: "background-request" }],
+  ]) {
+    let listener;
+    new Function(
+      "document",
+      "send",
+      "workspaceDocument",
+      "request",
+      `const $=()=>({open:false});let page="apis",busy=false,bodyExpanded=false;${keyboard}`,
+    )(
+      {
+        addEventListener: (_, callback) => {
+          listener = callback;
+        },
+      },
+      () =>
+        assert.fail(
+          "shortcut must not dispatch without a visible HTTP request",
+        ),
+      () => selectedDocument,
+      () => selectedRequest,
+    );
+    listener({
+      ctrlKey: true,
+      key: "Enter",
+      preventDefault() {
+        assert.fail("no application shortcut taken");
+      },
+    });
   }
 });
 test("blocked plan structure callbacks never mutate the current draft before rejection", async () => {

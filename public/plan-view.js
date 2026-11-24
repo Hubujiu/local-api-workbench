@@ -1,3 +1,4 @@
+import { renderStepPicker } from "./plan-step-picker.js";
 import { isHTTPPlanStep, planStepSummary } from "./plan-step-types.js";
 import { assertionState } from "./assertion-state.js";
 const esc = (value) =>
@@ -15,96 +16,146 @@ export function renderPlans({ project, planId, lastRun, busy, tab = "plans" }) {
   const runs = lastRun
     ? [lastRun, ...project.runs.filter((run) => run.id !== lastRun.id)]
     : project.runs;
-  return (
-    '<div class="page plans-page"><div class="plan-tabs"><button data-plan-tab="plans" class="' +
+  const tabs =
+    '<div class="plan-tabs" aria-label="计划与记录"><button data-plan-tab="plans" aria-pressed="' +
+    (tab === "plans") +
+    '" class="' +
     (tab === "plans" ? "primary" : "") +
-    '">执行计划</button><button data-plan-tab="runs" class="' +
+    '">执行计划</button><button data-plan-tab="runs" aria-pressed="' +
+    (tab === "runs") +
+    '" class="' +
     (tab === "runs" ? "primary" : "") +
-    '">执行记录</button></div><p id="mcp-plan-status" class="subtle"></p>' +
-    '<div class="plan-layout"><aside class="plan-list"><div class="row"><strong class="grow">执行计划</strong><button id="new-plan" class="primary">新建计划</button></div>' +
-    project.plans
-      .map(
-        (item) =>
-          '<button data-plan="' +
-          item.id +
-          '" class="' +
-          (item.id === planId ? "active" : "") +
-          '">' +
-          esc(item.name) +
-          "</button>",
-      )
-      .join("") +
-    '</aside><section class="plan-main">' +
+    '">执行记录</button></div>';
+  return (
+    '<div class="page plans-page"><header class="plans-heading"><h1>AI执行计划</h1><p>手动编排接口步骤，执行后查看报告；AI 可通过已授权的 MCP 连接协助操作。</p></header>' +
     (tab === "runs"
-      ? '<div class="row"><button id="refresh-plan-history">刷新执行记录</button><span id="plan-history-refresh-status" role="status" class="subtle">只读刷新已保存记录，不运行计划或保存草稿。</span></div><div id="plan-run-records">' +
-        renderRuns(runs, lastRun) +
-        "</div>"
+      ? '<div class="plan-history-controls">' +
+        tabs +
+        '<div class="plan-history-actions"><button type="button" class="ghost" id="refresh-plan-history" title="只读刷新已保存记录，不运行计划或保存草稿。">刷新执行记录</button><span id="plan-history-refresh-status" role="status" class="subtle"></span></div></div>'
+      : tabs) +
+    '<p id="mcp-plan-status" class="subtle"></p>' +
+    '<div class="plan-layout' +
+    (tab === "runs" ? " plan-history-layout" : "") +
+    '">' +
+    (tab === "runs"
+      ? ""
+      : '<aside class="plan-list"><div class="row"><strong class="grow">执行计划</strong><button id="new-plan" class="primary">新建计划</button></div>' +
+        project.plans
+          .map(
+            (item) =>
+              '<button data-plan="' +
+              item.id +
+              '" class="' +
+              (item.id === planId ? "active" : "") +
+              '">' +
+              esc(item.name) +
+              "</button>",
+          )
+          .join("") +
+        (project.plans.length
+          ? ""
+          : '<p class="plan-list-empty">暂无执行计划</p>') +
+        "</aside>") +
+    '<section class="plan-main' +
+    (tab === "plans" && plan ? " plan-editor" : "") +
+    '">' +
+    (tab === "runs"
+      ? '<div id="plan-run-records">' + renderRuns(runs, lastRun) + "</div>"
       : plan
-        ? renderEditor(plan, busy, project.environments)
-        : '<div class="empty"><p>新建计划后添加接口步骤。</p></div>') +
+        ? renderEditor(plan, busy, project, project.requests || [])
+        : '<div class="plan-selection-empty"><p>请选择或新建一个执行计划</p></div>') +
     "</section></div></div>"
   );
 }
-function renderEditor(plan, busy, environments) {
+function renderEditor(plan, busy, project, requests) {
+  const environments = project.environments || [];
+  const environmentId =
+    plan.environmentId || project.currentEnvironmentId || environments[0]?.id;
+  const hasEnvironment = environments.some(({ id }) => id === environmentId);
   return (
-    '<div class="row"><h2 class="grow">执行计划编辑器</h2><button id="run-plan" class="primary" ' +
+    '<div class="row plan-editor-heading"><div class="row grow"><h2>执行计划编辑器</h2><time class="subtle">最近修改：' +
+    esc(historyDate(plan.updatedAt || plan.createdAt)) +
+    '</time></div><button id="run-plan" class="primary" ' +
     (busy ? "disabled" : "") +
     ">" +
     (busy ? "执行中…" : "执行计划") +
     "</button>" +
     (busy ? '<button id="cancel">停止</button>' : "") +
     '<button id="delete-plan" class="danger">删除计划</button></div>' +
-    '<p class="subtle">最近修改：' +
-    esc(plan.updatedAt || plan.createdAt) +
-    "</p>" +
     (Object.values(plan.provenance?.fields || {}).includes("ai") ||
     Object.values(plan.provenance?.steps || {}).includes("ai")
       ? '<div class="notice ai-value">橙色内容由 AI 创建或修改；你可以检查并直接修改。</div>'
       : "") +
-    '<label>计划名称</label><input id="plan-name" class="' +
+    '<div class="plan-editor-fields"><label for="plan-name">计划名称</label><input id="plan-name" placeholder="例如：用户下单验证" class="' +
     ai(plan, "name") +
     '" value="' +
     esc(plan.name) +
-    '"><label>计划说明</label><textarea id="plan-description" class="' +
+    '"><label for="plan-description">计划说明</label><textarea id="plan-description" placeholder="说明该执行计划的验证目标" class="' +
     ai(plan, "description") +
     '">' +
     esc(plan.description || "") +
     "</textarea>" +
-    '<label>执行环境</label><select id="plan-env" class="' +
+    '<label for="plan-env">执行环境</label><div class="plan-environment-field"><select id="plan-env" class="' +
     ai(plan, "environmentId") +
     '">' +
+    (hasEnvironment
+      ? ""
+      : '<option value="" selected disabled>环境不可用</option>') +
     environments
       .map(
         (env) =>
           '<option value="' +
-          env.id +
+          esc(env.id) +
           '" ' +
-          (env.id === plan.environmentId ? "selected" : "") +
+          (env.id === environmentId ? "selected" : "") +
           ">" +
           esc(env.name) +
           "</option>",
       )
       .join("") +
     "</select>" +
-    '<label>成功状态规则</label><select id="plan-status-policy" class="' +
-    ai(plan, "statusPolicy") +
-    '"><option value="assertions" ' +
-    (plan.statusPolicy !== "strict200" ? "selected" : "") +
-    '>默认 2xx，可用状态断言指定预期错误</option><option value="strict200" ' +
-    (plan.statusPolicy === "strict200" ? "selected" : "") +
-    ">原版兼容：仅 200，断言不能豁免非 200</option></select>" +
-    '<div class="page-head"><h3>执行步骤</h3><div class="row"><button id="edit-plan">编辑 JSON</button><button id="edit-plan-structure">编辑步骤结构</button><button id="add-step">＋ 添加步骤</button></div></div>' +
+    '<button type="button" id="view-plan-environment" aria-label="查看执行环境" aria-haspopup="dialog" aria-controls="plan-environment-inspection"' +
+    (hasEnvironment ? "" : " disabled") +
+    ">查看</button></div></div>" +
+    '<dialog id="plan-environment-inspection" aria-labelledby="plan-environment-inspection-title"><header><button type="button" aria-label="关闭执行环境">×</button><h2 id="plan-environment-inspection-title"></h2></header><div class="plan-environment-scroll"><p>查看当前项目的环境和全局变量。变量值不显示，不会运行计划。</p><div id="plan-environment-inspection-tabs"></div></div></dialog>' +
+    '<section class="plan-editor-workflow"><h3>执行步骤</h3>' +
+    renderStepPicker(requests) +
     plan.steps
       .map((step, index) => renderPlanStep(step, index, plan))
       .join("") +
     (!plan.steps.length
       ? '<div class="notice">计划为空，请添加已有接口的独立快照。</div>'
       : "") +
-    '<div class="plan-save"><button id="save-plan-details" class="primary">保存计划</button></div>'
+    '<div class="plan-save"><button id="save-plan-details" class="primary">保存计划</button></div></section>' +
+    '<section class="plan-editor-advanced">' +
+    '<label for="plan-status-policy">成功状态规则</label><select id="plan-status-policy" class="' +
+    ai(plan, "statusPolicy") +
+    '"><option value="assertions" ' +
+    (plan.statusPolicy !== "strict200" ? "selected" : "") +
+    '>默认 2xx，可用状态断言指定预期错误</option><option value="strict200" ' +
+    (plan.statusPolicy === "strict200" ? "selected" : "") +
+    ">原版兼容：仅 200，断言不能豁免非 200</option></select>" +
+    '<div class="row"><button id="edit-plan">编辑 JSON</button><button id="edit-plan-structure">编辑步骤结构</button></div></section>'
   );
 }
-function stepOverview(step, position, inheritedDisabled = false) {
+function stepOverview(
+  step,
+  position,
+  inheritedDisabled = false,
+  inspectIndex = null,
+) {
   const summary = planStepSummary(step);
+  const title = esc(step.name || summary.kind);
+  const heading =
+    inspectIndex === null
+      ? "<strong>" + title + "</strong>"
+      : '<button type="button" class="plan-snapshot-opener" data-plan-inspect-step="' +
+        inspectIndex +
+        '" aria-expanded="false" aria-controls="plan-snapshot-' +
+        inspectIndex +
+        '">' +
+        title +
+        "</button>";
   return (
     '<span class="step-number">' +
     esc(position) +
@@ -112,9 +163,8 @@ function stepOverview(step, position, inheritedDisabled = false) {
     '<span class="method">' +
     esc(summary.kind) +
     "</span>" +
-    '<div class="grow"><strong>' +
-    esc(step.name || summary.kind) +
-    "</strong>" +
+    '<div class="grow">' +
+    heading +
     '<div class="subtle">' +
     esc(summary.detail) +
     "</div>" +
@@ -160,7 +210,7 @@ function renderPlanStep(step, index, plan) {
     '" ' +
     (step.enabled !== false ? "checked" : "") +
     ' aria-label="启用步骤">' +
-    stepOverview(step, index + 1) +
+    stepOverview(step, index + 1, false, advanced ? null : index) +
     '<button data-step-up="' +
     index +
     '" ' +
@@ -178,6 +228,13 @@ function renderPlanStep(step, index, plan) {
     '<button data-step-delete="' +
     index +
     '" class="danger">移除</button></div>' +
+    (advanced
+      ? ""
+      : '<section class="plan-snapshot-inspection" id="plan-snapshot-' +
+        index +
+        '" aria-label="请求快照" hidden><h4>请求 <span>步骤快照 · 不读取源接口</span></h4><div id="plan-snapshot-tabs-' +
+        index +
+        '" class="plan-snapshot-tabs"></div></section>') +
     nestedSteps(step, index + 1) +
     (advanced
       ? '<p class="subtle">循环/条件可视化修改；协议和结构详情使用完整 JSON，未修改字段保留。</p>'
@@ -185,74 +242,65 @@ function renderPlanStep(step, index, plan) {
     "</section>"
   );
 }
+function historyDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("en-US");
+}
 export function renderRuns(runs, lastRun) {
+  if (!runs.length) return '<p class="plan-history-empty">暂无执行记录</p>';
   return (
-    '<h2>执行记录 <span class="subtle">最近 50 条</span></h2>' +
-    (runs
+    '<p class="plan-history-limit">为避免本地文件过大，执行记录仅保留最近 50 条</p>' +
+    runs
       .map(
         (run) =>
           '<details class="card" data-plan-run-id="' +
           esc(run.id) +
           '" ' +
           (run.id === lastRun?.id ? "open" : "") +
-          '><summary><span class="' +
-          (run.status === "passed" ? "success" : "failed") +
+          '><summary><span class="plan-run-source">' +
+          (run.source === "manual" || (!run.source && run === lastRun)
+            ? "人工"
+            : run.source === "mcp"
+              ? "AI"
+              : run.source === "cli"
+                ? "CLI"
+                : "来源未知") +
+          '</span><span class="plan-run-title">业务流程执行 · ' +
+          esc(run.planName) +
+          '</span><time class="plan-run-time subtle">' +
+          esc(historyDate(run.createdAt)) +
+          '</time><span class="plan-run-verdict ' +
+          (run.status === "passed"
+            ? "success"
+            : run.status === "failed"
+              ? "failed"
+              : "subtle") +
           '">' +
           (run.status === "passed"
-            ? "✓ 通过"
+            ? "通过"
             : run.status === "cancelled"
-              ? "■ 已取消"
+              ? "已取消"
               : run.status === "failed"
-                ? "× 失败"
-                : "? 结果待核对") +
-          "</span> " +
-          esc(run.planName) +
-          ' <span class="subtle">' +
-          esc(run.createdAt) +
-          " · " +
-          run.results.length +
-          ' 步</span></summary><p class="subtle">快照 SHA256: ' +
+                ? "失败"
+                : "结果待核对") +
+          '</span></summary><div class="plan-run-body">' +
+          run.results.map(renderRunStep).join("") +
+          '<div class="plan-run-evidence-footer"><p class="subtle plan-run-hash">快照 SHA256: ' +
           esc(run.planHash) +
-          "</p>" +
-          run.results
-            .map(
-              (step, index) =>
-                '<details class="card run-step" data-run-step="' +
-                index +
-                '" ' +
-                (step.status === "failed" ? "open" : "") +
-                "><summary>" +
-                (index + 1) +
-                '. <span class="' +
-                (step.status === "passed" ? "success" : "failed") +
-                '">' +
-                esc(step.status) +
-                "</span> " +
-                esc(step.name) +
-                " · " +
-                (step.response?.status || "") +
-                " " +
-                (step.response?.duration || 0) +
-                "ms</summary>" +
-                renderStepEvidence(step) +
-                "</details>",
-            )
-            .join("") +
-          '<button data-export-run="' +
+          '</p><button data-export-run="' +
           esc(run.id) +
-          '">导出证据 JSON</button></details>',
+          '">导出证据 JSON</button></div></div></details>',
       )
-      .join("") || '<div class="empty"><p>计划运行后会保留逐步证据。</p></div>')
+      .join("")
   );
 }
 
-function evidenceBlock(label, value, open = false) {
+function evidenceBlock(label, value) {
   return (
     '<details class="step-evidence" data-evidence="' +
     esc(label) +
-    '" ' +
-    (open ? "open" : "") +
-    "><summary>" +
+    '"><summary>' +
     esc(label) +
     "</summary><pre>" +
     esc(
@@ -261,6 +309,56 @@ function evidenceBlock(label, value, open = false) {
         : JSON.stringify(value ?? null, null, 2),
     ) +
     "</pre></details>"
+  );
+}
+function renderRunStep(step, index) {
+  const failures = (step.assertions || []).filter(
+    (assertion) => assertionState(assertion) === "failed",
+  );
+  const failure = failures[0];
+  const compactMismatch =
+    step.status === "failed" &&
+    !!step.response &&
+    !step.error &&
+    failures.length === 1 &&
+    failure.target === "status" &&
+    failure.op === "eq" &&
+    Number.isInteger(failure.actual) &&
+    Number.isInteger(failure.value) &&
+    failure.actual === step.response.status &&
+    failure.actual !== failure.value;
+  return (
+    '<details class="card run-step" data-run-step="' +
+    index +
+    '" ' +
+    (step.status === "failed" && !compactMismatch ? "open" : "") +
+    "><summary>" +
+    (index + 1) +
+    '. <span class="' +
+    (step.status === "passed" ? "success" : "failed") +
+    '">' +
+    esc(step.status) +
+    "</span> <strong>" +
+    esc(step.name) +
+    '</strong> <span class="subtle">' +
+    esc(step.response?.request?.method || step.request?.method) +
+    " " +
+    esc(step.response?.request?.url || step.request?.url) +
+    "</span> · " +
+    (step.response?.status || "") +
+    " " +
+    (step.response?.duration || 0) +
+    "ms" +
+    (compactMismatch
+      ? '<span class="plan-step-status-mismatch failed">接口返回状态码 ' +
+        failure.actual +
+        "，期望 " +
+        failure.value +
+        "</span>"
+      : "") +
+    "</summary>" +
+    renderStepEvidence(step) +
+    "</details>"
   );
 }
 function renderStepEvidence(step) {
@@ -309,11 +407,7 @@ function renderStepEvidence(step) {
       step.requestUnresolved ? "请求配置（未发送）" : "请求",
       step.request,
     ) +
-    evidenceBlock(
-      "响应",
-      step.response || "未收到响应",
-      step.status === "failed" && !!step.response,
-    ) +
+    evidenceBlock("响应", step.response || "未收到响应") +
     evidenceBlock("脚本与操作日志", step.logs || []) +
     (step.subrequests?.length
       ? evidenceBlock("脚本HTTP子请求", step.subrequests)

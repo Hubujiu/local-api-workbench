@@ -24,6 +24,8 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     timeout-minutes: 10
     runs-on: ${{ matrix.os }}
+    env:
+      WORKBENCH_FIXTURE_GO_VERSION: "1.26.11"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,7 +33,24 @@ jobs:
           node-version: "24.22.3"
       - run: npm ci --ignore-scripts
       - run: npm run check
+      - name: Bootstrap pinned Go for Windows generated-code fixtures
+        id: fixture-go
+        if: runner.os == 'Windows'
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        timeout-minutes: 2
+        env:
+          GO111MODULE: "off"
+          GOPROXY: "off"
+          GOTOOLCHAIN: "local"
+          GOWORK: "off"
+        with:
+          go-version: ${{ env.WORKBENCH_FIXTURE_GO_VERSION }}
+          architecture: x64
+          cache: false
+          check-latest: false
       - run: node scripts/run-core-tests.mjs --shard=${{ matrix.shard }}/12 --label=${{ matrix.os }}
+        env:
+          WORKBENCH_FIXTURE_GO_ROOT: ${{ steps.fixture-go.outputs.GOROOT }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -42,20 +61,168 @@ jobs:
             test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-12.tap
             test-results/core-${{ matrix.os }}-shard-${{ matrix.shard }}-of-12.progress.jsonl
   browser:
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
       options: --shm-size=1g
     steps:
       - uses: actions/checkout@v4
+        id: browser_checkout
       - uses: actions/setup-node@v4
         with:
           node-version: "24.22.3"
       - run: npm install --no-save --ignore-scripts playwright@1.64.1
       - run: node tests/curl-http2.mjs
+      - run: node tests/http-pre-wait-ui.mjs
+        env:
+          HTTP_PRE_WAIT_EVIDENCE: /tmp/local-api-http-pre-wait
+      - run: node tests/http-script-snippets-ui.mjs
+        env:
+          HTTP_SCRIPT_SNIPPET_EVIDENCE: /tmp/local-api-http-script-snippets
+      - run: node tests/http-pre-actions-ui.mjs
+        env:
+          HTTP_PRE_ACTIONS_EVIDENCE: /tmp/local-api-http-pre-actions
+      - run: node tests/http-post-actions-ui.mjs
+        env:
+          HTTP_POST_ACTIONS_EVIDENCE: /tmp/local-api-http-post-actions
+      - run: node tests/http-request-parameter-overflow-ui.mjs
+        env:
+          HTTP_REQUEST_PARAMETER_OVERFLOW_EVIDENCE: /tmp/local-api-http-request-overflow
+      - run: node tests/http-split-body-ui.mjs
+        env:
+          HTTP_SPLIT_BODY_EVIDENCE: /tmp/local-api-http-split-body
+      - run: node tests/http-response-layout-ui.mjs
+        env:
+          HTTP_RESPONSE_LAYOUT_EVIDENCE: /tmp/local-api-http-response-layout
+      - run: node tests/http-auth-pane-ui.mjs
+      - run: node tests/http-request-auth-shared-ui.mjs
+        env:
+          HTTP_REQUEST_AUTH_EVIDENCE: /tmp/local-api-http-request-auth
+      - run: node tests/environment-workspace-ui.mjs
+      - run: node tests/workspace-global-variables-ui.mjs
+      - run: node tests/workspace-global-parameters-ui.mjs
+      - run: node tests/http-design-pane-ui.mjs
+      - run: node tests/http-design-response-example-inline-ui.mjs
+        env:
+          DESIGN_RESPONSE_EXAMPLE_INLINE_EVIDENCE: /tmp/local-api-design-response-example-inline
+      - run: node tests/http-design-response-header-inline-ui.mjs
+        env:
+          DESIGN_RESPONSE_HEADER_INLINE_EVIDENCE: /tmp/local-api-design-response-header-inline
+      - run: node tests/http-design-response-settings-inline-ui.mjs
+        env:
+          DESIGN_RESPONSE_SETTINGS_INLINE_EVIDENCE: /tmp/local-api-design-response-settings-inline
+      - run: node tests/http-design-pair-composer-ui.mjs
+        env:
+          DESIGN_PAIR_COMPOSER_EVIDENCE: /tmp/local-api-design-pair-composer
+      - run: node tests/http-design-path-ui.mjs
+        env:
+          DESIGN_PATH_EVIDENCE: /tmp/local-api-http-design-path
+      - run: node tests/http-design-query-metadata-ui.mjs
+        env:
+          DESIGN_QUERY_METADATA_EVIDENCE: /tmp/local-api-design-query-metadata
+      - run: node tests/http-design-description-scroll-ui.mjs
+        env:
+          DESIGN_DESCRIPTION_SCROLL_EVIDENCE: /tmp/local-api-http-design-description-scroll
+      - run: node tests/debug-pair-composer-ui.mjs
+      - run: node tests/http-debug-header-ui.mjs
+        env:
+          HTTP_DEBUG_HEADER_EVIDENCE: /tmp/local-api-http-debug-header
+      - run: node tests/http-debug-cookie-ui.mjs
+        env:
+          HTTP_DEBUG_COOKIE_EVIDENCE: /tmp/local-api-http-debug-cookie
+      - run: node tests/debug-url-query-ui.mjs
+        env:
+          DEBUG_URL_QUERY_EVIDENCE: /tmp/local-api-debug-url-query
+      - run: node tests/http-debug-path-ui.mjs
+        env:
+          HTTP_DEBUG_PATH_EVIDENCE: /tmp/local-api-http-debug-path
+      - run: node tests/http-debug-body-empty-ui.mjs
+      - run: node tests/http-debug-examples-ui.mjs
+        env:
+          HTTP_DEBUG_EXAMPLE_EVIDENCE: /tmp/local-api-http-debug-example
+      - run: node tests/http-success-response-ui.mjs
+        env:
+          HTTP_SUCCESS_RESPONSE_EVIDENCE: /tmp/local-api-http-success-response
+      - run: node tests/http-response-headers-ui.mjs
+        env:
+          HTTP_RESPONSE_HEADERS_EVIDENCE: /tmp/local-api-http-response-headers
+      - run: node tests/http-unsent-actual-request-ui.mjs
+        env:
+          HTTP_UNSENT_ACTUAL_REQUEST_EVIDENCE: /tmp/local-api-http-unsent-actual-request
+      - run: node tests/http-curl-preview-ui.mjs
+        env:
+          HTTP_CURL_PREVIEW_EVIDENCE: /tmp/local-api-http-curl-preview
+      - run: node tests/debug-multipart-editor-ui.mjs
+      - run: node tests/debug-urlencoded-editor-ui.mjs
+      - run: node tests/form-file-privacy-ui.mjs
+      - run: node tests/binary-body-editor-ui.mjs
+      - run: node tests/http-debug-body-raw-ui.mjs
+      - run: node tests/plan-step-picker-ui.mjs
+      - run: node tests/plan-inspection-ui.mjs
+        env:
+          PLAN_INSPECTION_EVIDENCE: /tmp/local-api-plan-inspection
+      - run: node tests/api-sidebar-tree-ui.mjs
+      - run: node tests/api-create-menu-ui.mjs
+      - run: node tests/graphql-workspace-ui.mjs
+      - run: node tests/graphql-operation-name-ui.mjs
+      - run: node tests/graphql-named-workspace-ui.mjs
+        env:
+          GRAPHQL_NAMED_WORKSPACE_EVIDENCE: /tmp/local-api-graphql-named-workspace
+      - run: node tests/graphql-schema-directory-ui.mjs
+      - run: node tests/project-create-form-ui.mjs
+      - run: node tests/project-create-settlement-ui.mjs
+      - run: node tests/project-top-menu-ui.mjs
+      - run: node tests/api-row-menu-ui.mjs
+      - run: node tests/project-switcher-ui.mjs
+      - run: node tests/project-switch-aftermath-ui.mjs
+      - run: node tests/project-switch-confirmation-ui.mjs
+      - run: node tests/project-switch-target-read-ui.mjs
+      - run: node tests/api-welcome-ui.mjs
+      - run: node tests/appearance-settings-ui.mjs
+      - run: node tests/appearance-font-scale-ui.mjs
+      - run: node tests/product-version-ui.mjs
+      - run: node tests/after-send-settings-ui.mjs
+      - run: node tests/send-settings-ui.mjs
+      - run: node tests/scoped-export-surface-ui.mjs
+      - run: node tests/graphql-export-notice-ui.mjs
+      - run: node tests/sse-workbench-ui.mjs
+      - run: node tests/sse-capture-owner-ui.mjs
+        env:
+          SSE_CAPTURE_EVIDENCE: /tmp/local-api-sse-capture-owner
+      - run: node tests/database-manager-ui.mjs
+      - run: node tests/empty-trash-ui.mjs
+      - run: node tests/request-trash-confirmation-ui.mjs
+      - run: node tests/database-connection-card-ui.mjs
+      - run: node tests/sse-definition-save-ui.mjs
+      - run: node tests/local-project-import-ui.mjs
+      - run: node tests/openapi-file-review-ui.mjs
+      - run: node tests/openapi-file-selection-ui.mjs
+      - run: node tests/workspace-document-ui.mjs
+      - run: node tests/workspace-document-image-ui.mjs
+      - run: node tests/workspace-document-history-ui.mjs
+      - run: node tests/workspace-document-scroll-ui.mjs
+      - run: node tests/dictionary-page-ui.mjs
+      - run: node tests/dictionary-entry-ui.mjs
+      - run: node tests/model-workspace-ui.mjs
+      - run: node tests/model-raw-editor-ui.mjs
+      - run: node tests/model-field-type-ui.mjs
+      - run: node tests/model-field-required-ui.mjs
+      - run: node tests/interface-case-drawer-ui.mjs
+      - run: node tests/interface-case-list-ui.mjs
+      - run: node tests/load-workspace-ui.mjs
+      - run: node tests/load-result-ownership-ui.mjs
+      - run: node tests/mcp-off-summary-ui.mjs
+      - run: node tests/mcp-top-status-ui.mjs
+      - run: node tests/mcp-status-overflow-ui.mjs
+      - run: node tests/recent-history-ui.mjs
+      - run: node tests/recent-dark-shell-ui.mjs
+      - run: node tests/recent-saved-versions-ui.mjs
+      - run: node tests/recent-saved-trash-ui.mjs
+      - run: node tests/recent-saved-checkbox-ui.mjs
       - run: node tests/ui-smoke.mjs
         env:
+          HTTP_WORKBENCH_CHECKOUT_COMMIT: ${{ steps.browser_checkout.outputs.commit }}
           PLAYWRIGHT_BUNDLED: "1"
       - run: node tests/sqlserver-owner-ui.mjs
         env:
@@ -70,6 +237,33 @@ jobs:
           name: ui-evidence
           path: |
             /tmp/local-api-*.png
+            /tmp/local-api-design-response-example-inline/design-response-example-*.png
+            /tmp/local-api-design-response-header-inline/design-response-header-*.png
+            /tmp/local-api-design-response-settings-inline/design-response-settings-*.png
+            /tmp/local-api-http-debug-example/http-debug-example-*.png
+            /tmp/local-api-http-success-response/response-*-workbench.png
+            /tmp/local-api-http-response-headers/http-response-headers-*.png
+            /tmp/local-api-http-unsent-actual-request/http-unsent-actual-request-*.png
+            /tmp/local-api-http-curl-preview/http-curl-preview-*.png
+            /tmp/local-api-http-response-layout/http-response-layout-*.png
+            /tmp/local-api-http-split-body/http-split-body-*.png
+            /tmp/local-api-http-request-overflow/http-request-overflow-*.png
+            /tmp/local-api-http-post-actions/http-post-actions-*.png
+            /tmp/local-api-http-pre-actions/http-pre-actions-*.png
+            /tmp/local-api-http-script-snippets/http-script-snippets-*.png
+            /tmp/local-api-http-pre-wait/http-pre-wait-*.png
+            /tmp/local-api-plan-inspection/plan-inspection-*.png
+            /tmp/local-api-http-request-auth/http-request-auth-*.png
+            /tmp/local-api-design-pair-composer/design-pair-*.png
+            /tmp/local-api-http-design-path/design-path-*.png
+            /tmp/local-api-http-debug-path/debug-path-*.png
+            /tmp/local-api-debug-url-query/debug-url-query-*.png
+            /tmp/local-api-http-debug-cookie/debug-cookie-*.png
+            /tmp/local-api-http-debug-header/debug-header-*.png
+            /tmp/local-api-design-query-metadata/design-query-*.png
+            /tmp/local-api-http-design-description-scroll/design-description-*.png
+            /tmp/local-api-graphql-named-workspace/named-workbench-*.png
+            /tmp/local-api-http-workbench.json
             /tmp/local-api-trace.zip
             /tmp/local-api-restart-journey-trace.zip
             /tmp/local-api-video/

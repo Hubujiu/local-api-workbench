@@ -1,0 +1,129 @@
+@media (min-width: 1240px) {
+  .shell:has(.editor[data-editor-mode="cases"]) > .sidebar {
+    width: 305px;
+  }
+  .editor[data-editor-mode="cases"] .case-empty-menu {
+    flex-basis: 195px;
+  }
+}
+.case-populated-layout {
+  gap: 12px;
+}
+.case-populated-layout .case-list-stage {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+.case-populated-layout .case-selection {
+  justify-content: space-between;
+  gap: 6px 8px;
+  min-height: 26px;
+  margin: 0 0 12px;
+  padding-inline-start: 17px;
+}
+.case-batch-selection,
+.case-selected-actions,
+.case-list-actions,
+.case-list-row-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  min-width: 0;
+}
+.case-populated-layout .case-selected-actions[hidden] {
+  display: none;
+}
+.case-populated-layout .case-selection button {
+  min-height: 26px;
+  padding: 3px 9px;
+  font-size: calc(12 * var(--app-type-unit));
+  line-height: 16px;
+}
+.case-populated-layout .case-selection [data-case-selection-count] {
+  color: var(--muted);
+  font-size: calc(12 * var(--app-type-unit));
+}
+.case-populated-layout [data-case-selection-count][data-empty] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.case-populated-layout #case-batch-status {
+  margin: 0 0 8px;
+}
+.case-populated-layout .interface-case-row {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin: 0 0 8px;
+  background: var(--panel);
+}
+body:not(.dark)
+  .case-populated-layout
+  .interface-case-row:not(.case-row-selected) {
+  background: #f3ebd9;
+}
+.case-populated-layout .case-row-selected {
+  border-color: var(--accent);
+  background: var(--hover);
+}
+.case-list-row-head {
+  min-height: 38px;
+  display: grid;
+  align-items: center;
+  grid-template-columns: 16px 36px minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  padding: 3px 8px 3px 16px;
+}
+.case-list-row-head > .method {
+  padding: 0;
+  background: transparent;
+}
+.case-list-name {
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+.case-list-row-actions > button,
+.case-row-address > summary {
+  min-height: 24px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  font-size: calc(12 * var(--app-type-unit));
+  line-height: 16px;
+}
+.case-row-address > summary {
+  cursor: pointer;
+}
+.case-row-address[open] {
+  width: 100%;
+}
+.case-row-address code {
+  display: block;
+  padding: 4px 6px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.case-list-row-head:has(.case-row-address[open]) > .case-list-row-actions {
+  grid-column: 1 / -1;
+}
+.case-populated-layout .interface-case-row > :is(pre, .case-result) {
+  margin: 4px 12px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 930px) {
+  .case-populated-layout .case-selection {
+    padding-inline-start: 8px;
+  }
+  .case-list-row-head {
+    grid-template-columns: 16px 36px minmax(0, 1fr);
+    padding-inline: 8px;
+  }
+  .case-list-row-actions {
+    grid-column: 1 / -1;
+  }
+}

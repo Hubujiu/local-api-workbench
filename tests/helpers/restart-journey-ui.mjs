@@ -1,3 +1,6 @@
+import { revealDebugPreSettings } from "./http-pre-actions-ui.mjs";
+import { revealDebugPostSettings } from "./http-post-actions-ui.mjs";
+import { openProjectCreateUI } from "./open-project-create-ui.mjs";
 import assert from "node:assert/strict";
 import { assertRestartedProject } from "./restart-project-receipt.mjs";
 import { readFile } from "node:fs/promises";
@@ -68,7 +71,10 @@ export async function exerciseRestartJourney({
     const card = page.locator("details.card").filter({ has: exportButton });
     const summary = card.locator(":scope > summary");
     await summary.waitFor({ state: "visible" });
-    assert.match(await summary.innerText(), /✓ 通过/);
+    assert.equal(
+      await summary.locator(".plan-run-verdict.success").innerText(),
+      "通过",
+    );
     assert.ok((await summary.innerText()).includes(expected.planName));
     if ((await card.getAttribute("open")) === null) await summary.click();
     await card
@@ -97,7 +103,7 @@ export async function exerciseRestartJourney({
     });
     await page.locator('.rail [data-page="apis"]').click();
   }
-  await page.locator("#new-project").click();
+  await openProjectCreateUI(page);
   await page.locator("#new-name").fill("Complete restart journey");
   await page.locator("#dialog-save").click();
   await closedDialog();
@@ -191,6 +197,7 @@ export async function exerciseRestartJourney({
   await page.locator("#auth-type").selectOption("bearer");
   await page.locator('[data-auth="token"]').fill("fictional-journey-token");
   await page.locator('[data-param="after"]').click();
+  await revealDebugPostSettings(page);
   await page
     .locator("#script-code")
     .fill(
@@ -208,6 +215,7 @@ export async function exerciseRestartJourney({
   mark("authorize-database");
   await grant("Journey first grant");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator("#add-db-operation").click();
   await page.locator("#operation-db-sql").fill("SELECT value FROM fixture");
   await page.locator("#operation-db-path").fill("$.rows[0].value");
@@ -236,7 +244,12 @@ export async function exerciseRestartJourney({
   assert.equal(run.status, "passed");
   assert.equal(run.results.length, 1);
   assert.equal(hits.length, 3);
-  await page.getByText("✓ 通过", { exact: false }).waitFor();
+  await page
+    .locator(
+      `[data-plan-run-id="${run.id}"] > summary .plan-run-verdict.success`,
+    )
+    .getByText("通过", { exact: true })
+    .waitFor();
   await page.locator('.rail [data-page="apis"]').click();
   mark("backup");
   const saved = await backup();
@@ -320,6 +333,7 @@ export async function exerciseRestartJourney({
   mark("regrant-and-rebind");
   await grant("Journey replacement grant");
   await page.locator('[data-param="before"]').click();
+  await revealDebugPreSettings(page);
   await page.locator('[data-edit-db-operation="0"]').click();
   await page.locator("#dialog").waitFor({ state: "visible" });
   assert.equal(await page.locator("#operation-db-connection").inputValue(), "");

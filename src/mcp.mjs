@@ -78,6 +78,7 @@ import {
   validateMCPProjectArguments,
 } from "./mcp-project-interchange.mjs";
 import { applyMCPInput } from "./mcp-request-input.mjs";
+import { activeGraphQLRequest } from "../public/graphql-named-queries.js";
 import {
   listExecutionHistory,
   findExecutionResult,
@@ -1503,18 +1504,19 @@ export function createMCP({
               );
               break;
             }
-            case "localapi_get_api_detail":
+            case "localapi_get_api_detail": {
               if (nativeName) {
                 output = nativeAPIDetail(p, args.apiId);
                 break;
               }
-              output = [
-                ...p.requests,
-                ...(p.protocols || []),
-                ...(p.documents || []),
-              ].find((r) => r.id === args.apiId && !r.deletedAt);
+              const match = (item) => item.id === args.apiId && !item.deletedAt;
+              const request = p.requests.find(match);
+              output = request
+                ? activeGraphQLRequest(request)
+                : [...(p.protocols || []), ...(p.documents || [])].find(match);
               if (!output) throw Error("接口不存在");
               break;
+            }
             case "localapi_list_plans":
               output = {
                 plans: p.plans,

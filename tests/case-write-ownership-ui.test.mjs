@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createDebugExampleDrafts } from "../public/http-debug-examples.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createProjectImportGuard } from "../public/project-import-guard.js";
@@ -35,10 +36,13 @@ function harness({ initial = fixture(), hooks = {} } = {}) {
     "api",
     "projectImports",
     "nativeRequestLifecycle",
+    "debugExampleDrafts",
     `
  let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
- let project=initial,current="r",editVersion=0,projectOpenSequence=0,modalRevision=0,dirty=false,busy=false,saving=false,opened=[],response,lastRun,loadResult,planId,selectedProtocolId;
+ let openedDocuments=[],activeDocumentId=null;
+ const documentModes=new Map();
+ let project=initial,current="r",editVersion=0,projectOpenSequence=0,projectOpenRequestSequence=0,modalRevision=0,dirty=false,busy=false,saving=false,opened=[],response,lastRun,loadResult,planId,selectedProtocolId;
  const els={"#case-name":{value:"new case"},"#case-folder":{value:""},"#modal-json":{value:JSON.stringify(initial.requests[0])},"#dialog":{open:true}};
  const $=s=>els[s],esc=s=>s,jsonEditor=()=>"",caseFolderPath=()=>"",collect=()=>{},render=()=>{},toast=()=>{},sessionStorage={setItem(){}},confirm=()=>hooks.confirm??true,request=()=>project.requests.find(r=>r.id===current);
  const edit=()=>{project.requests[0].name="new draft";dirty=true;editVersion++};
@@ -47,11 +51,11 @@ function harness({ initial = fixture(), hooks = {} } = {}) {
  ${openSource}
  ${editSource}
  editInterfaceCase();
- return {run:()=>submit(),open:openProject,save,edit,els,state:()=>({project,dirty}),replace(p){project=p},replaceModal(){modalRevision++},dirty(){dirty=true},pendingNavigation(){projectOpenSequence++}};
+ return {run:()=>submit(),open:openProject,save,edit,els,state:()=>({project,dirty}),replace(p){project=p},replaceModal(){modalRevision++},dirty(){dirty=true},pendingNavigation(){projectOpenSequence++;projectOpenRequestSequence++}};
  `,
   );
   return {
-    ...create(initial, hooks, api, guard, native),
+    ...create(initial, hooks, api, guard, native, createDebugExampleDrafts()),
     calls,
     guard,
     native,

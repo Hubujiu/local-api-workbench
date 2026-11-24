@@ -30,7 +30,11 @@ export function projectOwnerResponse(value) {
   return projectResponse(value, ["requestDefinitionHistory", "loadRuns"]);
 }
 
-// Existing MCP project-returning operations do not grant access to load receipts.
+// MCP project envelopes omit owner-only local editor data and load receipts.
 export function projectWithoutLoadRuns(value) {
-  return projectResponse(value, ["loadRuns"]);
+  return projectResponse(value, [
+    "loadRuns",
+    "literalQueryEditor",
+    "literalQueryEditorIssue",
+  ]);
 }

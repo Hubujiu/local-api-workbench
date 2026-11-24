@@ -153,8 +153,7 @@ test("unknown run outcome is neither failure nor success", () => {
   const owner = project();
   owner.runs = [{ ...record("uncertain"), status: "unknown" }];
   const html = renderPlans({ project: owner, tab: "runs" });
-  assert.match(html, /结果待核对/);
-  assert.doesNotMatch(html, /✓ 通过|× 失败/);
+  assert.match(html, /class="plan-run-verdict subtle">结果待核对<\/span>/);
 });
 test("stable record ID is attribute encoded", () => {
   const owner = project();

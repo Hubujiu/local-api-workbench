@@ -1,7 +1,13 @@
 import test from "node:test";
+import { createDebugExampleDrafts } from "../public/http-debug-examples.js";
 import { createProjectImportGuard } from "../public/project-import-guard.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { newGraphQLEditorRequest } from "../public/graphql-editor.js";
+import {
+  createGraphQLWorkspaceDrafts,
+  unappliedGraphQL,
+} from "../public/graphql-workspace.js";
 import {
   createNativeRequestLifecycle,
   nativeRequestLifecycleOperation,
@@ -309,30 +315,54 @@ test("actual application wiring awaits native controller and guards ordinary sav
     app.indexOf('  on("#delete",'),
     app.indexOf('  on("#send",'),
   );
+  const ordinaryTrash = app.slice(
+    app.indexOf("function ordinaryRequestRowOwner("),
+    app.indexOf("function bindTree()"),
+  );
   const execute = new Function(
     "project",
     "changeNativeRequestLifecycle",
-    "confirm",
     "request",
     "mark",
     "render",
     "save",
     "responses",
-    `let current="r1",response;const handlers={};const on=(s,e,f)=>handlers[s]=f;${handlers};return handlers;`,
+    "graphqlDrafts",
+    "unappliedGraphQL",
+    `let current="r1",activeDocumentId=null,response, editVersion=0, modalRevision=0, page="apis", busy=false, saving=false;
+      const handlers={};const on=(s,e,f)=>handlers[s]=f;
+      const workspaceDocument=()=>null, $=()=>({ open:true, focus(){} });
+      const modal=(title,_html,submit)=>{modalRevision++;handlers.title=title;handlers.confirm=submit};
+      const collect=()=>{};
+      ${ordinaryTrash};
+      ${handlers};
+      handlers.openOther=(target,opener)=>confirmOrdinaryRequestTrash(target,opener);
+      handlers.selection=()=>current;
+      handlers.select=(id)=>{current=id};
+      handlers.edit=()=>{editVersion++};
+      return handlers;`,
   );
   const calls = [];
   const p = fixture();
+  const graphqlDrafts = createGraphQLWorkspaceDrafts();
   let marks = 0;
   const native = execute(
     p,
     async (...x) => calls.push(x),
-    () => true,
     () => p.requests[0],
     () => marks++,
     () => {},
     async () => {},
     new Map(),
+    graphqlDrafts,
+    unappliedGraphQL,
   );
+  Object.assign(p.requests[0], newGraphQLEditorRequest());
+  graphqlDrafts.edit(p.requests[0], "query", "query Fixture { viewer { id } }");
+  await assert.rejects(native["#delete"](), { message: unappliedGraphQL });
+  assert.deepEqual(calls, []);
+  assert.equal(p.requests[0].deletedAt, undefined);
+  assert.equal(graphqlDrafts.discard(p.requests[0]), true);
   await native["#delete"]();
   await native["[data-restore]"](null, { dataset: { restore: "r1" } });
   assert.deepEqual(calls, [
@@ -350,23 +380,49 @@ test("actual application wiring awaits native controller and guards ordinary sav
     () => {
       throw Error("wrong branch");
     },
-    () => true,
     () => ordinary.requests[0],
     () => marks++,
     () => {},
     async () => saved++,
     new Map(),
+    graphqlDrafts,
+    unappliedGraphQL,
   );
   await old["#delete"]();
+  assert.match(old.title, /移到回收站/);
+  assert.equal(ordinary.requests[0].deletedAt, undefined);
+  assert.equal(saved, 0);
+  old.edit();
+  assert.throws(old.confirm, /草稿已变化/);
+  assert.equal(ordinary.requests[0].deletedAt, undefined);
+  await old["#delete"]();
+  const superseded = old.confirm;
+  await old["#delete"]();
+  assert.throws(superseded, /草稿已变化/);
+  assert.equal(ordinary.requests[0].deletedAt, undefined);
+  old.confirm();
   assert(ordinary.requests[0].deletedAt);
+  assert.equal(saved, 0);
   await old["[data-restore]"](null, { dataset: { restore: "r1" } });
   assert.equal(ordinary.requests[0].deletedAt, undefined);
+  assert.equal(saved, 1);
+  const other = { id: "other", name: "Another request" };
+  ordinary.requests.push(other);
+  old.select("r1");
+  old.openOther(other);
+  assert.match(old.title, /Another request/);
+  old.confirm();
+  assert(other.deletedAt);
+  assert.equal(ordinary.requests[0].deletedAt, undefined);
+  assert.equal(old.selection(), "r1");
   assert.equal(saved, 1);
 });
 
 async function openHarness(
   initial = fixture(),
   controller = createNativeRequestLifecycle(),
+  graphqlDrafts = createGraphQLWorkspaceDrafts(),
+  debugExampleDrafts = createDebugExampleDrafts(),
 ) {
   const app = await readFile(
     new URL("../public/app.js", import.meta.url),
@@ -377,31 +433,141 @@ async function openHarness(
     app.indexOf("\nfunction modal("),
   );
   const gets = [];
-  const api = (path) =>
-    new Promise((resolve, reject) => gets.push({ path, resolve, reject }));
+  const api = (path, method, data, options) =>
+    new Promise((resolve, reject) =>
+      gets.push({ path, method, data, options, resolve, reject }),
+    );
   const create = new Function(
     "initial",
     "nativeRequestLifecycle",
     "projectImports",
     "api",
+    "graphqlDrafts",
+    "unappliedGraphQL",
+    "debugExampleDrafts",
     `
     let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
+ let openedDocuments=[],activeDocumentId=null;
+ const documentModes=new Map();
  let project=initial, dirty=false, editVersion=0, busy=false, saving=false,
-      projectOpenSequence=0,current,opened,response,lastRun,loadResult,planId,selectedProtocolId;
+      projectOpenSequence=0,projectOpenRequestSequence=0,current,opened,response,lastRun,loadResult,planId,selectedProtocolId;
     const confirm=()=>true,sessionStorage={setItem(){}},render=()=>{};
     ${source}
-    return {open:openProject,getState:()=>({project,dirty,editVersion,busy,saving}),
+    return {open:openProject,getState:()=>({project,dirty,editVersion,busy,saving,projectOpenSequence,projectOpenRequestSequence}),
+      seedDocuments(){openedDocuments=["doc"];activeDocumentId="doc";documentModes.set("doc","edit");},
+      documents(){return {opened:[...openedDocuments],active:activeDocumentId,modes:[...documentModes]};},
       edit(){project.requests[0].name="new draft";dirty=true;editVersion++;},
       replace(p){project=p;},flag(key){if(key==="busy")busy=true;else saving=true;}};
   `,
   );
   return {
-    ...create(initial, controller, createProjectImportGuard(), api),
+    ...create(
+      initial,
+      controller,
+      createProjectImportGuard(),
+      api,
+      graphqlDrafts,
+      unappliedGraphQL,
+      debugExampleDrafts,
+    ),
     gets,
     controller,
   };
 }
+test("actual project reload does not read or replace an owner with an unapplied GraphQL draft", async () => {
+  const owner = fixture();
+  const graphqlRequest = Object.assign(
+    owner.requests[0],
+    newGraphQLEditorRequest(),
+  );
+  const drafts = createGraphQLWorkspaceDrafts();
+  drafts.edit(graphqlRequest, "query", "query Fixture { viewer { id } }");
+  const h = await openHarness(owner, undefined, drafts);
+  await assert.rejects(h.open(owner.id), { message: unappliedGraphQL });
+  assert.deepEqual(h.gets, []);
+  assert.equal(h.getState().project, owner);
+  assert.equal(graphqlRequest.body, '{"query":""}');
+  assert.equal(drafts.discard(graphqlRequest), true);
+  const reload = h.open(owner.id);
+  assert.equal(h.gets.length, 1);
+  h.gets[0].resolve(structuredClone(owner));
+  assert.equal(await reload, true);
+});
+
+test("project reload and picker switching preserve an invalid response example draft until recovery", async () => {
+  const owner = fixture();
+  const row = { name: "Working example", status: 200, body: "{}" };
+  const request = owner.requests[0];
+  request.examples = [row];
+  const drafts = createDebugExampleDrafts();
+  const h = await openHarness(owner, undefined, undefined, drafts);
+  drafts.edit(request, row, "{ invalid");
+  await assert.rejects(h.open(owner.id), /无效的响应示例正文/);
+  await assert.rejects(
+    h.open("another", { fromPicker: true }),
+    /无效的响应示例正文/,
+  );
+  assert.deepEqual(h.gets, []);
+  assert.equal(h.getState().project, owner);
+  assert.equal(drafts.read(row).body, "{ invalid");
+  assert.equal(row.body, "{}");
+  assert.equal(drafts.clear(row), true);
+  const reload = h.open(owner.id);
+  assert.equal(h.gets.length, 1);
+  h.gets[0].resolve(structuredClone(owner));
+  assert.equal(await reload, true);
+});
+
+test("aborted picker GET forwards its signal and cannot adopt a delivered late response", async () => {
+  const h = await openHarness();
+  const original = h.getState().project;
+  const canceled = new AbortController();
+  canceled.abort();
+  assert.equal(
+    await h.open("never-read", { targetSignal: canceled.signal }),
+    false,
+  );
+  assert.equal(h.gets.length, 0);
+
+  const target = new AbortController();
+  const pending = h.open("other", {
+    fromPicker: true,
+    targetSignal: target.signal,
+  });
+  assert.equal(h.gets[0].path, "/projects/other");
+  assert.equal(h.gets[0].method, "GET");
+  assert.equal(h.gets[0].options.signal, target.signal);
+  assert.equal(h.getState().projectOpenSequence, 0);
+  assert.equal(h.getState().projectOpenRequestSequence, 1);
+  target.abort();
+  h.gets[0].resolve({ ...original, id: "other" });
+  assert.equal(await pending, false);
+  assert.equal(h.getState().project, original);
+  assert.equal(h.getState().projectOpenSequence, 0);
+  assert.equal(h.getState().projectOpenRequestSequence, 1);
+});
+
+test("pending picker GET supersedes older read but cannot supersede a newer regular read", async () => {
+  const h = await openHarness();
+  const owner = h.getState().project;
+  const older = h.open(owner.id);
+  const target = new AbortController();
+  const pending = h.open("target", {
+    fromPicker: true,
+    targetSignal: target.signal,
+  });
+  h.gets[0].resolve({ ...owner, name: "obsolete mounted reload" });
+  assert.equal(await older, false);
+  assert.equal(h.getState().project, owner);
+  const newer = h.open("latest");
+  h.gets[1].resolve({ ...owner, id: "target" });
+  assert.equal(await pending, false);
+  h.gets[2].resolve({ ...owner, id: "latest" });
+  assert.equal(await newer, true);
+  assert.equal(h.getState().project.id, "latest");
+  assert.equal(h.getState().projectOpenRequestSequence, 3);
+});
 async function unknownCommand(h) {
   await assert.rejects(
     h.controller.run({
@@ -450,6 +616,22 @@ test("actual openProject only newest GET applies, across opposite response order
     await Promise.all([first, second]);
     assert.equal(h.getState().project.id, "second");
   }
+});
+test("only the winning project load clears local document tabs and modes", async () => {
+  const h = await openHarness();
+  h.seedDocuments();
+  const superseded = h.open("first");
+  const winning = h.open("second");
+  h.gets[0].resolve({ ...fixture(), id: "first" });
+  await superseded;
+  assert.deepEqual(h.documents(), {
+    opened: ["doc"],
+    active: "doc",
+    modes: [["doc", "edit"]],
+  });
+  h.gets[1].resolve({ ...fixture(), id: "second" });
+  await winning;
+  assert.deepEqual(h.documents(), { opened: [], active: null, modes: [] });
 });
 test("actual openProject rejects replacement identity and new busy/save work", async () => {
   for (const changed of ["identity", "busy", "saving"]) {

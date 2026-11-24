@@ -9,7 +9,7 @@ const esc = (value) =>
   );
 const object = (value) =>
   value && typeof value === "object" && !Array.isArray(value);
-const types = [
+export const schemaTypes = Object.freeze([
   "string",
   "integer",
   "number",
@@ -17,7 +17,8 @@ const types = [
   "object",
   "array",
   "null",
-];
+]);
+const types = schemaTypes;
 const combinations = ["allOf", "anyOf", "oneOf"];
 const constraintFields = {
   minimum: "数值下限",
@@ -677,33 +678,47 @@ export function bindSchemaEditor(container, schema) {
   };
 }
 
-export function editResponseDefinition(responses, index, fields) {
+function responseMetadata(responses, index, fields) {
   if (
     !Array.isArray(responses) ||
     !Number.isInteger(index) ||
     index < -1 ||
-    index >= responses.length
+    index >= responses.length ||
+    (index >= 0 && !object(responses[index]))
   )
     throw Error("响应索引无效");
-  const status = String(fields.status).trim(),
-    mediaType = String(fields.mediaType).trim();
+  const status = String(fields.status).trim();
   if (!/^(default|[1-5](?:[0-9]{2}|XX))$/.test(status))
     throw Error("响应状态须为100至599、1XX至5XX或default");
-  if (!/^[a-zA-Z0-9!#$&^_.+*-]+\/[a-zA-Z0-9!#$&^_.+*-]+$/.test(mediaType))
-    throw Error("Content-Type须为不含参数的类型/子类型");
   if (
-    responses.some((item, i) => i !== index && String(item.status) === status)
+    responses.some((item, i) => i !== index && String(item?.status) === status)
   )
     throw Error("此响应状态已存在，请编辑已有响应");
   if (index === -1 && responses.length >= 100)
     throw Error("可视响应定义最多100项");
-  schemaRows(fields.schema);
   const description = String(fields.description || "");
   if (description.length > 8192) throw Error("响应说明最多8192字符");
+  return { status, description };
+}
+
+export function editResponseDefinition(responses, index, fields) {
+  const { status, description } = responseMetadata(responses, index, fields);
+  const mediaType = String(fields.mediaType).trim();
+  if (!/^[a-zA-Z0-9!#$&^_.+*-]+\/[a-zA-Z0-9!#$&^_.+*-]+$/.test(mediaType))
+    throw Error("Content-Type须为不含参数的类型/子类型");
+  schemaRows(fields.schema);
   const next = structuredClone(responses),
     item = index < 0 ? {} : next[index];
   if (item.content !== undefined && !object(item.content))
     throw Error("响应content格式无效，请先用JSON修正");
+  if (
+    fields.sourceMediaType !== undefined &&
+    fields.sourceMediaType !== mediaType &&
+    Object.keys(item.content || {}).some(
+      (type) => type.toLowerCase() === mediaType.toLowerCase(),
+    )
+  )
+    throw Error("Content-Type 已存在，请切换到该类型后直接编辑");
   if (
     item.content?.[mediaType] !== undefined &&
     !object(item.content[mediaType])
@@ -723,12 +738,25 @@ export function editResponseDefinition(responses, index, fields) {
 }
 
 export function editRequestResponseDefinition(request, index, fields) {
-  const oldStatus = request.responses?.[index]?.status;
-  const responses = editResponseDefinition(
-    request.responses || [],
+  return responseUpdate(
+    request,
     index,
-    fields,
+    editResponseDefinition(request.responses || [], index, fields),
   );
+}
+
+export function editRequestResponseSettings(request, index, fields) {
+  const original = request.responses || [];
+  if (index < 0) throw Error("请先选择响应");
+  const metadata = responseMetadata(original, index, fields);
+  const responses = original.map((item, i) =>
+    i === index ? { ...item, ...metadata } : item,
+  );
+  return responseUpdate(request, index, responses);
+}
+
+function responseUpdate(request, index, responses) {
+  const oldStatus = request.responses?.[index]?.status;
   const status = responses[index < 0 ? responses.length - 1 : index].status;
   const update = { responses };
   if (

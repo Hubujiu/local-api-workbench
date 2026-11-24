@@ -129,3 +129,51 @@ test("actual valid structure modal submits only on explicit save", async () => {
   await h.save();
   assert.equal(h.saves, 1);
 });
+
+test("explicit inline add freezes the selected steps in one saved plan", async () => {
+  const saved = [];
+  let add;
+  const environment = {
+    project: {
+      plans: [
+        { id: "plan", name: "Unsaved name", steps: [{ id: "previous" }] },
+      ],
+      requests: [
+        { id: "r1" },
+        { id: "r2" },
+        { id: "deleted", deletedAt: "now" },
+      ],
+    },
+    planId: "plan",
+    selectedPlanStepIds: () => ["r1", "r2"],
+    on(selector, event, fn) {
+      assert.equal(selector, "#add-step");
+      assert.equal(event, "click");
+      add = fn;
+    },
+    assertExecutionReady() {},
+    snapshotInterfaceForPlan: (request) => ({ id: request.id, frozen: true }),
+    savePlan: async (plan) => saved.push(plan),
+  };
+  const picker = source.slice(
+    source.indexOf('  on("#add-step"'),
+    source.indexOf('  const stepPicker = $("#plan-step-picker");'),
+  );
+  new Function("env", `with(env){${picker}}`)(environment);
+  await add();
+  assert.deepEqual(saved, [
+    {
+      id: "plan",
+      name: "Unsaved name",
+      steps: [
+        { id: "previous" },
+        { request: { id: "r1", frozen: true } },
+        { request: { id: "r2", frozen: true } },
+      ],
+    },
+  ]);
+  assert.deepEqual(environment.project.plans[0].steps, [{ id: "previous" }]);
+  environment.selectedPlanStepIds = () => ["r1", "deleted"];
+  await assert.rejects(add, /所选接口已变化/);
+  assert.equal(saved.length, 1);
+});

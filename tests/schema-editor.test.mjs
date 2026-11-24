@@ -6,6 +6,8 @@ import {
   addSchemaProperty,
   removeSchemaProperty,
   schemaEditor,
+  editResponseDefinition,
+  editRequestResponseSettings,
 } from "../public/schema-editor.js";
 test("visual schema edits preserve nested constraints and typed false zero null examples", () => {
   const schema = {
@@ -327,4 +329,83 @@ test("visual local schema references resolve schema positions and preserve sibli
     description: "keep",
     example: 0,
   });
+});
+
+test("response schema copy refuses an existing Content-Type without mutating either format", () => {
+  const original = [
+    {
+      status: "404",
+      headers: { "X-Trace": { schema: { type: "string" } } },
+      content: {
+        "application/json": { schema: { type: "object" } },
+        "text/plain": { schema: { type: "string" }, example: "retain-me" },
+      },
+    },
+  ];
+  const before = structuredClone(original);
+  const fields = {
+    status: "404",
+    sourceMediaType: "application/json",
+    description: "missing",
+    schema: { type: "object", description: "edited" },
+  };
+  for (const mediaType of ["text/plain", "Text/Plain", "Application/JSON"]) {
+    assert.throws(
+      () => editResponseDefinition(original, 0, { ...fields, mediaType }),
+      /Content-Type 已存在/,
+    );
+  }
+  assert.deepEqual(original, before);
+  const copied = editResponseDefinition(original, 0, {
+    ...fields,
+    mediaType: "application/problem+json",
+  });
+  assert.deepEqual(
+    copied[0].content["application/problem+json"].schema,
+    fields.schema,
+  );
+  assert.deepEqual(
+    copied[0].content["application/json"],
+    original[0].content["application/json"],
+  );
+  assert.deepEqual(
+    copied[0].content["text/plain"],
+    original[0].content["text/plain"],
+  );
+  assert.deepEqual(copied[0].headers, original[0].headers);
+  const same = editResponseDefinition(original, 0, {
+    ...fields,
+    mediaType: "application/json",
+  });
+  assert.deepEqual(same[0].content["application/json"].schema, fields.schema);
+});
+
+test("response settings never synthesize media or mutate unrelated responses", () => {
+  const request = {
+    responses: [
+      {
+        status: "204",
+        description: "empty",
+        headers: { "X-Trace": { $ref: "#/components/headers/trace" } },
+      },
+      { status: "200" },
+    ],
+    examples: [{ status: 204, body: "" }],
+  };
+  const snapshot = structuredClone(request);
+  assert.throws(
+    () => editRequestResponseSettings(request, 0, { status: "200" }),
+    /已存在/,
+  );
+  const update = editRequestResponseSettings(request, 0, {
+    status: "205",
+    description: "reset",
+  });
+  assert.deepEqual(update.responses, [
+    { ...request.responses[0], status: "205", description: "reset" },
+    request.responses[1],
+  ]);
+  assert.equal(Object.hasOwn(update.responses[0], "content"), false);
+  assert.equal(Object.hasOwn(update, "examples"), false);
+  assert.deepEqual(request, snapshot);
 });

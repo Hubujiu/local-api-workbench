@@ -1,13 +1,42 @@
+import { createDebugExampleDrafts } from "../public/http-debug-examples.js";
+import { createHTTPPreWaitDrafts } from "../public/http-pre-wait.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createProjectImportGuard } from "../public/project-import-guard.js";
+import {
+  changedProvisionalQuery,
+  createProvisionalQuery,
+} from "../public/design-query-provisional.js";
 import { createApp } from "../src/server.mjs";
 const source = (
   await readFile(new URL("../public/app.js", import.meta.url), "utf8")
 ).replaceAll("\r\n", "\n");
+// Load the real app's import statement, not a test-only replacement. An
+// unbound helper throws before fetch and otherwise escapes a save-unit test.
+const literalQueryImport = source.match(
+  /import\s*\{[^}]+\}\s*from "\.\/debug-url-query\.js";/,
+)?.[0];
+assert.ok(literalQueryImport, "app must import the literal query editor");
+const literalQueryModule = new URL(
+  "../public/debug-url-query.js",
+  import.meta.url,
+);
+const { expireLiteralURLQueryRows, pruneLiteralURLQueryRows } = await import(
+  "data:text/javascript," +
+    encodeURIComponent(
+      literalQueryImport.replace(
+        '"./debug-url-query.js"',
+        JSON.stringify(literalQueryModule.href),
+      ) + "\nexport { expireLiteralURLQueryRows, pruneLiteralURLQueryRows };",
+    )
+);
+const expireOwnedLiteralURLCode = source.slice(
+  source.indexOf("  const expireOwnedLiteralURL ="),
+  source.indexOf("  let composingPathURL ="),
+);
 const saveCode = source.slice(
   source.indexOf("async function save()"),
   source.indexOf("\nfunction collect()"),
@@ -56,10 +85,19 @@ function harness(initial = fixture(), transport) {
     "initial",
     "api",
     "projectImports",
+    "changedProvisionalQuery",
+    "provisionalQuery",
+    "httpPreWaitDrafts",
+    "debugExampleDrafts",
+    "pruneLiteralURLQueryRows",
     `
+ const debugAuthDrafts = new WeakMap();
+ const request=()=>project.requests.find((entry)=>entry.id===current);
  let grpcWorkbenchState=null,grpcWorkbenchProject="",grpcNavigationGeneration=0;
  let socketioWorkbenchState=null,socketioWorkbenchProject="",socketioNavigationGeneration=0;
- let project=initial,projects=[{id:initial.id}],editVersion=0,dirty=true,saving=false,busy=false,projectOpenSequence=0,current='r',opened=[],response,lastRun,loadResult,planId,selectedProtocolId;
+ let openedDocuments=[],activeDocumentId=null;
+ const documentModes=new Map();
+ let project=initial,projects=[{id:initial.id}],editVersion=0,dirty=true,saving=false,busy=false,projectOpenSequence=0,projectOpenRequestSequence=0,current='r',opened=[],response,lastRun,loadResult,planId,selectedProtocolId;
  const nativeRequestLifecycle={assertCanSave(){},reloadCheckpoint(){return 0},assertReloadCurrent(){},acknowledgeReload(){}};
  let modalCallback, rendered;
  const fields={"#error-code-value":{value:"2"},"#error-code-label":{value:"candidate"},"#error-code-http":{checked:false}};
@@ -67,9 +105,24 @@ function harness(initial = fixture(), transport) {
  const document={querySelectorAll:()=>[]},sessionStorage={setItem(){}},collect=()=>{},render=()=>{rendered=structuredClone(project)},toast=()=>{},confirm=()=>true;
  const mark=()=>{dirty=true;editVersion++};
  ${saveCode}\n${openCode}\n${errorCode}
- return {save,open:openProject,editError(){editErrorCode(0);return modalCallback()},rendered:()=>rendered,edit(){project.name='new draft';mark()},replace(p){project=p;mark()},rollback:(e,fn)=>rollbackProjectSave(e,fn),state:()=>({project,dirty,saving}),mark};`,
+ return {save,open:openProject,debugAuthDrafts,debugExampleDrafts,editError(){editErrorCode(0);return modalCallback()},rendered:()=>rendered,edit(){project.name='new draft';mark()},replace(p){project=p;mark()},rollback:(e,fn)=>rollbackProjectSave(e,fn),state:()=>({project,dirty,saving}),mark};`,
   );
-  return { ...build(initial, api, guard), guard, calls };
+  const provisional = createProvisionalQuery();
+  return {
+    ...build(
+      initial,
+      api,
+      guard,
+      changedProvisionalQuery,
+      provisional,
+      createHTTPPreWaitDrafts(),
+      createDebugExampleDrafts(),
+      pruneLiteralURLQueryRows,
+    ),
+    guard,
+    calls,
+    provisional,
+  };
 }
 function rejection(id = "a", outcome = "not_committed") {
   return Object.assign(Error("rejected"), {
@@ -80,6 +133,37 @@ function rejection(id = "a", outcome = "not_committed") {
     },
   });
 }
+test("an unnamed Query setting prevents ambiguous saves without writing, then reset allows the same draft save", async () => {
+  const initial = fixture();
+  initial.requests[0].query = [];
+  const h = harness(initial);
+  const request = initial.requests[0];
+  h.provisional.observe(initial, request);
+  const defaults = h.provisional.read(initial, request);
+  assert.equal(
+    h.provisional.update(initial, request, defaults, {
+      ...defaults,
+      required: true,
+    }),
+    true,
+  );
+  await assert.rejects(h.save(), /待命名 Query 参数选项未保存/);
+  assert.deepEqual(h.calls, []);
+  assert.deepEqual(request.query, []);
+  assert.equal(
+    h.provisional.update(
+      initial,
+      request,
+      h.provisional.read(initial, request),
+      defaults,
+    ),
+    true,
+  );
+  const pending = h.save();
+  assert.deepEqual(h.calls[0].data.requests[0].query, []);
+  h.calls[0].resolve(saved(h.calls[0].data));
+  await pending;
+});
 test("current valid receipt replaces only owned draft", async () => {
   const h = harness();
   const p = h.save();
@@ -87,6 +171,36 @@ test("current valid receipt replaces only owned draft", async () => {
   await p;
   assert.equal(h.state().dirty, false);
   assert.equal(h.state().project.configRevision, 2);
+});
+test("owned save migrates only matching request and authentication drafts", async () => {
+  const initial = fixture();
+  const first = { id: "retained", auth: { type: "none" } };
+  const changed = { id: "changed", auth: { type: "none" } };
+  initial.requests = [first, changed];
+  const h = harness(initial);
+  const retainedDrafts = new Map([["bearer", { token: "{{synthetic-kept}}" }]]);
+  const changedDrafts = new Map([
+    ["bearer", { token: "{{synthetic-discarded}}" }],
+  ]);
+  h.debugAuthDrafts.set(first, retainedDrafts);
+  h.debugAuthDrafts.set(changed, changedDrafts);
+
+  const p = h.save();
+  const { data } = h.calls[0];
+  assert.deepEqual(data.requests, [first, changed]);
+  const response = saved(data);
+  response.requests = [
+    { ...response.requests[1], auth: { type: "basic" } },
+    ...response.requests.slice(0, 1),
+  ];
+  h.calls[0].resolve(response);
+  await p;
+
+  const [savedChanged, savedFirst] = h.state().project.requests;
+  assert.notEqual(savedFirst, first);
+  assert.equal(h.debugAuthDrafts.get(savedFirst), retainedDrafts);
+  assert.equal(h.debugAuthDrafts.has(savedChanged), false);
+  assert.equal(h.state().dirty, false);
 });
 test("valid late receipt advances metadata without erasing newer draft", async () => {
   const h = harness();
@@ -100,6 +214,9 @@ test("valid late receipt advances metadata without erasing newer draft", async (
 });
 test("same-ID new project object is not owned by old receipt", async () => {
   const h = harness();
+  const [request] = h.state().project.requests;
+  const drafts = new Map([["bearer", { token: "{{synthetic-owner}}" }]]);
+  h.debugAuthDrafts.set(request, drafts);
   const p = h.save();
   const other = fixture();
   other.name = "other selection";
@@ -108,6 +225,8 @@ test("same-ID new project object is not owned by old receipt", async () => {
   await p;
   assert.equal(h.state().project, other);
   assert.equal(other.configRevision, 1);
+  assert.equal(h.debugAuthDrafts.has(other.requests[0]), false);
+  assert.equal(h.debugAuthDrafts.get(request), drafts);
 });
 for (const [name, mutate] of [
   ["only ID", () => ({ id: "a" })],
@@ -335,4 +454,158 @@ test("configuration revision can never exceed overall revision", async () => {
     p = h.save();
   h.calls[0].resolve({ ...saved(h.calls[0].data), revision: 2 });
   await assert.rejects(p, /尚未确认/);
+});
+
+test("acknowledged snapshot finalizes an implicit example even if newer edits leave the owner mounted", async () => {
+  const owner = fixture();
+  const request = owner.requests[0];
+  request.examples = [];
+  const h = harness(owner);
+  const drafts = h.debugExampleDrafts;
+  const row = drafts.materializePreset(request, "success", "submitted body");
+  drafts.edit(request, row, "submitted body");
+  const running = h.save();
+  assert.equal(h.calls.length, 1);
+  assert.equal(drafts.returnToPreset(request, row, ""), undefined);
+  drafts.edit(request, row, "");
+  h.mark();
+  h.edit();
+  h.calls[0].resolve(saved(h.calls[0].data));
+  assert.equal(await running, null);
+  assert.equal(h.state().project, owner);
+  assert.equal(h.state().dirty, true);
+  assert.equal(owner.name, "new draft");
+  assert.equal(h.calls[0].data.requests[0].examples[0].body, "submitted body");
+  assert.deepEqual(request.examples, [row]);
+  assert.equal(row.body, "");
+  assert.equal(drafts.implicitPreset(row), undefined);
+  assert.equal(drafts.returnToPreset(request, row, ""), undefined);
+});
+
+test("definite rejection releases a preset save pin while ambiguous acknowledgement retains it", async () => {
+  for (const scenario of ["definite rejection", "wrong example receipt"]) {
+    const owner = fixture();
+    const request = owner.requests[0];
+    request.examples = [];
+    const h = harness(owner);
+    const drafts = h.debugExampleDrafts;
+    const row = drafts.materializePreset(request, "success", "draft");
+    drafts.edit(request, row, "draft");
+    const running = h.save();
+    assert.equal(drafts.returnToPreset(request, row, ""), undefined);
+    if (scenario === "definite rejection") {
+      h.calls[0].reject(rejection());
+      await assert.rejects(running, /rejected/);
+      assert.equal(drafts.returnToPreset(request, row, ""), "success");
+    } else {
+      const response = saved(h.calls[0].data);
+      response.requests[0].examples[0].body = "not the submitted body";
+      h.calls[0].resolve(response);
+      await assert.rejects(running, /保存结果尚未确认/);
+      assert.equal(drafts.returnToPreset(request, row, ""), undefined);
+      assert.equal(drafts.implicitPreset(row), "success");
+      assert.equal(h.state().project, owner);
+      assert.equal(row.body, "draft");
+      assert.equal(owner.configRevision, 1);
+    }
+  }
+});
+
+test("the mounted URL handler expires dormant rows only for its owning request", () => {
+  const request = {
+    id: "r",
+    url: "https://fixture.invalid/items?new=1#part",
+    query: [],
+  };
+  const other = { id: "other" };
+  const project = {
+    id: "a",
+    requests: [request, other],
+    literalQueryEditor: {
+      version: 1,
+      projectId: "a",
+      entries: [
+        {
+          requestId: "r",
+          effectiveURL: "https://fixture.invalid/items?enabled=1#part",
+          rows: [
+            { token: "enabled=1", enabled: true },
+            { token: "dormant=2", enabled: false },
+          ],
+        },
+      ],
+    },
+  };
+  let current = other;
+  const toasts = [];
+  const expireOwned = new Function(
+    "project",
+    "pathRequest",
+    "request",
+    "expireLiteralURLQueryRows",
+    "toast",
+    `const pathProject = project, page = "apis", workspaceDocument = () => false;
+    ${expireOwnedLiteralURLCode}
+    return expireOwnedLiteralURL;`,
+  )(
+    project,
+    request,
+    () => current,
+    expireLiteralURLQueryRows,
+    (message) => toasts.push(message),
+  );
+  expireOwned({ isConnected: true });
+  assert.equal(project.literalQueryEditor.entries.length, 1);
+  current = request;
+  expireOwned({ isConnected: false });
+  assert.equal(project.literalQueryEditor.entries.length, 1);
+  assert.deepEqual(toasts, []);
+  expireOwned({ isConnected: true });
+  assert.deepEqual(project.literalQueryEditor.entries, []);
+  assert.equal(toasts.length, 1);
+  assert.equal(request.url, "https://fixture.invalid/items?new=1#part");
+});
+test("explicitly restoring the last private URL query row may return an omitted sidecar", async () => {
+  const owner = fixture();
+  owner.literalQueryEditor = { version: 1, projectId: owner.id, entries: [] };
+  const h = harness(owner);
+  const running = h.save();
+  const sent = h.calls[0].data;
+  assert.deepEqual(sent.literalQueryEditor.entries, []);
+  const receipt = saved(sent);
+  delete receipt.literalQueryEditor;
+  h.calls[0].resolve(receipt);
+  assert.equal((await running).applied, receipt);
+  assert.equal(h.state().dirty, false);
+  assert.equal(h.state().project.literalQueryEditor, undefined);
+});
+
+test("nonempty URL query state is not acknowledged by a receipt missing the private entry", async () => {
+  const owner = fixture();
+  owner.requests[0].url = "https://fixture.invalid/items?live=1";
+  owner.requests[0].query = [];
+  owner.literalQueryEditor = {
+    version: 1,
+    projectId: owner.id,
+    entries: [
+      {
+        requestId: "r",
+        effectiveURL: owner.requests[0].url,
+        rows: [
+          { token: "live=1", enabled: true },
+          { token: "private=2", enabled: false },
+        ],
+      },
+    ],
+  };
+  const h = harness(owner);
+  const running = h.save();
+  assert.equal(h.calls[0].data.literalQueryEditor.entries.length, 1);
+  const receipt = saved(h.calls[0].data);
+  delete receipt.literalQueryEditor;
+  h.calls[0].resolve(receipt);
+  await assert.rejects(running, /保存结果尚未确认/);
+  assert.equal(h.state().project, owner);
+  assert.equal(h.state().dirty, true);
+  assert.equal(owner.literalQueryEditor.entries.length, 1);
 });

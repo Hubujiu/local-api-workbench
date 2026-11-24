@@ -1,0 +1,130 @@
+#dialog:has(.model-workspace-raw) > form {
+  height: min(516px, calc(100dvh - 24px));
+}
+#dialog-content:has(.model-workspace-raw) {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+#dialog-content .model-workspace-raw {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: 0 minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+  font:
+    calc(12 * var(--app-type-unit)) / calc(16 * var(--app-type-unit)) Consolas,
+    monospace;
+  font-variant-ligatures: none;
+  tab-size: 4;
+}
+#dialog-content .model-workspace-raw.model-raw-with-gutter {
+  grid-template-columns: 62px minmax(0, 1fr);
+}
+.model-workspace-raw :is(.model-raw-gutter, .model-raw-code) {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.model-workspace-raw .model-raw-gutter {
+  color: #326b78;
+}
+body.dark .model-workspace-raw .model-raw-gutter {
+  color: #82a8af;
+}
+.model-raw-with-gutter .model-raw-gutter {
+  border-inline-end: 1px solid var(--line);
+}
+.model-workspace-raw pre {
+  position: absolute;
+  inset: 0 auto auto 0;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  font-variant-ligatures: inherit;
+  tab-size: inherit;
+  white-space: pre;
+  pointer-events: none;
+  user-select: none;
+}
+.model-raw-gutter pre {
+  width: 100%;
+  text-align: center;
+  transform: translateY(var(--model-raw-offset-y, 0px));
+}
+.model-workspace-raw .model-raw-ink {
+  display: none;
+  transform: translate(
+    var(--model-raw-offset-x, 0px),
+    var(--model-raw-offset-y, 0px)
+  );
+}
+.model-raw-with-ink .model-raw-ink {
+  display: block;
+}
+#dialog-content .model-workspace-raw #model-workspace-json {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  resize: none;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-variant-ligatures: inherit;
+  tab-size: inherit;
+  white-space: pre;
+  caret-color: var(--text);
+  box-shadow: none;
+}
+#dialog-content .model-raw-with-ink #model-workspace-json {
+  background: transparent;
+  color: transparent;
+}
+.model-workspace-raw:has(#model-workspace-json:focus-visible) {
+  outline: 1px solid color-mix(in srgb, var(--accent) 65%, transparent);
+  outline-offset: 1px;
+}
+body:not(.dark) .model-workspace-raw {
+  & .syntax-key {
+    color: #b01e32;
+  }
+  & :is(.syntax-string, .syntax-literal) {
+    color: #0059b3;
+  }
+  & .syntax-number {
+    color: #087a52;
+  }
+}
+@media (forced-colors: active) {
+  #dialog-content .model-workspace-raw.model-raw-with-gutter {
+    grid-template-columns: 0 minmax(0, 1fr);
+    outline-color: Highlight;
+  }
+  .model-workspace-raw :is(.model-raw-gutter, .model-raw-ink) {
+    display: none;
+  }
+  #dialog-content .model-workspace-raw #model-workspace-json {
+    color: CanvasText;
+    caret-color: CanvasText;
+    background: Canvas;
+  }
+}
+@media (min-width: 1000px) and (min-height: 720px) {
+  #dialog:has(.model-workspace-raw) > form > header {
+    /* Keep the first code row independent of host title/button font metrics. */
+    box-sizing: border-box;
+    block-size: 56px;
+    padding-block: 0;
+  }
+  #dialog-content:has(.model-workspace-raw) {
+    padding-block-start: 0;
+  }
+}

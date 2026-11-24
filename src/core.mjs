@@ -1,3 +1,4 @@
+import { validateLiteralQueryEditor } from "./literal-query-editor.mjs";
 import { validateLoadRuns } from "./load-report-evidence.mjs";
 import {
   isPostmanEnvironmentDocument,
@@ -28,6 +29,13 @@ import {
   validateDatabaseOperationHeader,
   validateDatabaseOperationBinding,
 } from "./plan-database-operation.mjs";
+import {
+  assertHTTPPreWaitAdmission,
+  hasEnabledHTTPPreWait,
+  readPlanStepsForHTTPPreWait,
+  rejectHTTPPreWait,
+  validateHTTPPreWaitDefinition,
+} from "./http-pre-wait.mjs";
 import { analyzePlanRequirements } from "./plan-requirements.mjs";
 import { liveRequestId } from "./live-plan-reference.mjs";
 import { applyGlobalParameters } from "./global-parameters.mjs";
@@ -147,6 +155,12 @@ import {
 } from "./openapi-query-arrays.mjs";
 import { openAPIAuthDefinition } from "./openapi-auth-definition.mjs";
 import { importPostmanResponseExamples } from "./postman-response-examples.mjs";
+import { graphQLEditorVersion } from "../public/graphql-editor.js";
+import {
+  activeGraphQLRequest,
+  normalizeGraphQLNamedQueries,
+} from "../public/graphql-named-queries.js";
+import { assertActiveFormFileEncoding } from "./form-wire-guard.mjs";
 import {
   validateMultipartPartMedia,
   assertMultipartMediaExportable,
@@ -376,6 +390,8 @@ export async function extractResponse(response, extraction) {
 }
 export function normalizeRequest(r = {}) {
   const rawPolicy = postmanRawBodyPolicy(r);
+  const editorVersion = graphQLEditorVersion(r);
+  const namedQueries = normalizeGraphQLNamedQueries(r);
   rejectHTTPProtocolScripts(r);
   validatePostmanOAuth2Project({ requests: [r] });
   validatePathSerialization(r);
@@ -429,6 +445,7 @@ export function normalizeRequest(r = {}) {
     )
       throw Error(key + " 必须是对象数组");
   }
+  validateHTTPPreWaitDefinition(r);
   validateQueryArrayRequest(r);
   validateHeaderObjectRequest(r);
   validateCookieObjectRequest(r);
@@ -511,6 +528,12 @@ export function normalizeRequest(r = {}) {
         ? { type: "oauth2", postmanOAuth2: postmanOAuth2Definition(r.auth) }
         : { ...(r.auth || {}), type: r.auth?.type ?? "none" },
     bodyType: r.bodyType || "none",
+    ...(editorVersion === undefined
+      ? {}
+      : { graphqlEditorVersion: editorVersion }),
+    ...(namedQueries === undefined
+      ? {}
+      : { graphqlNamedQueries: namedQueries }),
     ...(rawPolicy ? { postmanRawBody: rawPolicy } : {}),
     body:
       typeof r.body === "string"
@@ -620,9 +643,14 @@ export function evaluateAssertions(response, assertions = []) {
     return { ...a, actual, passed };
   });
 }
-export function snapshotPlan(plan, { allowRuntimeRows = false } = {}) {
+export function snapshotPlan(
+  plan,
+  { allowRuntimeRows = false, preWaitAdmission } = {},
+) {
   const failurePolicy = readPlanFailurePolicy(plan);
-  validatePlanStepTypes(plan.steps);
+  const admittedSteps = readPlanStepsForHTTPPreWait(plan);
+  validatePlanStepTypes(admittedSteps);
+  assertHTTPPreWaitAdmission(admittedSteps, preWaitAdmission);
   for (const step of planLeaves(plan.steps || [])) liveRequestId(step);
   validatePostmanOAuth2Project({ plans: [plan] });
   const repeated = validateRepeatGraph(plan.steps, { allowRuntimeRows });
@@ -704,7 +732,9 @@ export function snapshotPlan(plan, { allowRuntimeRows = false } = {}) {
                   ? {}
                   : { liveRequestId: liveRequestId(s) }),
                 request: {
-                  ...normalizeRequest(cloneRequestWithTaskSource(s.request)),
+                  ...normalizeRequest(
+                    cloneRequestWithTaskSource(activeGraphQLRequest(s.request)),
+                  ),
                   serviceSnapshot: true,
                   parametersSnapshot: true,
                   authSnapshot: true,
@@ -801,10 +831,13 @@ export async function runPlan(
     executeProtocol,
     protocolCredentials,
     allowRuntimeRows = false,
+    preWaitAdmission,
   } = {},
 ) {
   const failurePolicy = readPlanFailurePolicy(plan);
-  validatePlanStepTypes(plan.steps);
+  const admittedSteps = readPlanStepsForHTTPPreWait(plan);
+  validatePlanStepTypes(admittedSteps);
+  assertHTTPPreWaitAdmission(admittedSteps, preWaitAdmission);
   for (const step of planLeaves(plan.steps || []))
     if (liveRequestId(step) !== undefined)
       throw Error("实时计划须先在项目快照中冻结引用");
@@ -1173,12 +1206,16 @@ export async function runPlan(
       (task) => task.type === "pickVars" && task.enabled === 1,
     );
     let committedScopes = structuredClone(scopes);
-    const commitScopes = async () => {
-      if (signal?.aborted) throw Error("执行已取消，未开始新的变量提交");
+    const commitScopes = async (commitSignal = signal) => {
+      if (commitSignal?.aborted) throw Error("执行已取消，未开始新的变量提交");
       const changes = scopeChanges(committedScopes, scopes);
       if (changes.length && onScopeChanges) {
         try {
-          const accepted = await onScopeChanges(changes, signal, collectionId);
+          const accepted = await onScopeChanges(
+            changes,
+            commitSignal,
+            collectionId,
+          );
           if (accepted?.globals && accepted?.environment) {
             scopes.globals = accepted.globals;
             scopes.environment = accepted.environment;
@@ -1397,7 +1434,32 @@ export async function runPlan(
         }
       } else {
         validateApipostTemplateRequest(step.request);
-        const executeOperation = async (operation, budget) => {
+        const beforeControls = hasEnabledHTTPPreWait(step.request)
+          ? {
+              signal,
+              deadline:
+                performance.now() + normalizeRequest(step.request).timeout,
+            }
+          : undefined;
+        const beforeSignal = beforeControls
+          ? AbortSignal.any([
+              ...(signal ? [signal] : []),
+              AbortSignal.timeout(
+                Math.max(
+                  0,
+                  Math.ceil(beforeControls.deadline - performance.now()),
+                ),
+              ),
+            ])
+          : signal;
+        const checkBefore = () => {
+          if (beforeControls) throwIfInactive(beforeControls);
+        };
+        const executeOperation = async (
+          operation,
+          budget,
+          operationSignal = signal,
+        ) => {
           if (operation.type !== "database")
             return applyOperation(operation, vars);
           if (!validateDatabaseOperationHeader(operation)) return;
@@ -1411,9 +1473,9 @@ export async function runPlan(
               sql: operation.sql,
               parameters: interpolate(operation.parameters || [], vars),
             },
-            signal,
+            operationSignal,
           );
-          if (signal?.aborted) throw Error("数据库操作已取消");
+          if (operationSignal?.aborted) throw Error("数据库操作已取消");
           if (performance.now() > budget.deadline)
             throw Error("数据库阶段超过10秒，结果未应用");
           const value = jsonPath(result, operation.path || "$");
@@ -1426,18 +1488,44 @@ export async function runPlan(
           deadline: performance.now() + 10000,
         };
         for (const operation of step.request.before || []) {
-          await executeOperation(operation, beforeDatabaseBudget);
+          checkBefore();
+          if (operation.type === "wait") {
+            if (!operation.enabled) continue;
+            if (operation.milliseconds > 0) {
+              const waitingSince = performance.now();
+              await delayForControl(operation.milliseconds, beforeControls);
+              // A deliberate delay is not time consumed by database work.
+              beforeDatabaseBudget.deadline += performance.now() - waitingSince;
+            }
+            record.logs.push({
+              phase: "before",
+              type: "wait",
+              milliseconds: operation.milliseconds,
+            });
+            continue;
+          }
+          await executeOperation(operation, beforeDatabaseBudget, beforeSignal);
           record.logs.push({
             phase: "before",
             type: operation.type,
             name: operation.name,
           });
         }
+        checkBefore();
         applyLegacyVariables(scopes, beforeOperations, vars);
         const localVariables = {};
         postmanOAuth2Definition(step.request.auth);
         let configuredRequest = structuredClone(step.request),
           finalizedBody;
+        // Wait is a host operation, not data or authority for a sandbox script.
+        if (
+          configuredRequest.before?.some(
+            (operation) => operation.type === "wait",
+          )
+        )
+          configuredRequest.before = configuredRequest.before.filter(
+            (operation) => operation.type !== "wait",
+          );
         const beforeStages = scriptStages(configuredRequest, "before");
         if (
           beforeStages.length ||
@@ -1455,6 +1543,7 @@ export async function runPlan(
           const templateSnapshot = templateRequest
             ? structuredClone(configuredRequest)
             : null;
+          checkBefore();
           scriptPhase = "before";
           const scripted = await (
             configuredRequest.nativeTasks
@@ -1478,7 +1567,7 @@ export async function runPlan(
               request: configuredRequest,
             },
             {
-              signal,
+              signal: beforeSignal,
               cookieSession,
               databaseQuery,
               nativeWrite,
@@ -1535,10 +1624,13 @@ export async function runPlan(
             )
           )
             throw Error("前置脚本不能更改 HTTP 重定向策略");
+          rejectHTTPPreWait(scripted.request, "脚本修改请求");
           configuredRequest = normalizeRequest(scripted.request);
           finalizedBody = scripted.finalBody;
         }
-        await commitScopes();
+        checkBefore();
+        await commitScopes(beforeSignal);
+        checkBefore();
         record.request = await resolveDynamicRequest(
           configuredRequest,
           {
@@ -1548,8 +1640,13 @@ export async function runPlan(
           snapshot.functions || [],
           interpolate,
           finalizedBody,
+          beforeControls
+            ? { ...beforeControls, workerSignal: beforeSignal }
+            : undefined,
         );
+        checkBefore();
         if (prepareRequest) record.request = prepareRequest(record.request);
+        checkBefore();
         record.response = await execute(record.request, signal, {
           cookieSession,
         });
@@ -2498,6 +2595,7 @@ export function exportOpenAPI(project) {
   const paths = Object.create(null);
   const components = structuredClone(project.openapiComponents ?? {});
   for (const source of project.requests.filter((r) => !r.deletedAt)) {
+    rejectHTTPPreWait(source, "OpenAPI导出");
     rejectHTTPProtocolScripts(source);
     assertRedirectExportable(source);
     rejectGraphQLVariableTemplate(source);
@@ -2697,6 +2795,7 @@ export function prepareLiteralHTTPExport(
   input,
   { collectionResolved = false } = {},
 ) {
+  rejectHTTPPreWait(input, "cURL／代码导出");
   rejectHTTPProtocolScripts(input);
   validatePostmanOAuth2Project({ requests: [input] });
   if (input.postmanCollectionId !== undefined && !collectionResolved)
@@ -2722,8 +2821,9 @@ export function prepareLiteralHTTPExport(
   )
     throw Error("cURL不能表达原版函数模板，请使用项目备份或已执行请求证据");
   const r = normalizeRequest(
-    postmanRawExportDefinition(sdkCurlDefinition(input)),
+    postmanRawExportDefinition(sdkCurlDefinition(activeGraphQLRequest(input))),
   );
+  assertActiveFormFileEncoding(r);
   // Match ordinary JSON execution without parsing or rewriting literal text.
   // This normalized export copy must not change the saved request definition.
   if (r.bodyType === "json" && r.body === "") r.body = "{}";
@@ -2894,6 +2994,12 @@ export function restoreProject(document) {
   )
     throw Error("不是有效的本地项目备份");
   validateRequestDefinitionHistory(document);
+  if (
+    Object.hasOwn(document, "literalQueryEditorIssue") ||
+    Object.hasOwn(document, "_retainLiteralQueryEditorFile")
+  )
+    throw Error("本地项目备份不完整");
+  validateLiteralQueryEditor(document);
   validateLoadRuns(document.loadRuns === undefined ? [] : document.loadRuns);
   if (
     document.runs !== undefined &&
@@ -3022,6 +3128,8 @@ export function restoreProject(document) {
   copy.id = id();
   if (copy.requestDefinitionHistory !== undefined)
     copy.requestDefinitionHistory.projectId = copy.id;
+  if (copy.literalQueryEditor !== undefined)
+    copy.literalQueryEditor.projectId = copy.id;
   copy.name = (document.name || "项目") + " · 恢复副本";
   delete copy.revision;
   copy.requests = copy.requests.map(
@@ -3040,6 +3148,7 @@ export function restoreProject(document) {
   copy.dictionary = copy.dictionary || [];
   validateNativeInheritanceProject(copy);
   validateRequestDefinitionHistory(copy);
+  validateLiteralQueryEditor(copy);
   return copy;
 }
 export function resolveLocalReferences(document) {

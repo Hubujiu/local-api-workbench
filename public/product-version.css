@@ -1,0 +1,82 @@
+.appearance-sidebar [role="tablist"] {
+  display: grid;
+  gap: 8px;
+}
+.appearance-sidebar .appearance-tab {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 36px;
+  padding: 0 24px;
+  gap: 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text);
+  text-align: start;
+}
+.appearance-sidebar .appearance-tab[aria-selected="true"] {
+  color: var(--accent);
+  background: #f0e9da;
+}
+body.dark .appearance-sidebar .appearance-tab[aria-selected="true"] {
+  color: #e4c789;
+  background: #2c2519;
+}
+.appearance-sidebar .appearance-tab:hover:not([aria-selected="true"]) {
+  background: var(--hover);
+}
+.appearance-sidebar .appearance-tab svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+.appearance-version-content {
+  padding-top: 24px;
+}
+.appearance-version-identity {
+  display: grid;
+  justify-items: center;
+  margin-top: 149px;
+  text-align: center;
+}
+.appearance-version-badge {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 13px;
+  background: #ae8c56;
+  color: #fff8e9;
+}
+.appearance-version-badge svg {
+  width: 43px;
+  height: 43px;
+}
+.appearance-version-name {
+  margin: 15px 0 0;
+  font-size: calc(16 * var(--app-type-unit));
+  line-height: 24px;
+}
+#appearance-version-text {
+  margin: 20px 0 0;
+  color: var(--version-info-ink, #6f6556);
+  font-size: calc(14 * var(--app-type-unit));
+  line-height: 24px;
+}
+body.dark .appearance-version-content {
+  --version-info-ink: var(--muted);
+}
+@media (max-width: 600px) {
+  .appearance-sidebar [role="tablist"] {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .appearance-sidebar .appearance-tab {
+    width: auto;
+    padding: 0 8px;
+  }
+  .appearance-version-identity {
+    margin-top: 55px;
+  }
+}
