@@ -1697,6 +1697,11 @@ export async function createApp({
               ].includes(format)
             )
               throw Error("项目导出格式无效");
+            if (
+              ["native", "backup"].includes(format) &&
+              p.literalQueryEditorIssue
+            )
+              throw Error("私有 URL 查询编辑数据不可用；无法生成完整项目备份");
             const apipostFormat = ["apipost", "apipost-directory"].includes(
               format,
             );

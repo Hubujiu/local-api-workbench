@@ -47,6 +47,8 @@ const omitted = [
   "loadRuns",
   "protocolRuns",
   "requestDefinitionHistory",
+  "literalQueryEditor",
+  "literalQueryEditorIssue",
   "apiResourceTrash",
   "settings.apipostDirectoryArtifacts",
 ];

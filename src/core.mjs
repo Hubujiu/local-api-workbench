@@ -1,3 +1,4 @@
+import { validateLiteralQueryEditor } from "./literal-query-editor.mjs";
 import { validateLoadRuns } from "./load-report-evidence.mjs";
 import {
   isPostmanEnvironmentDocument,
@@ -2993,6 +2994,12 @@ export function restoreProject(document) {
   )
     throw Error("不是有效的本地项目备份");
   validateRequestDefinitionHistory(document);
+  if (
+    Object.hasOwn(document, "literalQueryEditorIssue") ||
+    Object.hasOwn(document, "_retainLiteralQueryEditorFile")
+  )
+    throw Error("本地项目备份不完整");
+  validateLiteralQueryEditor(document);
   validateLoadRuns(document.loadRuns === undefined ? [] : document.loadRuns);
   if (
     document.runs !== undefined &&
@@ -3121,6 +3128,8 @@ export function restoreProject(document) {
   copy.id = id();
   if (copy.requestDefinitionHistory !== undefined)
     copy.requestDefinitionHistory.projectId = copy.id;
+  if (copy.literalQueryEditor !== undefined)
+    copy.literalQueryEditor.projectId = copy.id;
   copy.name = (document.name || "项目") + " · 恢复副本";
   delete copy.revision;
   copy.requests = copy.requests.map(
@@ -3139,6 +3148,7 @@ export function restoreProject(document) {
   copy.dictionary = copy.dictionary || [];
   validateNativeInheritanceProject(copy);
   validateRequestDefinitionHistory(copy);
+  validateLiteralQueryEditor(copy);
   return copy;
 }
 export function resolveLocalReferences(document) {

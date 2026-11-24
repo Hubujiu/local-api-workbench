@@ -4,6 +4,8 @@ import {
   canEditDebugURLQuery,
   changeDebugURLQueryValue,
   debugURLQueryBlankState,
+  debugURLQueryContents,
+  expireLiteralURLQueryRows,
   inspectDebugURLQuery,
   setDebugURLQueryBlankEquality,
 } from "../public/debug-url-query.js";
@@ -138,4 +140,48 @@ test("literal blank equality only changes empty tokens and preserves spelling th
       queryAddEqual: true,
     }).includes(wire),
   );
+});
+
+test("all-off projection remains restorable but sparse stale or degraded editor is not actionable", () => {
+  const request = {
+    id: "a",
+    query: [],
+    url: "https://fixture.invalid/items#part",
+  };
+  const project = {
+    id: "example",
+    requests: [request],
+    literalQueryEditor: {
+      version: 1,
+      projectId: "example",
+      entries: [
+        {
+          requestId: "a",
+          effectiveURL: request.url,
+          rows: [
+            { token: "tag=a%2Bb", enabled: false },
+            { token: "tag=a+b", enabled: false },
+          ],
+        },
+      ],
+    },
+  };
+  const html = debugURLQueryContents(project, request, String);
+  assert.match(html, /启用 URL 查询项 2：tag/);
+  assert.match(html, /value="a\+b" readonly/);
+  assert.doesNotMatch(
+    html,
+    /data-debug-literal-query-enabled="\d"[^>]*checked/,
+  );
+  request.url = "https://fixture.invalid/items?other=1";
+  assert.equal(expireLiteralURLQueryRows(project, request), true);
+  request.url = "https://fixture.invalid/items#part";
+  assert.equal(debugURLQueryContents(project, request, String), "");
+  assert.deepEqual(project.literalQueryEditor.entries, []);
+  const degraded = { ...project, literalQueryEditorIssue: "invalid" };
+  request.url = "https://fixture.invalid/items?other=1";
+  const recovery = debugURLQueryContents(degraded, request, String);
+  assert.match(recovery, /本地保留的未启用查询项暂不可读/);
+  assert.doesNotMatch(recovery, /data-debug-literal-query-enabled/);
+  assert.match(recovery, /value="1">/);
 });

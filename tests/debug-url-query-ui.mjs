@@ -13,6 +13,99 @@ const { chromium } = createRequire(import.meta.url)(
 const root = await mkdtemp(join(tmpdir(), "workbench-url-query-"));
 const raw = "https://fixture.invalid/items?tag=a%2Bb&tag=a+b&flag&empty=#part";
 const edited = raw.replace("a%2Bb", "ui%2Bnext");
+// Report only enums, counts, and fixture comparisons; never URLs or raw receipts.
+function saveFacts(payload, expectedURL, expectedDisabled) {
+  const req = payload?.requests?.find(({ id }) => id === "visual-query");
+  const entries = payload?.literalQueryEditor?.entries;
+  const entry = entries?.find(({ requestId }) => requestId === "visual-query");
+  return {
+    canonicalMatches: req?.url === expectedURL,
+    configRevision: payload?.configRevision,
+    entries: entries?.length ?? 0,
+    disabled: entry?.rows.filter(({ enabled }) => !enabled).length ?? 0,
+    entryMatches: expectedDisabled
+      ? entry?.effectiveURL === expectedURL
+      : !entry,
+  };
+}
+
+async function pressOwnerSave(
+  page,
+  origin,
+  path,
+  phase,
+  expectedURL,
+  expectedDisabled,
+) {
+  const state = page.locator("#saved-state");
+  const isOwnerSave = (req) => {
+    const dest = new URL(req.url());
+    return (
+      req.method() === "PUT" && dest.origin === origin && dest.pathname === path
+    );
+  };
+  const diagnostic = { phase, request: null, response: null };
+  const observeRequest = (req) => {
+    if (!isOwnerSave(req)) return;
+    try {
+      diagnostic.request = saveFacts(
+        req.postDataJSON(),
+        expectedURL,
+        expectedDisabled,
+      );
+    } catch {
+      diagnostic.request = "unreadable";
+    }
+  };
+  page.on("request", observeRequest);
+  try {
+    assert.equal(await state.textContent(), "● 未保存");
+    const [response] = await Promise.all([
+      page.waitForResponse((response) => isOwnerSave(response.request())),
+      page.locator("#save").click(),
+    ]);
+    diagnostic.response = { status: response.status() };
+    const receipt = await response.json().catch(() => null);
+    if (response.ok()) {
+      diagnostic.response.receipt = saveFacts(
+        receipt,
+        expectedURL,
+        expectedDisabled,
+      );
+    } else {
+      diagnostic.response.notCommitted =
+        receipt?.commit_outcome === "not_committed";
+      diagnostic.response.retrySafe = receipt?.retry_safe === true;
+      diagnostic.response.literalQueryValidation =
+        typeof receipt?.error === "string" &&
+        receipt.error.includes("URL 查询编辑状态");
+    }
+    assert.equal(response.status(), 200, "Owner PUT must commit successfully");
+    await state.getByText("✓ 已保存", { exact: true }).waitFor();
+  } catch (error) {
+    diagnostic.ui = await page
+      .evaluate(() => {
+        const state = document.querySelector("#saved-state")?.textContent;
+        const toast = document.querySelector("#toast")?.textContent || "";
+        return {
+          saveDisabled: document.querySelector("#save")?.disabled,
+          saved: state === "✓ 已保存",
+          dirty: state === "● 未保存",
+          unconfirmed: toast.includes("保存结果尚未确认"),
+          newerDraft: toast.includes("已保存本次快照"),
+          literalQueryValidation: toast.includes("URL 查询编辑状态"),
+        };
+      })
+      .catch(() => null);
+    console.error(
+      "DEBUG_URL_QUERY_SAVE_DIAGNOSTICS",
+      JSON.stringify(diagnostic),
+    );
+    throw error;
+  } finally {
+    page.off("request", observeRequest);
+  }
+}
 let browser, app;
 try {
   app = await createApp({ root, port: 0 });
@@ -87,6 +180,12 @@ try {
     exact: true,
   });
   const tableEquality = page.locator("#query-add-equal");
+  const duplicateEnabled = table.getByRole("checkbox", {
+    name: "启用 URL 查询项 2：tag",
+  });
+  const selectAll = table.getByRole("checkbox", {
+    name: "启用全部 URL 查询项",
+  });
   const first = table.getByRole("textbox", { name: "URL 查询值 1：tag" });
   const second = table.getByRole("textbox", { name: "URL 查询值 2：tag" });
   const values = () =>
@@ -222,6 +321,11 @@ try {
   );
   await first.press("Tab");
   assert.equal(
+    await duplicateEnabled.evaluate((node) => node === document.activeElement),
+    true,
+  );
+  await duplicateEnabled.press("Tab");
+  assert.equal(
     await second.evaluate((node) => node === document.activeElement),
     true,
   );
@@ -232,16 +336,53 @@ try {
   assert.equal(await equality.getAttribute("aria-pressed"), "false");
   assert.equal(await tableEquality.isChecked(), true);
   await capture("blank-equality-omit-narrow");
+  const withoutDuplicate = noEqual.replace("&tag=a+b", "");
+  await duplicateEnabled.press("Space");
+  assert.equal(await duplicateEnabled.isChecked(), false);
+  assert.equal(
+    await duplicateEnabled.evaluate((node) => node === document.activeElement),
+    true,
+  );
+  assert.equal(await selectAll.evaluate((node) => node.indeterminate), true);
+  assert.equal(await url.inputValue(), withoutDuplicate);
+  assert.equal(await second.inputValue(), "a+b");
+  assert.equal(await second.evaluate((node) => node.readOnly), true);
+  await capture("unchecked-narrow");
   await page.setViewportSize({ width: 1363, height: 1023 });
+  await capture("unchecked-desktop");
+
+  // All-off stays a visible local editor and never moves a query past the fragment.
+  await selectAll.press("Space");
+  assert.equal(await selectAll.isChecked(), true);
+  assert.equal(await url.inputValue(), noEqual);
+  await selectAll.press("Space");
+  assert.equal(await url.inputValue(), "https://fixture.invalid/items#part");
+  assert.equal(await inputs.count(), 4);
+  assert.equal(await selectAll.isChecked(), false);
+  await selectAll.press("Space");
+  assert.equal(await url.inputValue(), noEqual);
+  await duplicateEnabled.press("Space");
+  assert.equal(await url.inputValue(), withoutDuplicate);
+  await url.fill("https://fixture.invalid/items?other=1#part");
+  assert.equal(await duplicateEnabled.count(), 0);
+  await url.fill(noEqual);
+  assert.equal(await duplicateEnabled.isChecked(), true);
+  await duplicateEnabled.press("Space");
+  assert.equal(await url.inputValue(), withoutDuplicate);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(await app.store.get(owner.id), baseline);
   allowSave = true;
-  await page.locator("#save").click();
-  await page
-    .locator("#saved-state")
-    .getByText("✓ 已保存", { exact: true })
-    .waitFor();
+  await pressOwnerSave(
+    page,
+    origin,
+    ownerPath,
+    "disable",
+    withoutDuplicate,
+    true,
+  );
   allowSave = false;
   const saved = await app.store.get(owner.id);
-  assert.equal(saved.requests[0].url, noEqual);
+  assert.equal(saved.requests[0].url, withoutDuplicate);
   assert.deepEqual(saved.requests[0].query, baseline.requests[0].query);
   assert.equal(
     saved.requests[0].queryAddEqual,
@@ -252,6 +393,99 @@ try {
   assert.deepEqual(writes, ["PUT"]);
   assert.deepEqual(forbidden, []);
   assert.deepEqual(errors, []);
+  assert.deepEqual(saved.literalQueryEditor.entries[0].rows, [
+    { token: "tag=ui%2Bnext", enabled: true },
+    { token: "tag=a+b", enabled: false },
+    { token: "flag", enabled: true },
+    { token: "empty", enabled: true },
+  ]);
+  await page.close();
+  await app.close();
+  app = await createApp({ root, port: 0 });
+  const reopened = await browser.newPage({
+    viewport: { width: 1363, height: 1023 },
+    locale: "zh-CN",
+  });
+  const restartOrigin = new URL(app.launchUrl).origin;
+  const restartWrites = [];
+  const restartForbidden = [];
+  const restartErrors = [];
+  let allowRestartSave = false;
+  reopened.on("pageerror", ({ name }) => restartErrors.push(name));
+  await reopened.route("**/*", (route) => {
+    const req = route.request();
+    const dest = new URL(req.url());
+    if (
+      req.method() === "GET" &&
+      dest.origin === restartOrigin &&
+      !isMockTransportRoute(dest.pathname)
+    )
+      return route.continue();
+    if (
+      allowRestartSave &&
+      restartWrites.length === 0 &&
+      req.method() === "PUT" &&
+      dest.origin === restartOrigin &&
+      dest.pathname === ownerPath
+    ) {
+      restartWrites.push(req.method());
+      return route.continue();
+    }
+    restartForbidden.push(req.method());
+    return route.abort();
+  });
+  await reopened.goto(app.launchUrl);
+  await reopened.locator('[data-mode="debug"]').click();
+  await reopened.locator('.param-tabs [data-param="query"]').press("Enter");
+  const retained = reopened.getByRole("checkbox", {
+    name: "启用 URL 查询项 2：tag",
+  });
+  assert.equal(await retained.isChecked(), false);
+  assert.equal(await reopened.locator("#url").inputValue(), withoutDuplicate);
+  assert.equal(
+    await reopened
+      .getByRole("textbox", { name: "URL 查询值 2：tag" })
+      .inputValue(),
+    "a+b",
+  );
+  if (evidence)
+    await reopened.screenshot({
+      path: join(evidence, "debug-url-query-unchecked-restarted.png"),
+      caret: "hide",
+      animations: "disabled",
+    });
+  await retained.press("Space");
+  assert.equal(await reopened.locator("#url").inputValue(), noEqual);
+  assert.equal(await retained.isChecked(), true);
+  if (evidence)
+    await reopened.screenshot({
+      path: join(evidence, "debug-url-query-restored-restarted.png"),
+      caret: "hide",
+      animations: "disabled",
+    });
+  assert.deepEqual(restartWrites, []);
+  assert.equal(
+    (await app.store.get(owner.id)).requests[0].url,
+    withoutDuplicate,
+  );
+  allowRestartSave = true;
+  await pressOwnerSave(
+    reopened,
+    restartOrigin,
+    ownerPath,
+    "restore",
+    noEqual,
+    false,
+  );
+  allowRestartSave = false;
+  const final = await app.store.get(owner.id);
+  assert.equal(final.requests[0].url, noEqual);
+  assert.equal(final.literalQueryEditor, undefined);
+  assert.deepEqual(final.requests[0].query, baseline.requests[0].query);
+  assert.deepEqual(final.history, baseline.history);
+  assert.deepEqual(restartWrites, ["PUT"]);
+  assert.deepEqual(restartForbidden, []);
+  assert.deepEqual(restartErrors, []);
   console.log(
     "DEBUG_URL_QUERY_UI_PASS literal occurrence edits preserve raw neighbors, no dispatch",
   );
