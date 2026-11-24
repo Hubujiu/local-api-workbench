@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   canEditDebugURLQuery,
   changeDebugURLQueryValue,
+  debugURLQueryBlankState,
   inspectDebugURLQuery,
+  setDebugURLQueryBlankEquality,
 } from "../public/debug-url-query.js";
 import { appendRequestQuery } from "../src/query-serialization.mjs";
 import { applyGlobalParameters } from "../src/global-parameters.mjs";
@@ -98,4 +100,42 @@ test("existing runtime and cURL get one literal edit; table keys and inheritance
   );
   assert(toCurl(after).includes(expected));
   assert.equal(request.url, raw);
+});
+
+test("literal blank equality only changes empty tokens and preserves spelling through cURL", () => {
+  const initial = raw.replace("&flag", "&kept==&encoded=%20&low=%2b&flag");
+  const all = initial.replace("&flag&", "&flag=&");
+  const none = initial.replace("&empty=", "&empty");
+  assert.equal(debugURLQueryBlankState(inspectDebugURLQuery(initial)), "mixed");
+  assert.equal(setDebugURLQueryBlankEquality(initial, true), all);
+  assert.equal(setDebugURLQueryBlankEquality(initial, false), none);
+  assert.equal(debugURLQueryBlankState(inspectDebugURLQuery(all)), "true");
+  assert.equal(debugURLQueryBlankState(inspectDebugURLQuery(none)), "false");
+  assert.equal(setDebugURLQueryBlankEquality(all, false), none);
+  assert.equal(setDebugURLQueryBlankEquality(none, true), all);
+  assert.equal(setDebugURLQueryBlankEquality(none, "false"), null);
+  const justNonempty = "https://fixture.invalid/items?space=%20&extra==#";
+  assert.equal(setDebugURLQueryBlankEquality(justNonempty, true), justNonempty);
+  assert.equal(
+    debugURLQueryBlankState(inspectDebugURLQuery(justNonempty)),
+    null,
+  );
+  for (const opaque of [
+    "/items?flag",
+    "https://fixture.invalid/items?flag&",
+    "https://fixture.invalid/items?flag&value={{user}}",
+  ])
+    assert.equal(setDebugURLQueryBlankEquality(opaque, false), null);
+  const appendix = [{ key: "table", value: "", enabled: true }];
+  const url = new URL(none);
+  const wire = appendRequestQuery(url, appendix, true).href;
+  assert.equal(wire, none.replace("#part", "&table=#part"));
+  assert(
+    toCurl({
+      method: "GET",
+      url: none,
+      query: appendix,
+      queryAddEqual: true,
+    }).includes(wire),
+  );
 });

@@ -7611,3 +7611,26 @@ body.dark .http-response-header-count {
 .debug-literal-query-table td input[aria-invalid="true"] {
   border-color: var(--red);
 }
+
+.debug-literal-query-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.debug-literal-query-heading > h3 {
+  margin: 4px 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.debug-literal-query-equality {
+  min-height: 26px;
+  padding: 2px 8px;
+}
+.debug-literal-query-equality[hidden] {
+  display: none;
+}
+.debug-literal-query-equality[aria-pressed="true"] {
+  color: var(--accent-text, var(--accent));
+  border-color: currentColor;
+}
