@@ -141,6 +141,7 @@ import {
   debugQueryEqualityLabel,
   ownsDebugPairComposer,
 } from "./debug-pair-composer.js";
+import { bindDebugURLQuery, debugURLQueryContents } from "./debug-url-query.js";
 import {
   canComposeDesignPair,
   designPairComposer,
@@ -448,6 +449,7 @@ import {
   exportDocumentation,
   requestDocumentationHTML,
 } from "./document-export.js";
+import { createCurlPreview } from "./http-curl-preview.js";
 import { icon as lineIcon } from "./icons.js";
 const $ = (s) => document.querySelector(s),
   esc = (v) =>
@@ -533,6 +535,7 @@ let openedDocuments = [];
 let activeDocumentId = null;
 const documentModes = new Map();
 let modalRevision = 0;
+const curlPreview = createCurlPreview();
 let modalFocusHandlers;
 let opened = [],
   token = "",
@@ -1948,6 +1951,7 @@ function openScopedDefinitionExport() {
   bindScopedExportSelection($("#dialog-content"));
 }
 function modal(title, html, onSave, label = "确定", afterClose) {
+  curlPreview.dismiss();
   const d = $("#dialog"),
     revision = ++modalRevision;
   let submitting = false;
@@ -2040,6 +2044,7 @@ function tree() {
 }
 
 function render(preserveEditingFocus = false) {
+  curlPreview.dismiss();
   provisionalQuery.observe(
     project,
     page === "apis" && mode === "design" && !workspaceDocument()
@@ -2465,6 +2470,15 @@ function paramPanel(r, param, design = false) {
     return (
       (param === "headers"
         ? `<div class="header-common-parameters"><button type="button" class="ghost" data-page="settings" data-settings-target="settings-global-parameters" title="管理项目及目录公共请求参数">${lineIcon("⚙")}公共参数（Header）</button></div>`
+        : "") +
+      (!design &&
+      mode === "debug" &&
+      param === "query" &&
+      r.graphqlEditorVersion !== 1
+        ? (() => {
+            const contents = debugURLQueryContents(project, r, esc);
+            return `<section class="debug-literal-query-origin" ${contents ? "" : "hidden"}>${contents}</section>`;
+          })()
         : "") +
       pairs(
         r[param],
@@ -3726,6 +3740,30 @@ function bind() {
       }
     },
   );
+  const urlQueryRegion = $(".debug-literal-query-origin");
+  if (urlQueryRegion) {
+    const urlField = $("#url");
+    const refreshURLQuery = bindDebugURLQuery(urlQueryRegion, {
+      project: pathProject,
+      request: pathRequest,
+      urlField,
+      owns: () =>
+        urlQueryRegion.isConnected &&
+        urlField.isConnected &&
+        project === pathProject &&
+        request() === pathRequest &&
+        page === "apis" &&
+        mode === "debug" &&
+        param === "query" &&
+        !workspaceDocument(),
+      esc,
+      changed: mark,
+    });
+    on("#url", "input", (event) => {
+      if (!event.isComposing && !composingPathURL) refreshURLQuery();
+    });
+    on("#url", "compositionend", refreshURLQuery);
+  }
   on("#method", "change", (_, element) => {
     if (designResponseSettingsDrafts.get(request())) {
       element.value = request().method;
@@ -6340,16 +6378,19 @@ function bind() {
       page === "apis" &&
       mode === "debug" &&
       param === "after";
-    on("#http-post-advanced", "toggle", (_, disclosure) => {
-      if (!owns()) return;
-      const key = httpPostAdvancedKey(target);
+    const disclosure = postWorkspace.querySelector("#http-post-advanced");
+    const key = httpPostAdvancedKey(target);
+    const rememberDisclosure = () => {
       if (disclosure.open) {
         if (httpPostAdvanced.size >= 128 && !httpPostAdvanced.has(key))
           httpPostAdvanced.delete(httpPostAdvanced.values().next().value);
         httpPostAdvanced.add(key);
       } else httpPostAdvanced.delete(key);
+    };
+    on("#http-post-advanced", "toggle", () => {
+      if (owns()) rememberDisclosure();
     });
-    releaseHTTPPostActions = bindHTTPPostActions(postWorkspace, {
+    const releaseMenu = bindHTTPPostActions(postWorkspace, {
       choose(key) {
         if (!owns()) return;
         if (key === "script") openScriptEditor(true);
@@ -6358,6 +6399,11 @@ function bind() {
       },
       onError: (error) => toast(error.message),
     });
+    releaseHTTPPostActions = () => {
+      // A native details toggle event can still be queued when render replaces this editor.
+      if (postWorkspace.isConnected) rememberDisclosure();
+      releaseMenu();
+    };
   }
   if (preWorkspace) {
     const updatePre = (change) =>
@@ -6625,7 +6671,7 @@ function bind() {
     const details = element.closest("details");
     details.open = false;
     details.querySelector("summary").focus();
-    $("#curl").click();
+    return openCurlPreview(details.querySelector("summary"));
   });
   on("#send-menu-plan", "click", () => {
     mode = "cases";
@@ -6728,19 +6774,46 @@ function bind() {
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
-  on("#curl", "click", async () => {
+  async function openCurlPreview(opener) {
+    if (!opener.isConnected || $("#dialog").open) return;
     collect();
-    const r = await api("/projects/" + project.id + "/curl", "POST", {
-      request: request(),
-      environmentId: env(),
-    });
-    modal(
-      "cURL（Bash）",
-      `<p class="muted">按当前环境生成，不执行前后置脚本。可能包含认证凭据，请勿公开分享。HTTP/2命令需要支持HTTP/2的cURL；HTTPS严格HTTP/2需cURL8.10或更新版。</p><textarea id="curl-output" readonly>${esc(r.curl)}</textarea>`,
-      () => navigator.clipboard.writeText(r.curl),
-      "复制",
+    const owner = project,
+      ownedRequest = request(),
+      environmentId = env(),
+      ownerMode = mode,
+      projectIntent = projectOpenRequestSequence,
+      version = editVersion,
+      openingRevision = modalRevision;
+    if (!owner || !ownedRequest) return;
+    const ownsPreview = () =>
+      opener.isConnected &&
+      project === owner &&
+      request() === ownedRequest &&
+      env() === environmentId &&
+      page === "apis" &&
+      mode === ownerMode &&
+      projectOpenRequestSequence === projectIntent &&
+      editVersion === version &&
+      modalRevision === openingRevision &&
+      !workspaceDocument();
+    const drawer = curlPreview.open(
+      $("#curl-preview-dialog"),
+      opener,
+      ownsPreview,
+      (value) => navigator.clipboard.writeText(value),
     );
-  });
+    if (!drawer) return;
+    try {
+      const r = await api("/projects/" + owner.id + "/curl", "POST", {
+        request: ownedRequest,
+        environmentId,
+      });
+      drawer.deliver(r.curl);
+    } catch (error) {
+      drawer.fail(error);
+    }
+  }
+  on("#curl", "click", (_, opener) => openCurlPreview(opener));
   on("#import,#welcome-import,#project-menu-import", "click", (_, opener) => {
     const owner = project;
     modal(
@@ -9752,6 +9825,7 @@ async function send() {
 document.addEventListener("keydown", (e) => {
   if (
     $("#dialog").open ||
+    $("#curl-preview-dialog")?.open ||
     $("#empty-trash-dialog")?.open ||
     $("#appearance-dialog")?.open ||
     $("#project-switch-confirmation")?.open ||

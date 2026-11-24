@@ -1,5 +1,5 @@
 const curlAction =
-  '<button id="curl" type="button" title="生成 cURL" aria-label="生成 cURL">⌘</button>';
+  '<button id="curl" type="button" title="生成代码" aria-label="生成 cURL" aria-haspopup="dialog">⌘</button>';
 
 export function requestCurlAction(debug) {
   return debug ? curlAction : "";

@@ -182,7 +182,26 @@ try {
     await panel.getByText(/JavaScript 沙箱 · 无文件访问/).isVisible(),
     true,
   );
-  await disclosure.press("Enter");
+  const settledDisclosure = await disclosure.evaluate((summary) => {
+    const old = summary.parentElement;
+    const wasOpen = old.open;
+    summary.click();
+    const closedBeforeRender = !old.open;
+    document.querySelector('.param-tabs [data-param="assertions"]').click();
+    document.querySelector('.param-tabs [data-param="after"]').click();
+    return {
+      wasOpen,
+      closedBeforeRender,
+      oldDetached: !old.isConnected,
+      rebuiltOpen: document.querySelector("#http-post-advanced").open,
+    };
+  });
+  assert.deepEqual(settledDisclosure, {
+    wasOpen: true,
+    closedBeforeRender: true,
+    oldDetached: true,
+    rebuiltOpen: false,
+  });
 
   await trigger.press("ArrowDown");
   await item("自定义脚本").press("Enter");
