@@ -1,3 +1,5 @@
+import { literalQueryEffectiveURL } from "./literal-query-rows.js";
+
 const unsafeRaw = /[^\x21-\x7e]|[\\{}<>"`']|%(?![\da-f]{2})/i;
 const incompatible = [
   "nativeInheritance",
@@ -113,22 +115,102 @@ export function setDebugURLQueryBlankEquality(raw, equals) {
   return inspectDebugURLQuery(updated)?.rows ? updated : null;
 }
 
+function storedRows(project, request) {
+  const saved = project?.literalQueryEditor;
+  if (saved?.version !== 1 || saved.projectId !== project.id) return undefined;
+  return saved.entries.find((entry) => entry.requestId === request.id);
+}
+
+function editorAfterUpdate(project, request, rows, effectiveURL = request.url) {
+  const entries = (project.literalQueryEditor?.entries || []).filter(
+    (entry) => entry.requestId !== request.id,
+  );
+  if (rows?.some((row) => !row.enabled))
+    entries.push({ requestId: request.id, effectiveURL, rows });
+  return { version: 1, projectId: project.id, entries };
+}
+
+export function expireLiteralURLQueryRows(project, request) {
+  if (!project || !request) return false;
+  const entry = storedRows(project, request);
+  if (
+    !entry ||
+    (entry.effectiveURL === request.url &&
+      canEditDebugURLQuery(project, request))
+  )
+    return false;
+  project.literalQueryEditor = editorAfterUpdate(project, request);
+  return true;
+}
+
+export function pruneLiteralURLQueryRows(project) {
+  for (const request of project.requests)
+    expireLiteralURLQueryRows(project, request);
+  const entries = project.literalQueryEditor?.entries;
+  if (!entries) return;
+  const ids = new Set(project.requests.map(({ id }) => id));
+  project.literalQueryEditor.entries = entries.filter((entry) =>
+    ids.has(entry.requestId),
+  );
+}
+
+function projectedRows(project, request) {
+  const entry = storedRows(project, request);
+  if (
+    entry?.effectiveURL === request.url &&
+    canEditDebugURLQuery(project, request)
+  ) {
+    const parsed = inspectDebugURLQuery(
+      literalQueryEffectiveURL(request.url, entry.rows, true),
+    );
+    if (parsed?.rows?.length === entry.rows.length)
+      return {
+        entry,
+        rows: parsed.rows.map((row, i) => ({ ...row, ...entry.rows[i] })),
+      };
+  }
+  const parsed = inspectDebugURLQuery(request.url);
+  if (!parsed?.rows) return parsed;
+  return {
+    rows: parsed.rows.map((row, i) => ({
+      ...row,
+      token: parsed.tokens[i],
+      enabled: true,
+    })),
+  };
+}
+
 const blankEqualityAction = (state) =>
   state === "true" ? "省略 URL 查询空值的等号" : "保留 URL 查询空值的等号";
-const notice = "此处修改 URL 查询的编码文本或空值等号；不影响下方参数表。";
+const notice = "未启用项保留在本地项目，但不进入实际 URL；不影响下方参数表。";
 
 export function debugURLQueryContents(project, request, esc) {
-  const parsed = inspectDebugURLQuery(request.url);
-  if (!parsed) return "";
+  const parsed = projectedRows(project, request);
+  const issue = project?.literalQueryEditorIssue;
+  const diagnosis = issue
+    ? '<p class="muted" role="status">本地保留的未启用查询项暂不可读；有效 URL 和普通参数仍可编辑。</p>'
+    : "";
+  if (!parsed) return diagnosis;
   if (parsed.opaque)
-    return '<p class="muted">此 URL 查询无法安全拆分，请直接编辑请求地址。</p><h3>另加的参数表</h3>';
+    return (
+      diagnosis +
+      '<p class="muted">此 URL 查询无法安全拆分，请直接编辑请求地址。</p><h3>另加的参数表</h3>'
+    );
   const editable = canEditDebugURLQuery(project, request);
-  const blank = debugURLQueryBlankState(parsed);
-  return `<div class="debug-literal-query-heading"><h3>URL 中的查询</h3>${editable ? `<button class="ghost debug-literal-query-equality" type="button" aria-pressed="${blank ?? "false"}" title="${blankEqualityAction(blank)}"${blank === null ? " hidden" : ""}>URL 空值等号</button>` : ""}</div><p class="muted">${editable ? notice : "此 URL 查询仅供查看。原有定义及参数表不会改写。"}</p>
-  <table class="pairs-table request-pairs-table debug-literal-query-table" aria-label="URL 中的查询"><thead><tr><th scope="col">参数名</th><th scope="col">编码值</th></tr></thead><tbody>${parsed.rows
+  const togglable = editable && !issue;
+  const blank = debugURLQueryBlankState({
+    rows: parsed.rows.filter((row) => row.enabled),
+  });
+  const enabled = parsed.rows.filter((row) => row.enabled).length;
+  const all = enabled === parsed.rows.length;
+  const aggregate = togglable
+    ? `<input type="checkbox" class="debug-literal-query-select-all" aria-label="启用全部 URL 查询项" ${all ? "checked" : ""}>`
+    : "";
+  return `<div class="debug-literal-query-heading"><h3>URL 中的查询</h3>${editable ? `<button class="ghost debug-literal-query-equality" type="button" aria-pressed="${blank ?? "false"}" title="${blankEqualityAction(blank)}"${blank === null ? " hidden" : ""}>URL 空值等号</button>` : ""}</div>${diagnosis}<p class="muted">${editable ? notice : "此 URL 查询仅供查看。原有定义及参数表不会改写。"}</p>
+  <table class="pairs-table request-pairs-table debug-literal-query-table" aria-label="URL 中的查询"><thead><tr><th scope="col">${aggregate} 参数名</th><th scope="col">编码值</th></tr></thead><tbody>${parsed.rows
     .map(
-      ({ key, value, equals }, index) =>
-        `<tr><td>${esc(key)}</td><td><input type="text" spellcheck="false" autocapitalize="off" autocomplete="off" data-debug-literal-query-value="${index}" aria-label="URL 查询值 ${index + 1}：${esc(key)}" aria-describedby="debug-literal-query-error" value="${esc(value)}"${editable ? "" : " readonly"}>${!equals ? '<small class="muted">无等号</small>' : ""}</td></tr>`,
+      ({ key, value, equals, enabled }, index) =>
+        `<tr${enabled ? "" : ' class="debug-literal-query-unchecked"'}><td>${togglable ? `<label><input type="checkbox" data-debug-literal-query-enabled="${index}" aria-label="启用 URL 查询项 ${index + 1}：${esc(key)}" ${enabled ? "checked" : ""}><span>${esc(key)}</span></label>` : esc(key)}</td><td><input type="text" spellcheck="false" autocapitalize="off" autocomplete="off" data-debug-literal-query-value="${index}" aria-label="URL 查询值 ${index + 1}：${esc(key)}" aria-describedby="debug-literal-query-error" value="${esc(value)}"${editable && enabled ? "" : " readonly"}>${!equals ? '<small class="muted">无等号</small>' : ""}</td></tr>`,
     )
     .join(
       "",
@@ -137,19 +219,55 @@ export function debugURLQueryContents(project, request, esc) {
 
 export function bindDebugURLQuery(
   region,
-  { project, request, urlField, owns, esc, changed },
+  { project, request, urlField, owns, esc, changed, reject },
 ) {
   let snapshot = request.url;
+  let layout = projectedRows(project, request);
   let pending = null;
   let composing = null;
   function refresh() {
     if (!owns()) return;
     snapshot = request.url;
+    layout = projectedRows(project, request);
     pending = null;
     composing = null;
     region.innerHTML = debugURLQueryContents(project, request, esc);
     region.hidden = !region.firstElementChild;
+    reflectCheckboxes();
   }
+  function reflectCheckboxes() {
+    const all = region.querySelector(".debug-literal-query-select-all");
+    if (!all) return;
+    const count = layout.rows.filter((row) => row.enabled).length;
+    all.checked = count === layout.rows.length;
+    all.indeterminate = count > 0 && count < layout.rows.length;
+  }
+  const ownsSnapshot = () =>
+    snapshot === request.url &&
+    urlField.value === snapshot &&
+    layout?.entry === projectedRows(project, request)?.entry;
+  function publishRows(rows) {
+    const next = literalQueryEffectiveURL(snapshot, rows);
+    const full = literalQueryEffectiveURL(snapshot, rows, true);
+    if (!inspectDebugURLQuery(full)?.rows) return false;
+    if (layout.entry || rows.some((row) => !row.enabled)) {
+      const editor = editorAfterUpdate(project, request, rows, next);
+      if (
+        editor.entries.length > 100 ||
+        new TextEncoder().encode(JSON.stringify(editor)).length > 1024 * 1024
+      ) {
+        reject("未启用的 URL 查询项超过项目保留上限，本次未应用。");
+        return false;
+      }
+      project.literalQueryEditor = editor;
+    }
+    request.url = urlField.value = next;
+    snapshot = next;
+    layout = projectedRows(project, request);
+    changed();
+    return true;
+  }
+  reflectCheckboxes();
   function isProjectedField(node) {
     return (
       owns() &&
@@ -176,7 +294,7 @@ export function bindDebugURLQuery(
   function reflectBlankEquality(changedIndex) {
     const control = region.querySelector(".debug-literal-query-equality");
     if (!control) return;
-    const parsed = inspectDebugURLQuery(snapshot);
+    const parsed = { rows: layout.rows.filter((row) => row.enabled) };
     const state = debugURLQueryBlankState(parsed);
     control.hidden = state === null;
     control.setAttribute("aria-pressed", state ?? "false");
@@ -186,7 +304,7 @@ export function bindDebugURLQuery(
         ? "[data-debug-literal-query-value]"
         : `[data-debug-literal-query-value="${changedIndex}"]`;
     for (const node of region.querySelectorAll(selector)) {
-      const row = parsed?.rows?.[Number(node.dataset.debugLiteralQueryValue)];
+      const row = layout?.rows?.[Number(node.dataset.debugLiteralQueryValue)];
       if (!row) continue;
       const label = node.parentElement.querySelector("small");
       if (row.equals) label?.remove();
@@ -204,25 +322,31 @@ export function bindDebugURLQuery(
       !isEditor(node) ||
       event.isComposing ||
       composing === node ||
-      snapshot !== request.url ||
-      urlField.value !== snapshot
+      !ownsSnapshot()
     )
       return;
     const index = Number(node.dataset.debugLiteralQueryValue);
-    const next = changeDebugURLQueryValue(snapshot, index, node.value);
+    const row = layout?.rows?.[index];
+    if (!row?.enabled) return;
+    const full = literalQueryEffectiveURL(snapshot, layout.rows, true);
+    const next = changeDebugURLQueryValue(full, index, node.value);
     pending = next === null ? node : null;
     report(node, pending !== null);
-    if (next === null || next === snapshot) return;
-    snapshot = request.url = urlField.value = next;
-    reflectBlankEquality(index);
-    changed();
+    if (next === null || next === full) return;
+    const token = inspectDebugURLQuery(next).tokens[index];
+    const rows = layout.rows.map((item, offset) => ({
+      token: offset === index ? token : item.token,
+      enabled: item.enabled,
+    }));
+    if (publishRows(rows)) reflectBlankEquality(index);
+    else {
+      pending = node;
+      report(node, true);
+    }
   }
   function cancel(node) {
     if (!isEditor(node) || pending !== node) return;
-    const row =
-      inspectDebugURLQuery(snapshot)?.rows?.[
-        Number(node.dataset.debugLiteralQueryValue)
-      ];
+    const row = layout?.rows?.[Number(node.dataset.debugLiteralQueryValue)];
     if (row) node.value = row.value;
     report(node, false);
     pending = null;
@@ -244,17 +368,57 @@ export function bindDebugURLQuery(
       !ownsBlankControl(control) ||
       pending ||
       composing ||
-      snapshot !== request.url ||
-      urlField.value !== snapshot
+      !ownsSnapshot()
     )
       return;
-    const state = debugURLQueryBlankState(inspectDebugURLQuery(snapshot));
+    const state = debugURLQueryBlankState({
+      rows: layout.rows.filter((row) => row.enabled),
+    });
     if (state === null) return;
-    const next = setDebugURLQueryBlankEquality(snapshot, state !== "true");
-    if (!next || next === snapshot) return;
-    snapshot = request.url = urlField.value = next;
-    reflectBlankEquality();
-    changed();
+    const rows = layout.rows.map((row) => ({
+      token:
+        row.enabled && row.value === ""
+          ? row.key + (state === "true" ? "" : "=")
+          : row.token,
+      enabled: row.enabled,
+    }));
+    if (publishRows(rows)) reflectBlankEquality();
+  });
+  const ownsCheckbox = (node) =>
+    owns() &&
+    !project.literalQueryEditorIssue &&
+    node.isConnected &&
+    node.matches(
+      ".debug-literal-query-select-all, [data-debug-literal-query-enabled]",
+    ) &&
+    node.closest(".debug-literal-query-origin") === region &&
+    canEditDebugURLQuery(project, request);
+  region.addEventListener("change", ({ target }) => {
+    if (!ownsCheckbox(target)) return;
+    const selector = target.matches(".debug-literal-query-select-all")
+      ? ".debug-literal-query-select-all"
+      : `[data-debug-literal-query-enabled="${Number(target.dataset.debugLiteralQueryEnabled)}"]`;
+    if (!ownsSnapshot() || pending || composing) {
+      refresh();
+      return;
+    }
+    const index = target.matches(".debug-literal-query-select-all")
+      ? -1
+      : Number(target.dataset.debugLiteralQueryEnabled);
+    const rows = layout.rows.map((row, offset) => ({
+      token: row.token,
+      enabled: index === -1 || offset === index ? target.checked : row.enabled,
+    }));
+    if (
+      rows.some((row, i) => row.enabled !== layout.rows[i].enabled) &&
+      publishRows(rows)
+    ) {
+      refresh();
+      region.querySelector(selector)?.focus({ preventScroll: true });
+    } else {
+      if (index >= 0) target.checked = layout.rows[index].enabled;
+      reflectCheckboxes();
+    }
   });
   region.addEventListener("input", edit);
   region.addEventListener("compositionstart", ({ target }) => {
@@ -266,8 +430,9 @@ export function bindDebugURLQuery(
   });
   region.addEventListener("focusout", (event) => cancel(event.target));
   region.addEventListener("keydown", (event) => {
-    const blank = ownsBlankControl(event.target);
-    if (!blank && !isProjectedField(event.target)) return;
+    const control =
+      ownsBlankControl(event.target) || ownsCheckbox(event.target);
+    if (!control && !isProjectedField(event.target)) return;
     if (
       (event.ctrlKey || event.metaKey) &&
       (event.key === "Enter" ||
@@ -280,7 +445,7 @@ export function bindDebugURLQuery(
       event.stopPropagation();
       return;
     }
-    if (blank) return;
+    if (control) return;
     if (
       !isEditor(event.target) ||
       event.isComposing ||

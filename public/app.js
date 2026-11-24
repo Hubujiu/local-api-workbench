@@ -1361,6 +1361,7 @@ async function save() {
   )
     throw Error(unappliedGraphQL);
   collect();
+  if (project.literalQueryEditor) pruneLiteralURLQueryRows(project);
   const owner = project,
     snapshot = structuredClone(project),
     version = editVersion,
@@ -1470,6 +1471,11 @@ function assertProjectSaveReceipt(saved, snapshot) {
     JSON.parse(JSON.stringify(snapshot)),
   )) {
     if (omitted.has(key)) continue;
+    if (key === "literalQueryEditor") {
+      if (!value.entries?.length && saved[key] === undefined) continue;
+      if (JSON.stringify(saved[key]) !== JSON.stringify(value)) fail();
+      continue;
+    }
     if (
       !Object.hasOwn(saved, key) ||
       (Array.isArray(value) && !Array.isArray(saved[key])) ||
@@ -3694,23 +3700,45 @@ function bind() {
     for (const [selector, event, fn] of pathBindings)
       on(selector, event, fn, surface);
   };
+  const expireOwnedLiteralURL = (element) => {
+    if (
+      element.isConnected &&
+      project === pathProject &&
+      request() === pathRequest &&
+      page === "apis" &&
+      !workspaceDocument() &&
+      expireLiteralURLQueryRows(project, pathRequest)
+    )
+      toast("请求地址已替换，原来未启用的 URL 查询项不再保留。");
+  };
   let composingPathURL = false;
   on("#url", "compositionstart", (_, element) => {
     if (ownsPathURL(element)) composingPathURL = true;
   });
   on("#url", "compositionend", (_, element) => {
-    if (!ownsPathURL(element)) return;
+    if (!ownsPathURL(element)) {
+      expireOwnedLiteralURL(element);
+      return;
+    }
     composingPathURL = false;
     if (pathRequest.url !== element.value) {
       pathRequest.url = element.value;
       mark();
     }
     updatePathFromURL(element);
+    expireOwnedLiteralURL(element);
   });
   on(
     "#request-name,#url,#body-code,#description",
     "input",
     (event, element) => {
+      if (
+        element.id === "url" &&
+        (!element.isConnected ||
+          project !== pathProject ||
+          request() !== pathRequest)
+      )
+        return;
       if (designResponseSettingsDrafts.get(request())) {
         const field = {
           "request-name": "name",
@@ -3721,8 +3749,10 @@ function bind() {
         request()[field] = element.value;
       } else collect();
       mark();
-      if (element.id === "url" && !event.isComposing && !composingPathURL)
+      if (element.id === "url" && !event.isComposing && !composingPathURL) {
         updatePathFromURL(element);
+        expireOwnedLiteralURL(element);
+      }
       if (element.id === "request-name") {
         const id = CSS.escape(current);
         document
@@ -3758,6 +3788,7 @@ function bind() {
         !workspaceDocument(),
       esc,
       changed: mark,
+      reject: toast,
     });
     on("#url", "input", (event) => {
       if (!event.isComposing && !composingPathURL) refreshURLQuery();
@@ -7994,6 +8025,7 @@ function bind() {
     if (project.id !== projectId || current !== requestId || dirty)
       throw Error("接口或内容已变化，未切换Mock地址，请确认后重试");
     Object.assign(request(), target);
+    expireLiteralURLQueryRows(project, request());
     mode = "debug";
     mark();
     render();

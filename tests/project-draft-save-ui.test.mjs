@@ -1,3 +1,4 @@
+import { pruneLiteralURLQueryRows } from "../public/debug-url-query.js";
 import { createDebugExampleDrafts } from "../public/http-debug-examples.js";
 import { createHTTPPreWaitDrafts } from "../public/http-pre-wait.js";
 import test from "node:test";
@@ -66,6 +67,7 @@ function harness(initial = fixture(), transport) {
     "provisionalQuery",
     "httpPreWaitDrafts",
     "debugExampleDrafts",
+    "pruneLiteralURLQueryRows",
     `
  const debugAuthDrafts = new WeakMap();
  const request=()=>project.requests.find((entry)=>entry.id===current);
@@ -93,6 +95,7 @@ function harness(initial = fixture(), transport) {
       provisional,
       createHTTPPreWaitDrafts(),
       createDebugExampleDrafts(),
+      pruneLiteralURLQueryRows,
     ),
     guard,
     calls,
@@ -484,4 +487,49 @@ test("definite rejection releases a preset save pin while ambiguous acknowledgem
       assert.equal(owner.configRevision, 1);
     }
   }
+});
+
+test("explicitly restoring the last private URL query row may return an omitted sidecar", async () => {
+  const owner = fixture();
+  owner.literalQueryEditor = { version: 1, projectId: owner.id, entries: [] };
+  const h = harness(owner);
+  const running = h.save();
+  const sent = h.calls[0].data;
+  assert.deepEqual(sent.literalQueryEditor.entries, []);
+  const receipt = saved(sent);
+  delete receipt.literalQueryEditor;
+  h.calls[0].resolve(receipt);
+  assert.equal((await running).applied, receipt);
+  assert.equal(h.state().dirty, false);
+  assert.equal(h.state().project.literalQueryEditor, undefined);
+});
+
+test("nonempty URL query state is not acknowledged by a receipt missing the private entry", async () => {
+  const owner = fixture();
+  owner.requests[0].url = "https://fixture.invalid/items?live=1";
+  owner.requests[0].query = [];
+  owner.literalQueryEditor = {
+    version: 1,
+    projectId: owner.id,
+    entries: [
+      {
+        requestId: "r",
+        effectiveURL: owner.requests[0].url,
+        rows: [
+          { token: "live=1", enabled: true },
+          { token: "private=2", enabled: false },
+        ],
+      },
+    ],
+  };
+  const h = harness(owner);
+  const running = h.save();
+  assert.equal(h.calls[0].data.literalQueryEditor.entries.length, 1);
+  const receipt = saved(h.calls[0].data);
+  delete receipt.literalQueryEditor;
+  h.calls[0].resolve(receipt);
+  await assert.rejects(running, /保存结果尚未确认/);
+  assert.equal(h.state().project, owner);
+  assert.equal(h.state().dirty, true);
+  assert.equal(owner.literalQueryEditor.entries.length, 1);
 });
